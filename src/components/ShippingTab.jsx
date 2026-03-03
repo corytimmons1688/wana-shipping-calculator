@@ -36,10 +36,10 @@ export default function ShippingTab({ ships, prod, frt }) {
         <div style={{ overflowX:"auto" }}><table style={tbl}><thead><tr>
           <th style={th}>#</th><th style={th}>Mo.</th><th style={th}>Method</th><th style={th}>Container</th>
           <th style={{ ...th, textAlign:"right", color:T.GR }}>Bases</th><th style={{ ...th, textAlign:"right", color:T.AC }}>Lids</th><th style={{ ...th, textAlign:"right" }}>Total</th>
-          <th style={th}>Ship</th><th style={th}>Base Arr.</th><th style={th}>Lid Arr.</th>
+          <th style={th}>Ship</th><th style={th}>Arrival</th>
           <th style={{ ...th, textAlign:"right" }}>Cost</th><th style={{ ...th, textAlign:"right" }}>$/Unit</th>
         </tr></thead><tbody>
-          {ships.length===0 && <tr><td colSpan={12} style={{ ...td, textAlign:"center", color:T.T2, padding:18 }}>No shipments</td></tr>}
+          {ships.length===0 && <tr><td colSpan={11} style={{ ...td, textAlign:"center", color:T.T2, padding:18 }}>No shipments</td></tr>}
           {ships.map((sh,i) => {
             const cpu = sh.tQ>0 ? sh.cost/sh.tQ : 0;
             return (
@@ -53,7 +53,6 @@ export default function ShippingTab({ ships, prod, frt }) {
                 <td style={{ ...td, textAlign:"right", fontWeight:700 }}>{fm(sh.tQ)}</td>
                 <td style={{ ...td, color:T.T2, fontSize:11 }}>{dF(sh.bSd)}</td>
                 <td style={{ ...td, color:T.T2, fontSize:11 }}>{dF(sh.bAr)}</td>
-                <td style={{ ...td, color:T.T2, fontSize:11 }}>{dF(sh.lAr)}</td>
                 <td style={{ ...td, textAlign:"right", color:sh.cost>0?T.AM:T.GR, fontWeight:700 }}>{sh.cost===0?"FREE":f$(sh.cost)}</td>
                 <td style={{ ...td, textAlign:"right", color:T.T2, fontSize:11 }}>{sh.cost===0?"$0.00":fC(cpu)}</td>
               </tr>);
