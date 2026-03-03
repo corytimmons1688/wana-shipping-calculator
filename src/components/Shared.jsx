@@ -25,7 +25,7 @@ export function Ed({ value, onChange, type = "number", style: sx = {} }) {
   );
 }
 
-export function Badge({ method }) {
+export function Bg({ method }) {
   const colors = { "Standard Ocean": { bg: "#0a1f12", bd: "#2e7d32", tx: "#66bb6a" }, "Fast Boat": { bg: "#0a1528", bd: "#1565c0", tx: "#64b5f6" }, "Air": { bg: "#281008", bd: "#e65100", tx: "#ff8a65" } };
   const c = colors[method] || { bg: "#222", bd: "#555", tx: "#ccc" };
   return <span style={{ display: "inline-block", padding: "2px 7px", borderRadius: 4, background: c.bg, border: "1px solid " + c.bd, color: c.tx, fontSize: 10, fontWeight: 700, fontFamily: "JetBrains Mono, monospace" }}>{method}</span>;
