@@ -33,7 +33,7 @@ export function calcProd(molds) {
   return wks;
 }
 
-export function calcCapex(molds, pm, eq) {
+export function calcCap(molds, pm, eq) {
   var bCost = (molds.base.proto.qty * molds.base.proto.cost) + (molds.base.prod.qty * molds.base.prod.cost);
   var lCost = (molds.lid.proto.qty * molds.lid.proto.cost) + (molds.lid.prod.qty * molds.lid.prod.cost);
   var mT = bCost + lCost, pT = 0, eT = 0;
