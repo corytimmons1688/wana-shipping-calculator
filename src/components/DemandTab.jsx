@@ -39,12 +39,12 @@ export default function DemandTab({ sc, gld, annD, upd }) {
                 {mk.demand.map((d, di) => {
                   const isGL = mk.goLive === di + 1;
                   const isAct = mk.goLive != null && di + 1 >= mk.goLive;
-                  return <td key={di} style={{ ...td, textAlign: "right", background: isGL ? "#0a1f12" : undefined }}><Ed value={d} onChange={v => upd(s => { s.markets[mi].demand[di] = v; })} style={{ color: isGL ? T.GR : isAct ? T.TX : T.T2 + "70" }} /></td>;
+                  return <td key={di} style={{ ...td, textAlign: "right", background: isGL ? "#dcfce7" : undefined }}><Ed value={d} onChange={v => upd(s => { s.markets[mi].demand[di] = v; })} style={{ color: isGL ? T.GR : isAct ? T.TX : T.T2 + "70" }} /></td>;
                 })}
                 <td style={{ ...td, textAlign: "right", fontWeight: 700 }}>{fm(ann)}</td>
               </tr>);
           })}
-          <tr style={{ background: "#0a1f1228" }}>
+          <tr style={{ background: "#dcfce710" }}>
             <td style={{ ...td, fontWeight: 700, color: T.GR, borderTop: "2px solid " + T.GR }}>GO-LIVE DEMAND</td>
             <td style={{ ...td, textAlign: "center", color: T.T2, fontSize: 8, borderTop: "2px solid " + T.GR }}>auto</td>
             {gld.map((d, i) => <td key={i} style={{ ...td, textAlign: "right", fontWeight: 700, color: T.GR, borderTop: "2px solid " + T.GR }}>{fm(d)}</td>)}
