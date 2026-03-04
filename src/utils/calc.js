@@ -42,25 +42,55 @@ export function calcCap(molds, pm, eq) {
   return { bCost, lCost, mT, pT, eT, grand: mT + pT + eT };
 }
 
-// Helper: get cumulative production at a given date
 function prodAt(prod, date) {
   let best = null;
-  for (const p of prod) {
-    if (p.wk <= date) best = p;
-  }
+  for (const p of prod) { if (p.wk <= date) best = p; }
   return best ? { bC: best.bC, lC: best.lC } : { bC: 0, lC: 0 };
 }
 
-// Helper: find the latest possible ship date for a method to arrive by deadline
 function shipDate(arriveBy, transitDays) {
   const d = new Date(arriveBy);
   d.setDate(d.getDate() - transitDays);
   return d;
 }
 
-export function optimize(mkts, molds, ship, par, cont) {
+// Container capacity in units, based on pallets
+// Each container has N pallets. Pallets can be base or lid.
+// Base: basePP units per pallet. Lid: lidPP units per pallet.
+// We pick the pallet split that best matches the base/lid ratio needed.
+function contCap(contSpec, pal) {
+  const p = contSpec.pallets;
+  const bPP = pal.basePP;  // 9,072
+  const lPP = pal.lidPP;   // 30,720
+  return { pallets: p, bPP, lPP, maxB: p * bPP, maxL: p * lPP };
+}
+
+// Given a container with N pallets, figure out optimal base/lid pallet split
+// to ship as close to bWant bases and lWant lids as possible
+function splitPallets(pallets, bPP, lPP, bWant, lWant) {
+  let bestB = 0, bestL = 0, bestBP = 0, bestLP = 0, bestWaste = Infinity;
+  for (let bp = 0; bp <= pallets; bp++) {
+    const lp = pallets - bp;
+    const bQ = Math.min(bp * bPP, bWant);
+    const lQ = Math.min(lp * lPP, lWant);
+    const waste = (bp * bPP - bQ) + (lp * lPP - lQ);
+    const filled = bQ + lQ;
+    if (filled > bestB + bestL || (filled === bestB + bestL && waste < bestWaste)) {
+      bestB = bQ; bestL = lQ; bestBP = bp; bestLP = lp; bestWaste = waste;
+    }
+  }
+  return { bQ: bestB, lQ: bestL, bPallets: bestBP, lPallets: bestLP };
+}
+
+// Check if a container is "full" (all pallets used with product)
+function isFull(bQ, lQ, bPallets, lPallets, bPP, lPP) {
+  // Full = every pallet has at least some product AND total pallets used = container pallets
+  return (bPallets === 0 || bQ > 0) && (lPallets === 0 || lQ > 0);
+}
+
+export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
   const gld = calcGLD(mkts), prod = calcProd(molds), res = [];
-  let bS = 0, lS = 0; // cumulative shipped
+  let bS = 0, lS = 0;
 
   let oc = null, fb = null, ar = null;
   for (const s of ship) {
@@ -79,226 +109,184 @@ export function optimize(mkts, molds, ship, par, cont) {
     demands.push({ mo: m, dem: gld[m], bDeadline: bD, lDeadline: lD, bNeed: gld[m], lNeed: gld[m] });
   }
 
-  // ── PHASE 2: Maximize free Ocean ──
-  // Strategy: For each demand month, try to ship as much as possible via Ocean.
-  // Also look AHEAD: if we have excess production, pre-ship future months' demand on Ocean too.
-  // Ocean requires full containers only.
-
-  // First pass: standard Ocean for each month
+  // ── PHASE 2: Maximize free Ocean (full containers only) ──
   for (const d of demands) {
     if (!oc) break;
-    const oShipDate = shipDate(d.bDeadline, oc.transitDays);
-    const avail = prodAt(prod, oShipDate);
+    const oSD = shipDate(d.bDeadline, oc.transitDays);
+    const avail = prodAt(prod, oSD);
     let aB = Math.max(0, avail.bC - bS);
     let aL = Math.max(0, avail.lC - lS);
     let cB = Math.min(aB, d.bNeed);
     let cL = Math.min(aL, d.lNeed);
 
-    // Try 40' HC full containers
-    let total = cB + cL;
-    let n40 = Math.floor(total / cont["40HC"].max);
-    for (let i = 0; i < n40; i++) {
-      let bQ = Math.min(cB, cont["40HC"].max);
-      let lQ = Math.min(cL, cont["40HC"].max - bQ);
-      // Try to fill remainder
-      if (bQ + lQ < cont["40HC"].max) { bQ += Math.min(cont["40HC"].max - bQ - lQ, cB - bQ); lQ += Math.min(cont["40HC"].max - bQ - lQ, cL - lQ); }
-      if (bQ + lQ < cont["40HC"].max) continue;
-      res.push({ mo: d.mo, meth: "Standard Ocean", cn: "40' HC", bQ, lQ, tQ: bQ + lQ, cost: 0,
-        bSd: new Date(oShipDate), lSd: new Date(oShipDate), bAr: new Date(d.bDeadline), lAr: new Date(d.lDeadline) });
-      bS += bQ; lS += lQ; d.bNeed -= bQ; d.lNeed -= lQ; cB -= bQ; cL -= lQ;
-    }
-    // Try 20' HC full containers
-    total = cB + cL;
-    let n20 = Math.floor(total / cont["20HC"].max);
-    for (let i = 0; i < n20; i++) {
-      let bQ = Math.min(cB, cont["20HC"].max);
-      let lQ = Math.min(cL, cont["20HC"].max - bQ);
-      if (bQ + lQ < cont["20HC"].max) { bQ += Math.min(cont["20HC"].max - bQ - lQ, cB - bQ); lQ += Math.min(cont["20HC"].max - bQ - lQ, cL - lQ); }
-      if (bQ + lQ < cont["20HC"].max) continue;
-      res.push({ mo: d.mo, meth: "Standard Ocean", cn: "20' HC", bQ, lQ, tQ: bQ + lQ, cost: 0,
-        bSd: new Date(oShipDate), lSd: new Date(oShipDate), bAr: new Date(d.bDeadline), lAr: new Date(d.lDeadline) });
-      bS += bQ; lS += lQ; d.bNeed -= bQ; d.lNeed -= lQ; cB -= bQ; cL -= lQ;
+    // Try 40' HC
+    for (const ck of ["40HC", "20HC"]) {
+      const cc = contCap(cont[ck], pal);
+      while (cB + cL > 0) {
+        const sp = splitPallets(cc.pallets, cc.bPP, cc.lPP, cB, cL);
+        // Ocean requires full container: all pallets must have product
+        if (sp.bQ + sp.lQ <= 0) break;
+        // Check if it's truly full (no empty pallets)
+        const usedPallets = sp.bPallets + sp.lPallets;
+        const bFull = sp.bPallets === 0 || sp.bQ >= sp.bPallets * cc.bPP * 0.95;
+        const lFull = sp.lPallets === 0 || sp.lQ >= sp.lPallets * cc.lPP * 0.95;
+        if (!bFull || !lFull) break;
+        if (sp.bQ + sp.lQ < cc.pallets * Math.min(cc.bPP, cc.lPP) * 0.5) break;
+
+        res.push({ mo: d.mo, meth: "Standard Ocean", cn: cont[ck].label, bQ: sp.bQ, lQ: sp.lQ, tQ: sp.bQ + sp.lQ, cost: 0,
+          bSd: new Date(oSD), lSd: new Date(oSD), bAr: new Date(d.bDeadline), lAr: new Date(d.lDeadline),
+          bPal: sp.bPallets, lPal: sp.lPallets });
+        bS += sp.bQ; lS += sp.lQ; d.bNeed -= sp.bQ; d.lNeed -= sp.lQ;
+        cB -= sp.bQ; cL -= sp.lQ;
+        aB -= sp.bQ; aL -= sp.lQ;
+      }
     }
   }
 
-  // ── PHASE 2b: Pre-ship future demand on Ocean using excess production ──
-  // Check each month: if production exceeds current month's need, ship ahead for future months
+  // ── PHASE 2b: Pre-ship future demand on free Ocean ──
   if (oc) {
     for (let di = 0; di < demands.length; di++) {
       const d = demands[di];
-      const oShipDate = shipDate(d.bDeadline, oc.transitDays);
-      const avail = prodAt(prod, oShipDate);
-      let excessB = Math.max(0, avail.bC - bS);
-      let excessL = Math.max(0, avail.lC - lS);
+      const oSD = shipDate(d.bDeadline, oc.transitDays);
+      const avail = prodAt(prod, oSD);
+      let exB = Math.max(0, avail.bC - bS);
+      let exL = Math.max(0, avail.lC - lS);
 
-      // Look ahead to future months and try to pre-fill Ocean containers
-      for (let fj = di + 1; fj < demands.length && (excessB >= cont["20HC"].max * 0.3 || excessL >= cont["20HC"].max * 0.3); fj++) {
+      for (let fj = di + 1; fj < demands.length && (exB > 0 || exL > 0); fj++) {
         const fd = demands[fj];
         if (fd.bNeed <= 0 && fd.lNeed <= 0) continue;
+        let preB = Math.min(exB, fd.bNeed);
+        let preL = Math.min(exL, fd.lNeed);
 
-        let preB = Math.min(excessB, fd.bNeed);
-        let preL = Math.min(excessL, fd.lNeed);
-        let preTotal = preB + preL;
+        for (const ck of ["40HC", "20HC"]) {
+          const cc = contCap(cont[ck], pal);
+          while (preB + preL > 0) {
+            const sp = splitPallets(cc.pallets, cc.bPP, cc.lPP, preB, preL);
+            if (sp.bQ + sp.lQ <= 0) break;
+            const bFull = sp.bPallets === 0 || sp.bQ >= sp.bPallets * cc.bPP * 0.95;
+            const lFull = sp.lPallets === 0 || sp.lQ >= sp.lPallets * cc.lPP * 0.95;
+            if (!bFull || !lFull) break;
 
-        // Only ship if we can fill a full container
-        // Try 40' HC
-        while (preTotal >= cont["40HC"].max) {
-          let bQ = Math.min(preB, cont["40HC"].max);
-          let lQ = Math.min(preL, cont["40HC"].max - bQ);
-          if (bQ + lQ < cont["40HC"].max) { bQ += Math.min(cont["40HC"].max - bQ - lQ, preB - bQ); lQ += Math.min(cont["40HC"].max - bQ - lQ, preL - lQ); }
-          if (bQ + lQ < cont["40HC"].max) break;
-          res.push({ mo: fd.mo, meth: "Standard Ocean", cn: "40' HC", bQ, lQ, tQ: bQ + lQ, cost: 0,
-            bSd: new Date(oShipDate), lSd: new Date(oShipDate), bAr: new Date(d.bDeadline), lAr: new Date(d.lDeadline), preShip: true });
-          bS += bQ; lS += lQ; fd.bNeed -= bQ; fd.lNeed -= lQ;
-          excessB -= bQ; excessL -= lQ; preB -= bQ; preL -= lQ; preTotal -= (bQ + lQ);
-        }
-        // Try 20' HC
-        while (preTotal >= cont["20HC"].max) {
-          let bQ = Math.min(preB, cont["20HC"].max);
-          let lQ = Math.min(preL, cont["20HC"].max - bQ);
-          if (bQ + lQ < cont["20HC"].max) { bQ += Math.min(cont["20HC"].max - bQ - lQ, preB - bQ); lQ += Math.min(cont["20HC"].max - bQ - lQ, preL - lQ); }
-          if (bQ + lQ < cont["20HC"].max) break;
-          res.push({ mo: fd.mo, meth: "Standard Ocean", cn: "20' HC", bQ, lQ, tQ: bQ + lQ, cost: 0,
-            bSd: new Date(oShipDate), lSd: new Date(oShipDate), bAr: new Date(d.bDeadline), lAr: new Date(d.lDeadline), preShip: true });
-          bS += bQ; lS += lQ; fd.bNeed -= bQ; fd.lNeed -= lQ;
-          excessB -= bQ; excessL -= lQ; preB -= bQ; preL -= lQ; preTotal -= (bQ + lQ);
+            res.push({ mo: fd.mo, meth: "Standard Ocean", cn: cont[ck].label, bQ: sp.bQ, lQ: sp.lQ, tQ: sp.bQ + sp.lQ, cost: 0,
+              bSd: new Date(oSD), lSd: new Date(oSD), bAr: new Date(d.bDeadline), lAr: new Date(d.lDeadline),
+              preShip: true, bPal: sp.bPallets, lPal: sp.lPallets });
+            bS += sp.bQ; lS += sp.lQ; fd.bNeed -= sp.bQ; fd.lNeed -= sp.lQ;
+            exB -= sp.bQ; exL -= sp.lQ; preB -= sp.bQ; preL -= sp.lQ;
+          }
         }
       }
     }
   }
 
   // ── PHASE 3: Fast Boat with separate base/lid ship dates ──
-  // Key insight: Bases need 14-day lead, Lids need 7-day lead.
-  // By shipping them separately, lids get 7 more production days.
-  // This can convert Air shipments to Fast Boat.
   if (fb) {
     for (const d of demands) {
       if (d.bNeed <= 0 && d.lNeed <= 0) continue;
 
-      // Separate ship dates for base and lid
-      const bShipDate = shipDate(d.bDeadline, fb.transitDays);
-      const lShipDate = shipDate(d.lDeadline, fb.transitDays);
+      const bSD = shipDate(d.bDeadline, fb.transitDays);
+      const lSD = shipDate(d.lDeadline, fb.transitDays);
 
-      // Available production at each ship date
-      const bAvail = prodAt(prod, bShipDate);
-      const lAvail = prodAt(prod, lShipDate);
+      const bAv = prodAt(prod, bSD);
+      const lAv = prodAt(prod, lSD);
 
-      let canB = Math.min(Math.max(0, bAvail.bC - bS), d.bNeed);
-      let canL = Math.min(Math.max(0, lAvail.lC - lS), d.lNeed);
+      let canB = Math.min(Math.max(0, bAv.bC - bS), d.bNeed);
+      let canL = Math.min(Math.max(0, lAv.lC - lS), d.lNeed);
 
-      // Strategy A: Ship together (use earlier base ship date for both)
-      // Strategy B: Ship separately (base on bShipDate, lid on lShipDate)
-      // Pick whichever fills more containers and costs less
+      // Combined: use base ship date for both
+      const combAvailL = Math.min(Math.max(0, bAv.lC - lS), d.lNeed);
 
-      // Try combined first (using base ship date - earlier, less lid production)
-      const combAvailL = Math.min(Math.max(0, bAvail.lC - lS), d.lNeed);
-      const combTotal = canB + combAvailL;
-
-      // Try separate: base-only containers + lid-only containers
-      const sepTotal = canB + canL;
-
-      // Compare: how many containers each approach needs
-      function containerCost(total) {
-        if (total <= 0) return 0;
-        let c = 0, rem = total;
+      // Cost comparison: separate vs combined
+      function fbCost(bQ, lQ) {
+        let cost = 0, rem = bQ + lQ;
         while (rem > 0) {
-          if (rem > cont["20HC"].max) {
-            c += cont["40HC"].cost; rem -= cont["40HC"].max;
-          } else if (rem >= cont["20HC"].min) {
-            c += cont["20HC"].cost; rem = 0;
+          // Check which container fits better
+          const c40 = contCap(cont["40HC"], pal);
+          const c20 = contCap(cont["20HC"], pal);
+          if (rem > c20.pallets * Math.max(c20.bPP, c20.lPP)) {
+            cost += cont["40HC"].cost; rem -= c40.maxB; // rough
           } else {
-            break; // Below minimum, can't ship via FB
+            cost += cont["20HC"].cost; rem = 0;
           }
         }
-        return c;
+        return cost;
       }
 
-      // How much would go to Air under each strategy
-      const combAir = Math.max(0, d.bNeed - canB) + Math.max(0, d.lNeed - combAvailL);
-      const sepAir = Math.max(0, d.bNeed - canB) + Math.max(0, d.lNeed - canL);
-      const ar2 = ship.find(s => s.method === "Air");
-      const airCPU = ar2 ? ar2.costPerUnit : 0.80;
+      const combAirB = Math.max(0, d.bNeed - canB);
+      const combAirL = Math.max(0, d.lNeed - combAvailL);
+      const sepAirB = Math.max(0, d.bNeed - canB);
+      const sepAirL = Math.max(0, d.lNeed - canL);
 
-      const combCost = containerCost(combTotal) + combAir * airCPU;
-      const sepCost = containerCost(canB) + containerCost(canL) + sepAir * airCPU;
+      const combAirCost = combAirB * airCost.base + combAirL * airCost.lid;
+      const sepAirCost = sepAirB * airCost.base + sepAirL * airCost.lid;
 
-      if (sepCost < combCost && canL > combAvailL) {
-        // SEPARATE is cheaper: ship bases and lids independently
-        // Ship bases
+      const useSep = canL > combAvailL && sepAirCost < combAirCost;
+
+      if (useSep) {
+        // Ship bases separately
         let remB = canB;
-        while (remB > 0) {
-          let cn, cc, cx;
-          if (remB > cont["20HC"].max) {
-            cn = "40' HC"; cc = cont["40HC"].cost; cx = cont["40HC"].max;
-          } else if (remB >= cont["20HC"].min) {
-            cn = "20' HC"; cc = cont["20HC"].cost; cx = cont["20HC"].max;
-          } else { break; }
-          const bQ = Math.min(remB, cx);
-          if (bQ <= 0) break;
-          res.push({ mo: d.mo, meth: "Fast Boat", cn, bQ, lQ: 0, tQ: bQ, cost: cc,
-            bSd: new Date(bShipDate), lSd: new Date(bShipDate),
-            bAr: new Date(d.bDeadline), lAr: new Date(d.bDeadline) });
-          bS += bQ; d.bNeed -= bQ; remB -= bQ;
+        for (const ck of ["40HC", "20HC"]) {
+          const cc = contCap(cont[ck], pal);
+          while (remB > 0) {
+            const bPal = Math.min(cc.pallets, Math.ceil(remB / cc.bPP));
+            const bQ = Math.min(bPal * cc.bPP, remB);
+            if (bQ <= 0) break;
+            res.push({ mo: d.mo, meth: "Fast Boat", cn: cont[ck].label, bQ, lQ: 0, tQ: bQ, cost: cont[ck].cost,
+              bSd: new Date(bSD), lSd: new Date(bSD), bAr: new Date(d.bDeadline), lAr: new Date(d.bDeadline),
+              bPal: bPal, lPal: 0 });
+            bS += bQ; d.bNeed -= bQ; remB -= bQ;
+          }
         }
-        // Ship lids
+        // Ship lids separately
         let remL = canL;
-        while (remL > 0) {
-          let cn, cc, cx;
-          if (remL > cont["20HC"].max) {
-            cn = "40' HC"; cc = cont["40HC"].cost; cx = cont["40HC"].max;
-          } else if (remL >= cont["20HC"].min) {
-            cn = "20' HC"; cc = cont["20HC"].cost; cx = cont["20HC"].max;
-          } else { break; }
-          const lQ = Math.min(remL, cx);
-          if (lQ <= 0) break;
-          res.push({ mo: d.mo, meth: "Fast Boat", cn, bQ: 0, lQ, tQ: lQ, cost: cc,
-            bSd: new Date(lShipDate), lSd: new Date(lShipDate),
-            bAr: new Date(d.lDeadline), lAr: new Date(d.lDeadline) });
-          lS += lQ; d.lNeed -= lQ; remL -= lQ;
+        for (const ck of ["40HC", "20HC"]) {
+          const cc = contCap(cont[ck], pal);
+          while (remL > 0) {
+            const lPal = Math.min(cc.pallets, Math.ceil(remL / cc.lPP));
+            const lQ = Math.min(lPal * cc.lPP, remL);
+            if (lQ <= 0) break;
+            res.push({ mo: d.mo, meth: "Fast Boat", cn: cont[ck].label, bQ: 0, lQ, tQ: lQ, cost: cont[ck].cost,
+              bSd: new Date(lSD), lSd: new Date(lSD), bAr: new Date(d.lDeadline), lAr: new Date(d.lDeadline),
+              bPal: 0, lPal: lPal });
+            lS += lQ; d.lNeed -= lQ; remL -= lQ;
+          }
         }
       } else {
-        // COMBINED is cheaper or same: ship together on base ship date
+        // Combined shipping
         let remB = canB, remL2 = combAvailL;
-        let rem = remB + remL2;
-        while (rem > 0) {
-          let cn, cc, cx;
-          if (rem > cont["20HC"].max) {
-            cn = "40' HC"; cc = cont["40HC"].cost; cx = cont["40HC"].max;
-          } else if (rem >= cont["20HC"].min) {
-            cn = "20' HC"; cc = cont["20HC"].cost; cx = cont["20HC"].max;
-          } else { break; }
-          const sq = Math.min(rem, cx);
-          const bQ = Math.min(remB, sq);
-          const lQ = Math.min(remL2, sq - bQ);
-          if (bQ + lQ <= 0) break;
-          res.push({ mo: d.mo, meth: "Fast Boat", cn, bQ, lQ, tQ: bQ + lQ, cost: cc,
-            bSd: new Date(bShipDate), lSd: new Date(bShipDate),
-            bAr: new Date(d.bDeadline), lAr: new Date(d.lDeadline) });
-          bS += bQ; lS += lQ; d.bNeed -= bQ; d.lNeed -= lQ;
-          remB -= bQ; remL2 -= lQ; rem -= (bQ + lQ);
+        for (const ck of ["40HC", "20HC"]) {
+          const cc = contCap(cont[ck], pal);
+          while (remB + remL2 > 0) {
+            const sp = splitPallets(cc.pallets, cc.bPP, cc.lPP, remB, remL2);
+            if (sp.bQ + sp.lQ <= 0) break;
+            res.push({ mo: d.mo, meth: "Fast Boat", cn: cont[ck].label, bQ: sp.bQ, lQ: sp.lQ, tQ: sp.bQ + sp.lQ, cost: cont[ck].cost,
+              bSd: new Date(bSD), lSd: new Date(bSD), bAr: new Date(d.bDeadline), lAr: new Date(d.lDeadline),
+              bPal: sp.bPallets, lPal: sp.lPallets });
+            bS += sp.bQ; lS += sp.lQ; d.bNeed -= sp.bQ; d.lNeed -= sp.lQ;
+            remB -= sp.bQ; remL2 -= sp.lQ;
+          }
         }
       }
     }
   }
 
-  // ── PHASE 4: Air for anything remaining ──
+  // ── PHASE 4: Air with split pricing ──
   if (ar) {
     for (const d of demands) {
       const bN = d.bNeed, lN = d.lNeed;
       if (bN <= 0 && lN <= 0) continue;
-      const aShp = shipDate(d.bDeadline, ar.transitDays);
+      const aSD = shipDate(d.bDeadline, ar.transitDays);
       const bQ = Math.ceil(Math.max(bN, 0) / par.rounding) * par.rounding;
       const lQ = Math.ceil(Math.max(lN, 0) / par.rounding) * par.rounding;
       if (bQ + lQ > 0) {
-        res.push({ mo: d.mo, meth: "Air", cn: "Air", bQ, lQ, tQ: bQ + lQ, cost: (bQ + lQ) * ar.costPerUnit,
-          bSd: new Date(aShp), lSd: new Date(aShp), bAr: new Date(d.bDeadline), lAr: new Date(d.lDeadline) });
+        const cost = (bQ * airCost.base) + (lQ * airCost.lid);
+        res.push({ mo: d.mo, meth: "Air", cn: "Air", bQ, lQ, tQ: bQ + lQ, cost,
+          bSd: new Date(aSD), lSd: new Date(aSD), bAr: new Date(d.bDeadline), lAr: new Date(d.lDeadline) });
         bS += bQ; lS += lQ; d.bNeed -= bQ; d.lNeed -= lQ;
       }
     }
   }
 
-
-  // Fix arrival dates: actual arrival = ship date + transit days (same for both components)
+  // Fix arrival dates: actual arrival = ship date + transit days
   for (const sh of res) {
     const m = ship.find(s => s.method === sh.meth);
     if (m) {
@@ -309,9 +297,8 @@ export function optimize(mkts, molds, ship, par, cont) {
     }
   }
 
-  // Sort results by month then method priority
+  // Sort by month then method priority
   const methOrder = { "Standard Ocean": 0, "Fast Boat": 1, "Air": 2 };
   res.sort((a, b) => a.mo - b.mo || methOrder[a.meth] - methOrder[b.meth]);
-
   return res;
 }
