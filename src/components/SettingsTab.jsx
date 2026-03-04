@@ -86,8 +86,7 @@ export default function SettingsTab({ sc, cap, upd }) {
           <div key={k} style={{ background: T.S2, borderRadius: 6, padding: "8px 12px", border: "1px solid " + T.BD, minWidth: 140 }}>
             <div style={{ fontWeight: 700, color: T.AC, fontSize: 12, marginBottom: 4 }}>{c.label}</div>
             <div style={{ color: T.T2, fontSize: 10 }}>Cost: <Ed value={c.cost} onChange={v => upd(s => { s.containers[k].cost = v; })} /></div>
-            <div style={{ color: T.T2, fontSize: 10 }}>Min: <Ed value={c.min} onChange={v => upd(s => { s.containers[k].min = v; })} /></div>
-            <div style={{ color: T.T2, fontSize: 10 }}>Max: <Ed value={c.max} onChange={v => upd(s => { s.containers[k].max = v; })} /></div>
+            <div style={{ color: T.T2, fontSize: 10 }}>Pallets: <Ed value={c.pallets} onChange={v => upd(s => { s.containers[k].pallets = v; })} /></div>
           </div>
         ))}
       </div>
@@ -116,8 +115,9 @@ export default function SettingsTab({ sc, cap, upd }) {
   );
 
   const ParSet = () => (
-    <div style={{ maxWidth: 420 }}>
-      <div style={{ background: T.S2, borderRadius: 7, padding: 12, border: "1px solid " + T.BD }}>
+    <div style={{ maxWidth: 520 }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: T.TX, marginBottom: 6 }}>Lead Times & Rounding</div>
+      <div style={{ background: T.S2, borderRadius: 7, padding: 12, border: "1px solid " + T.BD, marginBottom: 12 }}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "8px 16px", alignItems: "center" }}>
           <div><div style={{ color: T.TX, fontSize: 12, fontWeight: 600 }}>Base Lead Time</div><div style={{ color: T.T2, fontSize: 8 }}>Days before month start</div></div>
           <Ed value={sc.params.baseLeadDays} onChange={v => upd(s => { s.params.baseLeadDays = v; })} />
@@ -125,6 +125,24 @@ export default function SettingsTab({ sc, cap, upd }) {
           <Ed value={sc.params.lidLeadDays} onChange={v => upd(s => { s.params.lidLeadDays = v; })} />
           <div><div style={{ color: T.TX, fontSize: 12, fontWeight: 600 }}>Shipment Rounding</div><div style={{ color: T.T2, fontSize: 8 }}>Round air qty to increment</div></div>
           <Ed value={sc.params.rounding} onChange={v => upd(s => { s.params.rounding = v; })} />
+        </div>
+      </div>
+      <div style={{ fontSize: 12, fontWeight: 700, color: T.TX, marginBottom: 6 }}>Pallet Specifications</div>
+      <div style={{ background: T.S2, borderRadius: 7, padding: 12, border: "1px solid " + T.BD, marginBottom: 12 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "8px 16px", alignItems: "center" }}>
+          <div><div style={{ color: T.TX, fontSize: 12, fontWeight: 600 }}>Bases per Pallet</div></div>
+          <Ed value={sc.pallet.basePP} onChange={v => upd(s => { s.pallet.basePP = v; })} />
+          <div><div style={{ color: T.TX, fontSize: 12, fontWeight: 600 }}>Lids per Pallet</div></div>
+          <Ed value={sc.pallet.lidPP} onChange={v => upd(s => { s.pallet.lidPP = v; })} />
+        </div>
+      </div>
+      <div style={{ fontSize: 12, fontWeight: 700, color: T.TX, marginBottom: 6 }}>Air Shipping Costs</div>
+      <div style={{ background: T.S2, borderRadius: 7, padding: 12, border: "1px solid " + T.BD }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "8px 16px", alignItems: "center" }}>
+          <div><div style={{ color: T.TX, fontSize: 12, fontWeight: 600 }}>Air Shipping Bases</div><div style={{ color: T.T2, fontSize: 8 }}>Cost per unit</div></div>
+          <Ed value={sc.airCost.base} onChange={v => upd(s => { s.airCost.base = v; })} />
+          <div><div style={{ color: T.TX, fontSize: 12, fontWeight: 600 }}>Air Shipping Lids</div><div style={{ color: T.T2, fontSize: 8 }}>Cost per unit</div></div>
+          <Ed value={sc.airCost.lid} onChange={v => upd(s => { s.airCost.lid = v; })} />
         </div>
       </div>
     </div>
