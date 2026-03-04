@@ -127,13 +127,22 @@ export default function SettingsTab({ sc, cap, upd }) {
           <Ed value={sc.params.rounding} onChange={v => upd(s => { s.params.rounding = v; })} />
         </div>
       </div>
-      <div style={{ fontSize: 12, fontWeight: 700, color: T.TX, marginBottom: 6 }}>Pallet Specifications</div>
+      <div style={{ fontSize: 12, fontWeight: 700, color: T.TX, marginBottom: 6 }}>Ocean / Fast Boat Pallets</div>
       <div style={{ background: T.S2, borderRadius: 7, padding: 12, border: "1px solid " + T.BD, marginBottom: 12 }}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "8px 16px", alignItems: "center" }}>
           <div><div style={{ color: T.TX, fontSize: 12, fontWeight: 600 }}>Bases per Pallet</div></div>
           <Ed value={sc.pallet.basePP} onChange={v => upd(s => { s.pallet.basePP = v; })} />
           <div><div style={{ color: T.TX, fontSize: 12, fontWeight: 600 }}>Lids per Pallet</div></div>
           <Ed value={sc.pallet.lidPP} onChange={v => upd(s => { s.pallet.lidPP = v; })} />
+        </div>
+      </div>
+      <div style={{ fontSize: 12, fontWeight: 700, color: T.TX, marginBottom: 6 }}>Air Pallets</div>
+      <div style={{ background: T.S2, borderRadius: 7, padding: 12, border: "1px solid " + T.BD, marginBottom: 12 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "8px 16px", alignItems: "center" }}>
+          <div><div style={{ color: T.TX, fontSize: 12, fontWeight: 600 }}>Bases per Pallet</div><div style={{ color: T.T2, fontSize: 8 }}>Air freight</div></div>
+          <Ed value={sc.pallet.airBasePP} onChange={v => upd(s => { s.pallet.airBasePP = v; })} />
+          <div><div style={{ color: T.TX, fontSize: 12, fontWeight: 600 }}>Lids per Pallet</div><div style={{ color: T.T2, fontSize: 8 }}>Air freight</div></div>
+          <Ed value={sc.pallet.airLidPP} onChange={v => upd(s => { s.pallet.airLidPP = v; })} />
         </div>
       </div>
       <div style={{ fontSize: 12, fontWeight: 700, color: T.TX, marginBottom: 6 }}>Air Shipping Costs</div>
