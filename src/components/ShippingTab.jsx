@@ -34,12 +34,12 @@ export default function ShippingTab({ ships, prod, frt }) {
       </div>
       {sv==="timeline" ? (
         <div style={{ overflowX:"auto" }}><table style={tbl}><thead><tr>
-          <th style={th}>#</th><th style={th}>Mo.</th><th style={th}>Method</th><th style={th}>Container</th>
+          <th style={th}>#</th><th style={th}>Mo.</th><th style={th}>Method</th><th style={th}>Container</th><th style={{ ...th, textAlign:"center" }}>Pallets</th>
           <th style={{ ...th, textAlign:"right", color:T.GR }}>Bases</th><th style={{ ...th, textAlign:"right", color:T.AC }}>Lids</th><th style={{ ...th, textAlign:"right" }}>Total</th>
           <th style={th}>Ship</th><th style={th}>Arrival</th>
           <th style={{ ...th, textAlign:"right" }}>Cost</th><th style={{ ...th, textAlign:"right" }}>$/Unit</th>
         </tr></thead><tbody>
-          {ships.length===0 && <tr><td colSpan={11} style={{ ...td, textAlign:"center", color:T.T2, padding:18 }}>No shipments</td></tr>}
+          {ships.length===0 && <tr><td colSpan={12} style={{ ...td, textAlign:"center", color:T.T2, padding:18 }}>No shipments</td></tr>}
           {ships.map((sh,i) => {
             const cpu = sh.tQ>0 ? sh.cost/sh.tQ : 0;
             return (
@@ -47,7 +47,7 @@ export default function ShippingTab({ ships, prod, frt }) {
                 <td style={{ ...td, color:T.T2 }}>{i+1}</td>
                 <td style={{ ...td, fontWeight:600 }}>{MO[sh.mo]}</td>
                 <td style={td}><Bg method={sh.meth}/>{sh.preShip && <span style={{ marginLeft:4, fontSize:8, color:T.GR, fontWeight:700 }} title="Pre-shipped ahead of schedule">PRE</span>}{sh.consolidated && <span style={{ marginLeft:4, fontSize:8, color:T.AM, fontWeight:700 }} title="Consolidated across months">COMB</span>}</td>
-                <td style={{ ...td, color:T.T2, fontSize:11 }}>{sh.cn}</td>
+                <td style={{ ...td, color:T.T2, fontSize:11 }}>{sh.cn}</td><td style={{ ...td, textAlign:"center", fontSize:10, color:T.T2 }}>{sh.bPal != null ? (sh.bPal + "B/" + sh.lPal + "L") : "—"}</td>
                 <td style={{ ...td, textAlign:"right", color:T.GR, fontWeight:600 }}>{fm(sh.bQ)}</td>
                 <td style={{ ...td, textAlign:"right", color:T.AC, fontWeight:600 }}>{fm(sh.lQ)}</td>
                 <td style={{ ...td, textAlign:"right", fontWeight:700 }}>{fm(sh.tQ)}</td>
