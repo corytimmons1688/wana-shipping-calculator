@@ -26,6 +26,10 @@ export default function App() {
   }, [ships]);
   const addSc = () => { const ns = mkScenario("Scenario " + (scenarios.length + 1), sc); setScenarios(p => [...p, ns]); setActive(scenarios.length); };
   const dupeSc = () => { const ns = mkScenario(sc.name + " (copy)", sc); setScenarios(p => [...p, ns]); setActive(scenarios.length); };
+  const delSc = (idx) => { if (scenarios.length <= 1) return; setScenarios(p => p.filter((_, i) => i !== idx)); setActive(a => idx < a ? a - 1 : idx === a ? Math.min(a, scenarios.length - 2) : a); };
+  const renameSc = (idx, name) => { setScenarios(p => p.map((s, i) => i === idx ? { ...s, name } : s)); };
+  const [renaming, setRenaming] = useState(null);
+  const [renameVal, setRenameVal] = useState("");
   const CmpView = () => {
     const data = scenarios.map(s => { const g = calcGLD(s.markets).reduce((a, b) => a + b, 0); const sh = optimize(s.markets, s.molds, s.shipping, s.params, s.containers, s.pallet, s.airCost); let ft = 0; for (const x of sh) ft += x.cost; const cx = calcCap(s.molds, s.protoMolds, s.equipment); return { name: s.name, gld: g, freight: ft, capex: cx.grand, total: ft + cx.grand, bM: s.molds.base.proto.qty + s.molds.base.prod.qty, lM: s.molds.lid.proto.qty + s.molds.lid.prod.qty }; });
     const minFr = Math.min(...data.map(d => d.freight)), minT = Math.min(...data.map(d => d.total));
@@ -43,7 +47,17 @@ const mainTabs = [{ k:"demand", l:"Market Demand", i:"📊" },{ k:"shipping", l:
         </div>
       </div>
       <div style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 18px", background:T.S2, borderBottom:"1px solid "+T.BD, flexWrap:"wrap" }}>
-        {scenarios.map((s, i) => { const a = i === active; return <button key={s.id} onClick={() => { setActive(i); setCmp(false); }} style={{ padding:"4px 12px", borderRadius:5, border:a ? "1px solid "+T.AC : "1px solid "+T.BD, background:a ? T.AC+"15" : "transparent", color:a ? T.AC : T.T2, cursor:"pointer", fontSize:11, fontWeight:a ? 700 : 500, fontFamily:"inherit" }}>{s.name}</button>; })}
+        {scenarios.map((s, i) => { const a = i === active; return (
+          <div key={s.id} style={{ display:"inline-flex", alignItems:"center", position:"relative" }}>
+            {renaming === i ? (
+              <input autoFocus value={renameVal} onChange={e => setRenameVal(e.target.value)} onBlur={() => { if (renameVal.trim()) renameSc(i, renameVal.trim()); setRenaming(null); }} onKeyDown={e => { if (e.key === "Enter") { if (renameVal.trim()) renameSc(i, renameVal.trim()); setRenaming(null); } if (e.key === "Escape") setRenaming(null); }} style={{ padding:"3px 8px", borderRadius:5, border:"1px solid "+T.AC, background:T.S1, color:T.AC, fontSize:11, fontWeight:700, fontFamily:"inherit", width: Math.max(80, renameVal.length * 7), outline:"none" }} />
+            ) : (
+              <button onClick={() => { setActive(i); setCmp(false); }} onDoubleClick={() => { setRenaming(i); setRenameVal(s.name); }} style={{ padding:"4px 12px", borderRadius: scenarios.length > 1 ? "5px 0 0 5px" : 5, border:a ? "1px solid "+T.AC : "1px solid "+T.BD, background:a ? T.AC+"15" : "transparent", color:a ? T.AC : T.T2, cursor:"pointer", fontSize:11, fontWeight:a ? 700 : 500, fontFamily:"inherit" }} title="Double-click to rename">{s.name}</button>
+            )}
+            {scenarios.length > 1 && renaming !== i && (
+              <button onClick={e => { e.stopPropagation(); delSc(i); }} style={{ padding:"4px 5px", borderRadius:"0 5px 5px 0", border:a ? "1px solid "+T.AC : "1px solid "+T.BD, borderLeft:"none", background:a ? T.AC+"15" : "transparent", color:T.T2, cursor:"pointer", fontSize:10, fontFamily:"inherit", lineHeight:1 }} title="Delete scenario">{"×"}</button>
+            )}
+          </div>); })}
         <div style={{ borderLeft:"1px solid "+T.BD, height:20, margin:"0 2px" }} />
         <button onClick={addSc} style={{ padding:"4px 10px", borderRadius:5, border:"1px solid "+T.GR, background:T.GR+"10", color:T.GR, cursor:"pointer", fontSize:10, fontWeight:600 }}>+ New</button>
         <button onClick={dupeSc} style={{ padding:"4px 10px", borderRadius:5, border:"1px solid "+T.AM, background:T.AM+"10", color:T.AM, cursor:"pointer", fontSize:10, fontWeight:600 }}>Duplicate</button>
