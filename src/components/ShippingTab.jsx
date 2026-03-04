@@ -71,10 +71,24 @@ export default function ShippingTab({ ships, prod, frt, gld }) {
       }
 
       var stockOnHand = cumArrived - cumDemand;
-      var activeMonths = 0;
-      for (var gi = 0; gi < gld.length; gi++) { if (gld[gi] > 0) activeMonths++; }
-      var avgMonthDem = activeMonths > 0 ? cumDemand / activeMonths : 0;
-      var mosVal = avgMonthDem > 0 ? stockOnHand / avgMonthDem : 0;
+      // Months of stock: how many future months can current stock cover?
+      // Walk forward from current month, subtracting each month's demand
+      var mosVal = 0;
+      if (stockOnHand > 0 && wkMonth < 12) {
+        var remStock = stockOnHand;
+        for (var fm2 = wkMonth; fm2 < 12; fm2++) {
+          var mDem = gld[fm2] || 0;
+          if (mDem <= 0) continue;
+          if (remStock >= mDem) {
+            remStock -= mDem;
+            mosVal += 1;
+          } else {
+            mosVal += remStock / mDem;
+            remStock = 0;
+            break;
+          }
+        }
+      }
 
       rows.push({
         wk: w.wk, bW: w.bW, lW: w.lW, bC: w.bC, lC: w.lC,
@@ -155,7 +169,7 @@ export default function ShippingTab({ ships, prod, frt, gld }) {
                     <td style={{ ...td, textAlign:"right", color:r.arrQty>0?T.GR:T.T2 }}>{r.cumArrived>0?fm(r.cumArrived):""}</td>
                     <td style={{ ...td, textAlign:"right", color:r.monthDemand>0?"#9333ea":T.T2 }}>{r.cumDemand>0?fm(r.cumDemand):""}</td>
                     <td style={{ ...td, textAlign:"right", fontWeight:700, color:negStock?"#dc2626":r.stockOnHand>0?T.GR:T.T2 }}>{r.cumArrived>0||r.cumDemand>0?fm(r.stockOnHand):""}</td>
-                    <td style={{ ...td, textAlign:"right", color:r.monthsOfStock<1&&r.cumDemand>0?"#dc2626":T.T2, fontSize:11 }}>{r.cumDemand>0?r.monthsOfStock.toFixed(1):""}</td>
+                    <td style={{ ...td, textAlign:"right", color:r.monthsOfStock<3&&r.cumDemand>0?"#dc2626":r.monthsOfStock>=3?T.GR:T.T2, fontSize:11 }}>{r.cumDemand>0?r.monthsOfStock.toFixed(1):""}</td>
                   </tr>
                 );
 
