@@ -26,7 +26,7 @@ export const MARKETS = [
 export const SHIPPING = [
   {method:"Standard Ocean",transitDays:45,costPerUnit:0,notes:"Free full containers"},
   {method:"Fast Boat",transitDays:25,costPerUnit:0,notes:"Container pricing"},
-  {method:"Air",transitDays:10,costPerUnit:0.80,notes:"Per-unit emergency"},
+  {method:"Air",transitDays:10,costPerUnit:0,notes:"Base $1/ea, Lid $0.25/ea"},
 ];
 
 export const MOLDS = {
@@ -40,7 +40,9 @@ export const MOLDS = {
   }
 };
 
-export const CONTAINERS = {"20HC":{label:"20' HC",cost:9500,min:24000,max:65000},"40HC":{label:"40' HC",cost:14300,min:0,max:170000}};
+export const CONTAINERS = {"20HC":{label:"20' HC",cost:9500,pallets:10},"40HC":{label:"40' HC",cost:14300,pallets:20}};
+export const PALLET = {basePP:9072,lidPP:30720};
+export const AIR_COST = {base:1.00,lid:0.25};
 export const PARAMS = {baseLeadDays:14,lidLeadDays:7,rounding:10000};
 export const PROTO_MOLDS = [{name:"Lid Mold VN",cost:1300,qty:1},{name:"EBM Jar VN",cost:1850,qty:1},{name:"Lid Mold CN",cost:2000,qty:1},{name:"EBM Jar CN",cost:1000,qty:1},{name:"IBM Jar CN",cost:2000,qty:1}];
 export const EQUIPMENT = [{name:"PE Label Applicator Change Parts",cost:29389,qty:1},{name:"KapsAll Change Parts",cost:17132,qty:1},{name:"Die Tool for Lid Liner",cost:450,qty:1}];
@@ -51,6 +53,6 @@ export const PKL = [{cont:"20' HC",item:"Wana Jar",pallets:8,qpc:72576,wt:"2,070
 
 const dc = o => JSON.parse(JSON.stringify(o));
 export function initScenario() {
-  return { markets:dc(MARKETS), shipping:dc(SHIPPING), molds:dc(MOLDS), containers:dc(CONTAINERS), params:dc(PARAMS), protoMolds:dc(PROTO_MOLDS), equipment:dc(EQUIPMENT), protoTL:dc(PROTO_TL), prodTL:dc(PROD_TL), forecast:dc(FORECAST), pkl:dc(PKL) };
+  return { markets:dc(MARKETS), shipping:dc(SHIPPING), molds:dc(MOLDS), containers:dc(CONTAINERS), params:dc(PARAMS), pallet:dc(PALLET), airCost:dc(AIR_COST), protoMolds:dc(PROTO_MOLDS), equipment:dc(EQUIPMENT), protoTL:dc(PROTO_TL), prodTL:dc(PROD_TL), forecast:dc(FORECAST), pkl:dc(PKL) };
 }
 export function mkScenario(name, base) { return { id: Date.now()+Math.random(), name, ...dc(base) }; }
