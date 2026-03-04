@@ -123,8 +123,7 @@ export default function SettingsTab({ sc, cap, upd }) {
           <Ed value={sc.params.baseLeadDays} onChange={v => upd(s => { s.params.baseLeadDays = v; })} />
           <div><div style={{ color: T.TX, fontSize: 12, fontWeight: 600 }}>Lid Lead Time</div><div style={{ color: T.T2, fontSize: 8 }}>Days before month start</div></div>
           <Ed value={sc.params.lidLeadDays} onChange={v => upd(s => { s.params.lidLeadDays = v; })} />
-          <div><div style={{ color: T.TX, fontSize: 12, fontWeight: 600 }}>Shipment Rounding</div><div style={{ color: T.T2, fontSize: 8 }}>Round air qty to increment</div></div>
-          <Ed value={sc.params.rounding} onChange={v => upd(s => { s.params.rounding = v; })} />
+
         </div>
       </div>
       <div style={{ fontSize: 12, fontWeight: 700, color: T.TX, marginBottom: 6 }}>Ocean / Fast Boat Pallets</div>
