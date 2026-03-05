@@ -52,21 +52,28 @@ function sd(arriveBy, transitDays) {
   const d = new Date(arriveBy); d.setDate(d.getDate() - transitDays); return d;
 }
 
-function splitPallets(pallets, bPP, lPP, bWant, lWant) {
-  // Always ship full pallets - round up to fill each allocated pallet
-  let bestB = 0, bestL = 0, bestBP = 0, bestLP = 0, bestWaste = Infinity;
-  for (let bp = 0; bp <= pallets; bp++) {
-    const lp = pallets - bp;
-    // Only allocate pallets we actually need (ceil of demand / per-pallet)
-    const bPalUsed = Math.min(bp, bWant > 0 ? Math.ceil(bWant / bPP) : 0);
-    const lPalUsed = Math.min(lp, lWant > 0 ? Math.ceil(lWant / lPP) : 0);
-    // Full pallets: each pallet is fully loaded
-    const bQ = bPalUsed * bPP;
-    const lQ = lPalUsed * lPP;
-    const totalPal = bPalUsed + lPalUsed;
-    const waste = (bQ - bWant) + (lQ - lWant);
-    if (bQ + lQ > bestB + bestL || (bQ + lQ === bestB + bestL && waste < bestWaste)) {
-      bestB = bQ; bestL = lQ; bestBP = bPalUsed; bestLP = lPalUsed; bestWaste = waste;
+function splitPallets(pallets, bPP, lPP, bAvail, lAvail, airCostB, airCostL) {
+  // Minimize Air cost: pick the pallet split that saves the most Air freight
+  // Half-pallet rule: allow last pallet if >= 50% full
+  var fullBP = Math.floor(bAvail / bPP);
+  var bRem = bAvail - fullBP * bPP;
+  var maxBP = fullBP + (bRem >= bPP * 0.5 ? 1 : 0);
+  var fullLP = Math.floor(lAvail / lPP);
+  var lRem = lAvail - fullLP * lPP;
+  var maxLP = fullLP + (lRem >= lPP * 0.5 ? 1 : 0);
+
+  var acB = airCostB || 0.40;
+  var acL = airCostL || 0.12;
+
+  var bestB = 0, bestL = 0, bestBP = 0, bestLP = 0, bestSaving = -1;
+  for (var bp = 0; bp <= Math.min(pallets, maxBP); bp++) {
+    var lp = Math.min(pallets - bp, maxLP);
+    var bQ = Math.min(bp * bPP, bAvail);
+    var lQ = Math.min(lp * lPP, lAvail);
+    // Air cost saved by shipping these via Ocean/FB instead of Air
+    var saving = bQ * acB + lQ * acL;
+    if (saving > bestSaving) {
+      bestB = bQ; bestL = lQ; bestBP = bp; bestLP = lp; bestSaving = saving;
     }
   }
   return { bQ: bestB, lQ: bestL, bPallets: bestBP, lPallets: bestLP };
@@ -94,28 +101,46 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
     demands.push({ mo: m, dem: gld[m], bDeadline: bD, lDeadline: lD, bNeed: gld[m], lNeed: gld[m] });
   }
 
-  // Helper: ship Ocean containers (full only)
+  // Helper: ship Ocean containers (full only) — ships ASAP when production ready
   function shipOcean(d, oSD, label) {
-    const avail = prodAt(prod, oSD);
-    let aB = Math.max(0, avail.bC - bS);
-    let aL = Math.max(0, avail.lC - lS);
-    let cB = Math.min(aB, d.bNeed);
-    let cL = Math.min(aL, d.lNeed);
+    // Find the EARLIEST week where enough production exists for a container
+    // Scan from earliest production week up to oSD (latest allowed ship date)
     for (const ck of ["40HC", "20HC"]) {
       const cc = { pallets: cont[ck].pallets, bPP: pal.basePP, lPP: pal.lidPP };
-      while (cB + cL > 0) {
-        const sp = splitPallets(cc.pallets, cc.bPP, cc.lPP, cB, cL);
-        if (sp.bQ + sp.lQ <= 0) break;
-        // Full container = meet minimum pallet utilization
-        // 20' HC: 8 of 10 pallets, 40' HC: 16 of 20 pallets
-        var usedPal = (sp.bQ > 0 ? sp.bPallets : 0) + (sp.lQ > 0 ? sp.lPallets : 0);
-        var mnP = cont[ck].minPal || (cc.pallets <= 10 ? 8 : 16);
-        if (usedPal < mnP) break;
-        res.push({ mo: d.mo, meth: "Standard Ocean", cn: cont[ck].label, bQ: sp.bQ, lQ: sp.lQ, tQ: sp.bQ + sp.lQ, cost: 0,
-          bSd: new Date(oSD), lSd: new Date(oSD), bAr: new Date(d.bDeadline), lAr: new Date(d.lDeadline),
-          preShip: !!label, bPal: sp.bPallets, lPal: sp.lPallets });
-        bS += sp.bQ; lS += sp.lQ; d.bNeed -= sp.bQ; d.lNeed -= sp.lQ;
-        cB -= sp.bQ; cL -= sp.lQ;
+      const mnP = cont[ck].minPal || (cc.pallets <= 10 ? 8 : 16);
+
+      // Try each production week as a potential ship date
+      for (var pwi = 0; pwi < prod.length; pwi++) {
+        if (prod[pwi].wk > oSD) break; // Don't ship later than deadline allows
+        if (d.bNeed <= 0 && d.lNeed <= 0) break;
+
+        var shipWk = prod[pwi].wk;
+        var avail = prodAt(prod, shipWk);
+        var aB = Math.max(0, avail.bC - bS);
+        var aL = Math.max(0, avail.lC - lS);
+        var cB = Math.min(aB, d.bNeed);
+        var cL = Math.min(aL, d.lNeed);
+
+        while (cB + cL > 0) {
+          var sp = splitPallets(cc.pallets, cc.bPP, cc.lPP, cB, cL, airCost.base, airCost.lid);
+          if (sp.bQ + sp.lQ <= 0) break;
+          var usedPal = (sp.bQ > 0 ? sp.bPallets : 0) + (sp.lQ > 0 ? sp.lPallets : 0);
+          if (usedPal < mnP) break;
+
+          var arrDate = new Date(shipWk);
+          arrDate.setDate(arrDate.getDate() + oc.transitDays);
+
+          res.push({ mo: d.mo, meth: "Standard Ocean", cn: cont[ck].label, bQ: sp.bQ, lQ: sp.lQ, tQ: sp.bQ + sp.lQ, cost: 0,
+            bSd: new Date(shipWk), lSd: new Date(shipWk), bAr: new Date(arrDate), lAr: new Date(arrDate),
+            preShip: !!label, bPal: sp.bPallets, lPal: sp.lPallets });
+          bS += sp.bQ; lS += sp.lQ; d.bNeed -= sp.bQ; d.lNeed -= sp.lQ;
+          cB -= sp.bQ; cL -= sp.lQ;
+          // Recheck available after shipping
+          aB = Math.max(0, avail.bC - bS);
+          aL = Math.max(0, avail.lC - lS);
+          cB = Math.min(aB, d.bNeed);
+          cL = Math.min(aL, d.lNeed);
+        }
       }
     }
   }
@@ -143,9 +168,9 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
       for (const ck of ["40HC", "20HC"]) {
         const cc = { pallets: cont[ck].pallets, bPP: pal.basePP };
         while (remB > 0) {
-          const bPl = Math.min(cc.pallets, Math.ceil(remB / cc.bPP));
+          const bPl = Math.min(cc.pallets, Math.floor(remB / cc.bPP) + (remB % cc.bPP >= cc.bPP * 0.5 ? 1 : 0));
           if (bPl < (cont[ck].minPal || (cc.pallets <= 10 ? 8 : 16))) break;
-          const bQ = bPl * cc.bPP;
+          const bQ = Math.min(bPl * cc.bPP, remB);  // capped to available
           if (bQ <= 0) break;
           res.push({ mo: d.mo, meth: "Fast Boat", cn: cont[ck].label, bQ, lQ: 0, tQ: bQ, cost: cont[ck].cost,
             bSd: new Date(bSD), lSd: new Date(bSD), bAr: new Date(d.bDeadline), lAr: new Date(d.bDeadline), bPal: bPl, lPal: 0 });
@@ -157,9 +182,9 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
       for (const ck of ["40HC", "20HC"]) {
         const cc = { pallets: cont[ck].pallets, lPP: pal.lidPP };
         while (remL > 0) {
-          const lPl = Math.min(cc.pallets, Math.ceil(remL / cc.lPP));
+          const lPl = Math.min(cc.pallets, Math.floor(remL / cc.lPP) + (remL % cc.lPP >= cc.lPP * 0.5 ? 1 : 0));
           if (lPl < (cont[ck].minPal || (cc.pallets <= 10 ? 8 : 16))) break;
-          const lQ = lPl * cc.lPP;
+          const lQ = Math.min(lPl * cc.lPP, remL);
           if (lQ <= 0) break;
           res.push({ mo: d.mo, meth: "Fast Boat", cn: cont[ck].label, bQ: 0, lQ, tQ: lQ, cost: cont[ck].cost,
             bSd: new Date(lSD), lSd: new Date(lSD), bAr: new Date(d.lDeadline), lAr: new Date(d.lDeadline), bPal: 0, lPal: lPl });
@@ -172,7 +197,7 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
       for (const ck of ["40HC", "20HC"]) {
         const cc = { pallets: cont[ck].pallets, bPP: pal.basePP, lPP: pal.lidPP };
         while (remB + remL > 0) {
-          const sp = splitPallets(cc.pallets, cc.bPP, cc.lPP, remB, remL);
+          const sp = splitPallets(cc.pallets, cc.bPP, cc.lPP, remB, remL, airCost.base, airCost.lid);
           if (sp.bQ + sp.lQ <= 0) break;
           var usedP = (sp.bQ > 0 ? sp.bPallets : 0) + (sp.lQ > 0 ? sp.lPallets : 0);
           if (usedP < (cont[ck].minPal || (cc.pallets <= 10 ? 8 : 16))) break;
@@ -183,9 +208,10 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
         }
       }
     }
-  }
 
-  // ═══════════════════════════════════════════════════════
+      }
+
+    // ═══════════════════════════════════════════════════════
   // PHASE 1: For each month, Ocean first, then Fast Boat
   // This ensures FB gets production before pre-ship steals it
   // ═══════════════════════════════════════════════════════
