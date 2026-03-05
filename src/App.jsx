@@ -44,7 +44,6 @@ const mainTabs = [{ k:"demand", l:"Market Demand", i:"📊" },{ k:"shipping", l:
       <div style={{ padding:"10px 18px", background:T.S1, borderBottom:"1px solid "+T.BD, display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:8 }}>
         <div><div style={{ fontSize:16, fontWeight:800, letterSpacing:"-0.5px" }}><span style={{ color:T.GR }}>Wana</span> Production & Shipping</div><div style={{ color:T.T2, fontSize:9, marginTop:1 }}>2026 Launch {"—"} Shipping Optimizer</div></div>
         <div style={{ display:"flex", gap:8, alignItems:"center" }}>
-          <div style={{ background:T.S2, borderRadius:5, padding:"3px 9px", border:"1px solid "+T.BD }}><span style={{ color:T.T2, fontSize:9 }}>CAPEX </span><span style={{ color:T.AC, fontWeight:700, fontFamily:"'JetBrains Mono',monospace", fontSize:12 }}>{f$(cap.grand)}</span></div>
           <div style={{ background:T.S2, borderRadius:5, padding:"3px 9px", border:"1px solid "+T.BD }}><span style={{ color:T.T2, fontSize:9 }}>Freight </span><span style={{ color:T.AM, fontWeight:700, fontFamily:"'JetBrains Mono',monospace", fontSize:12 }}>{f$(frt.tot)}</span></div>
         </div>
       </div>
