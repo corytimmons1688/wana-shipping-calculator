@@ -51,7 +51,7 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem }) {
       if (w.bC === 0 && w.lC === 0 && w.bW === 0 && w.lW === 0) continue;
       var wt = w.wk.getTime();
 
-      var shipping = shipByWeek[wt] || [];
+      var shipping = arrByWeek[wt] || [];
       var arrivals = arrByWeek[wt] || [];
       var arrB = 0, arrL = 0;
       for (var ai = 0; ai < arrivals.length; ai++) { arrB += arrivals[ai].bQ; arrL += arrivals[ai].lQ; }
