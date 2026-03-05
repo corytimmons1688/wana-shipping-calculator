@@ -247,6 +247,49 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
   }
 
   const moOrder = { "Standard Ocean": 0, "Fast Boat": 1, "Air": 2 };
+  // Sort first so within each month: Ocean → FB → Air, ensuring non-Air counted before Air in post-pass
+  res.sort((a, b) => a.mo - b.mo || moOrder[a.meth] - moOrder[b.meth] || a.bSd - b.bSd);
+
+  // ════════════════════════════════════════════════════════════════════════════
+  // POST-PASS: Remove Air shipments made unnecessary by cumulative carry-over.
+  //
+  // Ocean/FB containers ship in pallet multiples, so each month slightly
+  // over-ships. That surplus carries forward. If cumulative shipped bases
+  // (or lids) through month M already cover cumulative demand through M,
+  // any Air shipment for month M is redundant — drop it.
+  // ════════════════════════════════════════════════════════════════════════════
+  {
+    const toRemove = new Set();
+    let cumShipB = 0, cumShipL = 0, cumDem = 0;
+    const months = [...new Set(res.map(s => s.mo))].sort((a,b) => a-b);
+    for (const m of months) {
+      cumDem += gld[m] || 0;
+      // Count all non-Air shipments for this month first
+      for (const s of res) {
+        if (s.mo === m && s.meth !== "Air") { cumShipB += s.bQ; cumShipL += s.lQ; }
+      }
+      // Now evaluate each Air shipment for this month
+      for (let i = 0; i < res.length; i++) {
+        const s = res[i];
+        if (s.mo !== m || s.meth !== "Air") continue;
+        const bCovered = cumShipB >= cumDem;
+        const lCovered = cumShipL >= cumDem;
+        if (bCovered && lCovered) {
+          toRemove.add(i);
+        } else if (bCovered && s.bQ > 0 && s.lQ === 0) {
+          toRemove.add(i);
+        } else if (lCovered && s.lQ > 0 && s.bQ === 0) {
+          toRemove.add(i);
+        } else {
+          // Still genuinely needed — count it toward cumulative
+          cumShipB += s.bQ; cumShipL += s.lQ;
+        }
+      }
+    }
+    // Remove in reverse order so indices stay valid
+    const removeList = [...toRemove].sort((a,b) => b-a);
+    for (const i of removeList) res.splice(i, 1);
+  }
   res.sort((a, b) => a.mo - b.mo || moOrder[a.meth] - moOrder[b.meth] || a.bSd - b.bSd);
   return res;
 }
