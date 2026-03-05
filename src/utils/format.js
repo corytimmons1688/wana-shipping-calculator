@@ -8,6 +8,7 @@ export function f$(v) {
 export function fC(v) {
   return v == null || isNaN(v) ? "\u2014" : "$" + Number(v).toLocaleString(undefined, {minimumFractionDigits:2,maximumFractionDigits:2});
 }
+// FIXED: null guard prevents crash when date is null/undefined
 export function dF(d) {
-  return d.toLocaleDateString("en-US", {month:"short",day:"numeric"});
+  return d ? d.toLocaleDateString("en-US", {month:"short",day:"numeric"}) : "\u2014";
 }
