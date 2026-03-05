@@ -66,6 +66,8 @@ function splitPallets(pallets, bPP, lPP, bWant, lWant) {
   return { bQ: bestB, lQ: bestL, bPallets: bestBP, lPallets: bestLP };
 }
 
+// Minimum pallets required per container (configurable via settings)
+
 export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
   const gld = calcGLD(mkts), prod = calcProd(molds), res = [];
   let bS = 0, lS = 0;
@@ -98,12 +100,11 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
       while (cB + cL > 0) {
         const sp = splitPallets(cc.pallets, cc.bPP, cc.lPP, cB, cL);
         if (sp.bQ + sp.lQ <= 0) break;
-        // Full container = all pallets allocated have product on them
-        // At least use all pallets in the container (no empty pallets)
-        var totalPal = sp.bPallets + sp.lPallets;
-        if (totalPal < cc.pallets) break;
-        if (sp.bPallets > 0 && sp.bQ <= 0) break;
-        if (sp.lPallets > 0 && sp.lQ <= 0) break;
+        // Full container = meet minimum pallet utilization
+        // 20' HC: 8 of 10 pallets, 40' HC: 16 of 20 pallets
+        var usedPal = (sp.bQ > 0 ? sp.bPallets : 0) + (sp.lQ > 0 ? sp.lPallets : 0);
+        var mnP = cont[ck].minPal || (cc.pallets <= 10 ? 8 : 16);
+        if (usedPal < mnP) break;
         res.push({ mo: d.mo, meth: "Standard Ocean", cn: cont[ck].label, bQ: sp.bQ, lQ: sp.lQ, tQ: sp.bQ + sp.lQ, cost: 0,
           bSd: new Date(oSD), lSd: new Date(oSD), bAr: new Date(d.bDeadline), lAr: new Date(d.lDeadline),
           preShip: !!label, bPal: sp.bPallets, lPal: sp.lPallets });
@@ -137,6 +138,7 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
         const cc = { pallets: cont[ck].pallets, bPP: pal.basePP };
         while (remB > 0) {
           const bPl = Math.min(cc.pallets, Math.ceil(remB / cc.bPP));
+          if (bPl < (cont[ck].minPal || (cc.pallets <= 10 ? 8 : 16))) break;
           const bQ = Math.min(bPl * cc.bPP, remB);
           if (bQ <= 0) break;
           res.push({ mo: d.mo, meth: "Fast Boat", cn: cont[ck].label, bQ, lQ: 0, tQ: bQ, cost: cont[ck].cost,
@@ -150,6 +152,7 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
         const cc = { pallets: cont[ck].pallets, lPP: pal.lidPP };
         while (remL > 0) {
           const lPl = Math.min(cc.pallets, Math.ceil(remL / cc.lPP));
+          if (lPl < (cont[ck].minPal || (cc.pallets <= 10 ? 8 : 16))) break;
           const lQ = Math.min(lPl * cc.lPP, remL);
           if (lQ <= 0) break;
           res.push({ mo: d.mo, meth: "Fast Boat", cn: cont[ck].label, bQ: 0, lQ, tQ: lQ, cost: cont[ck].cost,
@@ -165,6 +168,8 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
         while (remB + remL > 0) {
           const sp = splitPallets(cc.pallets, cc.bPP, cc.lPP, remB, remL);
           if (sp.bQ + sp.lQ <= 0) break;
+          var usedP = (sp.bQ > 0 ? sp.bPallets : 0) + (sp.lQ > 0 ? sp.lPallets : 0);
+          if (usedP < (cont[ck].minPal || (cc.pallets <= 10 ? 8 : 16))) break;
           res.push({ mo: d.mo, meth: "Fast Boat", cn: cont[ck].label, bQ: sp.bQ, lQ: sp.lQ, tQ: sp.bQ + sp.lQ, cost: cont[ck].cost,
             bSd: new Date(bSD), lSd: new Date(bSD), bAr: new Date(d.bDeadline), lAr: new Date(d.lDeadline), bPal: sp.bPallets, lPal: sp.lPallets });
           bS += sp.bQ; lS += sp.lQ; d.bNeed -= sp.bQ; d.lNeed -= sp.lQ;
