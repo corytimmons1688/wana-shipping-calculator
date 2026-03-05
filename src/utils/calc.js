@@ -219,12 +219,8 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
         }
       }
 
-      // Ship remaining lids via FB if any left (lid residuals missed by Phase 2)
-      if (d.lNeed > 0 && d.lNeed >= pal.lidPP) {
-        const shipDate = lSD;
-        const bMaxFB = Math.max(d.bNeed, padBases);
-        fillAt("Fast Boat", d, shipDate, fb.transitDays, bMaxFB, d.lNeed, false, false, 1);
-      }
+      // Lid residuals NOT shipped via FB here — if Phase 2 rejected them
+      // (Air is cheaper), they correctly fall through to Phase 4 Air.
     }
   }
 
