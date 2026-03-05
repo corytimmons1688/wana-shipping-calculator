@@ -138,23 +138,34 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
   const padBases = minContPal * pal.basePP; // base padding to unlock lid containers
 
   // ════════════════════════════════════════════════════════════════════════════
-  // PHASE 1 — Ocean: backward week scan, lid deadline cutoff.
+  // PHASE 1 — Ocean: two-pass approach using separate base/lid deadlines.
   //
-  // Use LID deadline for Ocean cutoff (more conservative) so containers arriving
-  // on time for lids also arrive on time for bases.
+  // Bases need 14 days lead, lids only 7 days. A single cutoff date loses
+  // ~168K lids/week that could ship on later Ocean containers.
   //
-  // Scan production weeks BACKWARD (latest first): each month picks production
-  // closest to its deadline, leaving early production for earlier months.
+  // Pass 1a: base deadline — ship bases + any lids available at that date.
+  // Pass 1b: lid deadline — ship remaining lids using the later window.
   //
-  // committedBy scoping ensures each ship sees accurate surplus without
-  // future-month commitments polluting the available count.
+  // Both passes scan backward, leaving early production for earlier months.
   // ════════════════════════════════════════════════════════════════════════════
   if (oc) {
+    // Pass 1a: base deadline window
     for (const d of demands) {
-      const ocD = addDays(d.lDeadline, -oc.transitDays);
-      const validWeeks = prod.filter(pw => pw.wk <= ocD);
+      const ocBD = addDays(d.bDeadline, -oc.transitDays);
+      const validWeeks = prod.filter(pw => pw.wk <= ocBD);
       for (let i = validWeeks.length - 1; i >= 0 && (d.bNeed > 0 || d.lNeed > 0); i--) {
         fillAt("Standard Ocean", d, validWeeks[i].wk, oc.transitDays, d.bNeed, d.lNeed, false, false, null);
+      }
+    }
+    // Pass 1b: lid deadline window — extra weeks between base and lid deadlines
+    for (const d of demands) {
+      if (d.lNeed <= 0) continue;
+      const ocLD = addDays(d.lDeadline, -oc.transitDays);
+      const ocBD = addDays(d.bDeadline, -oc.transitDays);
+      if (ocLD <= ocBD) continue; // no extra window
+      const extraWeeks = prod.filter(pw => pw.wk > ocBD && pw.wk <= ocLD);
+      for (let i = extraWeeks.length - 1; i >= 0 && d.lNeed > 0; i--) {
+        fillAt("Standard Ocean", d, extraWeeks[i].wk, oc.transitDays, padBases, d.lNeed, false, true, null);
       }
     }
   }
@@ -253,40 +264,33 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
   // ════════════════════════════════════════════════════════════════════════════
   // POST-PASS: Remove Air shipments made unnecessary by cumulative carry-over.
   //
-  // Ocean/FB containers ship in pallet multiples, so each month slightly
-  // over-ships. That surplus carries forward. If cumulative shipped bases
-  // (or lids) through month M already cover cumulative demand through M,
-  // any Air shipment for month M is redundant — drop it.
+  // Track base surplus and lid surplus INDEPENDENTLY. An Air shipment for
+  // bases is redundant if cumulative bases already cover cumulative demand.
+  // Same for lids. Mixed Air (both bQ>0 and lQ>0) is only dropped if BOTH
+  // components are covered.
   // ════════════════════════════════════════════════════════════════════════════
   {
     const toRemove = new Set();
-    let cumShipB = 0, cumShipL = 0, cumDem = 0;
+    let cumB = 0, cumL = 0, cumD = 0;
     const months = [...new Set(res.map(s => s.mo))].sort((a,b) => a-b);
     for (const m of months) {
-      cumDem += gld[m] || 0;
-      // Count all non-Air shipments for this month first
+      cumD += gld[m] || 0;
+      // Count non-Air first so carry-over is known before evaluating Air
       for (const s of res) {
-        if (s.mo === m && s.meth !== "Air") { cumShipB += s.bQ; cumShipL += s.lQ; }
+        if (s.mo === m && s.meth !== "Air") { cumB += s.bQ; cumL += s.lQ; }
       }
-      // Now evaluate each Air shipment for this month
       for (let i = 0; i < res.length; i++) {
         const s = res[i];
         if (s.mo !== m || s.meth !== "Air") continue;
-        const bCovered = cumShipB >= cumDem;
-        const lCovered = cumShipL >= cumDem;
-        if (bCovered && lCovered) {
-          toRemove.add(i);
-        } else if (bCovered && s.bQ > 0 && s.lQ === 0) {
-          toRemove.add(i);
-        } else if (lCovered && s.lQ > 0 && s.bQ === 0) {
-          toRemove.add(i);
-        } else {
-          // Still genuinely needed — count it toward cumulative
-          cumShipB += s.bQ; cumShipL += s.lQ;
-        }
+        const bCov = cumB >= cumD;  // bases already covered cumulatively
+        const lCov = cumL >= cumD;  // lids already covered cumulatively
+        const hasB = s.bQ > 0, hasL = s.lQ > 0;
+        if ((hasB && bCov) && (hasL && lCov)) { toRemove.add(i); }        // both covered
+        else if (hasB && !hasL && bCov)        { toRemove.add(i); }        // base-only, covered
+        else if (hasL && !hasB && lCov)        { toRemove.add(i); }        // lid-only, covered
+        else { cumB += s.bQ; cumL += s.lQ; }  // genuinely needed
       }
     }
-    // Remove in reverse order so indices stay valid
     const removeList = [...toRemove].sort((a,b) => b-a);
     for (const i of removeList) res.splice(i, 1);
   }
