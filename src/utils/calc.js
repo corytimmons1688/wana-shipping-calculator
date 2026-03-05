@@ -8,8 +8,10 @@ export function calcGLD(mkts) {
 
 export function calcProd(molds) {
   const S = new Date("2026-03-09"), wks = [];
-  let bC = 0, lC = 0, bPU = 0, lPU = 0;
+  let bC = 0, lC = 0, bPU = 0, lPU = 0, bP2U = 0;
   const bPD = new Date(molds.base.proto.avail), bMD = new Date(molds.base.prod.avail);
+  const bP2 = molds.base.proto2 || null;
+  const bP2D = bP2 ? new Date(bP2.avail) : null;
   const lPD = new Date(molds.lid.proto.avail), lMD = new Date(molds.lid.prod.avail);
   for (let w = 0; w < 43; w++) {
     const wk = new Date(S); wk.setDate(wk.getDate() + w * 7);
@@ -19,11 +21,17 @@ export function calcProd(molds) {
       const c = molds.base.proto.life ? Math.min(o, molds.base.proto.life - bPU) : o;
       bW += c; bPU += c;
     }
+    // Second prototype base mold (optional)
+    if (bP2 && bP2D && wk >= bP2D && (bP2.life == null || bP2U < bP2.life)) {
+      const o2 = bP2.daily * bP2.qty * bP2.days;
+      const c2 = bP2.life ? Math.min(o2, bP2.life - bP2U) : o2;
+      bW += c2; bP2U += c2;
+    }
     if (wk >= bMD) bW += molds.base.prod.daily * molds.base.prod.qty * molds.base.prod.days;
     if (wk >= lPD && (molds.lid.proto.life == null || lPU < molds.lid.proto.life)) {
-      const o2 = molds.lid.proto.daily * molds.lid.proto.qty * molds.lid.proto.days;
-      const c2 = molds.lid.proto.life ? Math.min(o2, molds.lid.proto.life - lPU) : o2;
-      lW += c2; lPU += c2;
+      const o3 = molds.lid.proto.daily * molds.lid.proto.qty * molds.lid.proto.days;
+      const c3 = molds.lid.proto.life ? Math.min(o3, molds.lid.proto.life - lPU) : o3;
+      lW += c3; lPU += c3;
     }
     if (wk >= lMD) lW += molds.lid.prod.daily * molds.lid.prod.qty * molds.lid.prod.days;
     bC += bW; lC += lW;
