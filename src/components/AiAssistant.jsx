@@ -128,7 +128,7 @@ export default function AiAssistant({ sc, gld, ships, prod, frt, cap }) {
       apiMsgs.push({ role: newMsgs[i].role, content: newMsgs[i].content });
     }
 
-    fetch("https://api.anthropic.com/v1/messages", {
+    fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
