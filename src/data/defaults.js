@@ -36,6 +36,7 @@ export const SHIPPING = [
 export const MOLDS = {
   base:{
     proto:{mat:"HDPE",daily:3800,avail:"2026-03-15",life:50000,days:6,cav:4,qty:1,cost:2875},
+    proto2:{mat:"HDPE",daily:3800,avail:"2026-04-06",life:50000,days:6,cav:4,qty:1,cost:2875},
     prod:{mat:"HDPE",daily:7800,avail:"2026-04-27",life:null,days:6,cav:4,qty:4,cost:2875},
   },
   lid:{
