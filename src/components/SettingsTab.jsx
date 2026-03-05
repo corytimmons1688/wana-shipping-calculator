@@ -87,6 +87,7 @@ export default function SettingsTab({ sc, cap, upd }) {
             <div style={{ fontWeight: 700, color: T.AC, fontSize: 12, marginBottom: 4 }}>{c.label}</div>
             <div style={{ color: T.T2, fontSize: 10 }}>Cost: <Ed value={c.cost} onChange={v => upd(s => { s.containers[k].cost = v; })} /></div>
             <div style={{ color: T.T2, fontSize: 10 }}>Pallets: <Ed value={c.pallets} onChange={v => upd(s => { s.containers[k].pallets = v; })} /></div>
+            <div style={{ color: T.T2, fontSize: 10 }}>Min Pallets: <Ed value={c.minPal} onChange={v => upd(s => { s.containers[k].minPal = v; })} /></div>
           </div>
         ))}
       </div>
