@@ -67,6 +67,8 @@ export default function ShippingTab({ ships, prod, frt, gld }) {
 
       var cumArrived = cumArrB + cumArrL;
       var stockOnHand = cumArrived - cumDemand;
+      var stockB = cumArrB - cumDemand;
+      var stockL = cumArrL - cumDemand;
 
       var mosVal = 0;
       if (stockOnHand > 0 && wkMonth < 12) {
@@ -84,7 +86,7 @@ export default function ShippingTab({ ships, prod, frt, gld }) {
         shipping: shipping, arrivals: arrivals,
         arrB: arrB, arrL: arrL, cumArrB: cumArrB, cumArrL: cumArrL,
         cumArrived: cumArrived, monthDemand: monthDemand,
-        cumDemand: cumDemand, stockOnHand: stockOnHand,
+        cumDemand: cumDemand, stockOnHand: stockOnHand, stockB: stockB, stockL: stockL,
         monthsOfStock: mosVal
       });
     }
@@ -128,7 +130,7 @@ export default function ShippingTab({ ships, prod, frt, gld }) {
                 <th style={th} rowSpan={2}>Week Of</th>
                 <th style={{ ...th, textAlign:"center", borderBottom:"2px solid "+T.GR, color:T.GR }} colSpan={4}>Production</th>
                 <th style={{ ...th, textAlign:"center", borderBottom:"2px solid "+T.AC, color:T.AC }} colSpan={5}>Shipping</th>
-                <th style={{ ...th, textAlign:"center", borderBottom:"2px solid "+T.AM, color:T.AM }} colSpan={5}>Inventory at Calyx</th>
+                <th style={{ ...th, textAlign:"center", borderBottom:"2px solid "+T.AM, color:T.AM }} colSpan={6}>Inventory at Calyx</th>
               </tr>
               <tr>
                 <th style={{ ...th, textAlign:"right", fontSize:9, color:T.GR }}>Base Wk</th>
@@ -143,7 +145,8 @@ export default function ShippingTab({ ships, prod, frt, gld }) {
                 <th style={{ ...th, textAlign:"right", fontSize:9, color:T.GR }}>Base Arr</th>
                 <th style={{ ...th, textAlign:"right", fontSize:9, color:T.AC }}>Lid Arr</th>
                 <th style={{ ...th, textAlign:"right", fontSize:9 }}>Demand</th>
-                <th style={{ ...th, textAlign:"right", fontSize:9 }}>Stock</th>
+                <th style={{ ...th, textAlign:"right", fontSize:9, color:T.GR }}>Base Stk</th>
+                <th style={{ ...th, textAlign:"right", fontSize:9, color:T.AC }}>Lid Stk</th>
                 <th style={{ ...th, textAlign:"right", fontSize:9 }}>Mo. Stock</th>
               </tr>
             </thead>
@@ -171,7 +174,8 @@ export default function ShippingTab({ ships, prod, frt, gld }) {
                     <td style={{ ...td, textAlign:"right", color:T.GR }}>{r.cumArrB>0?fm(r.cumArrB):""}</td>
                     <td style={{ ...td, textAlign:"right", color:T.AC }}>{r.cumArrL>0?fm(r.cumArrL):""}</td>
                     <td style={{ ...td, textAlign:"right", color:r.monthDemand>0?"#9333ea":T.T2 }}>{r.cumDemand>0?fm(r.cumDemand):""}</td>
-                    <td style={{ ...td, textAlign:"right", fontWeight:700, color:negStock?"#dc2626":r.stockOnHand>0?T.GR:T.T2 }}>{r.cumArrived>0||r.cumDemand>0?fm(r.stockOnHand):""}</td>
+                    <td style={{ ...td, textAlign:"right", fontWeight:600, color:r.stockB<0?"#dc2626":r.stockB>0?T.GR:T.T2 }}>{r.cumArrB>0||r.cumDemand>0?fm(r.stockB):""}</td>
+                    <td style={{ ...td, textAlign:"right", fontWeight:600, color:r.stockL<0?"#dc2626":r.stockL>0?T.AC:T.T2 }}>{r.cumArrL>0||r.cumDemand>0?fm(r.stockL):""}</td>
                     <td style={{ ...td, textAlign:"right", color:r.monthsOfStock<3&&r.cumDemand>0?"#dc2626":r.monthsOfStock>=3?T.GR:T.T2, fontSize:11 }}>{r.cumDemand>0?r.monthsOfStock.toFixed(1):""}</td>
                   </tr>
                 );
@@ -180,13 +184,13 @@ export default function ShippingTab({ ships, prod, frt, gld }) {
                   var subHl = hl === "u"+i;
                   return (
                     <tr key={"s"+i+"-"+si} onClick={function() { setHl(hl === "u"+i ? null : "u"+i); }} style={{ background: subHl ? hlBg : (i%2===0?"transparent":T.S2), cursor:"pointer" }}>
-                      <td style={td}></td><td style={td}></td><td style={td}></td><td style={td}></td><td style={td}></td>
+                      <td style={td}></td><td style={td}></td><td style={td}></td><td style={td}></td><td style={td}></td><td style={td}></td>
                       <td style={td}><Bg method={esh.meth}/></td>
                       <td style={{ ...td, textAlign:"right", fontWeight:600, color:T.GR }}>{esh.bQ > 0 ? fm(esh.bQ) : ""}</td>
                       <td style={{ ...td, textAlign:"right", fontWeight:600, color:T.AC }}>{esh.lQ > 0 ? fm(esh.lQ) : ""}</td>
                       <td style={{ ...td, textAlign:"right", color:esh.cost>0?T.AM:T.GR, fontWeight:600 }}>{esh.cost===0?"FREE":f$(esh.cost)}</td>
                       <td style={{ ...td, color:T.T2, fontSize:11 }}>{dF(esh.bAr)}</td>
-                      <td style={td}></td><td style={td}></td><td style={td}></td><td style={td}></td><td style={td}></td>
+                      <td style={td}></td><td style={td}></td><td style={td}></td><td style={td}></td><td style={td}></td><td style={td}></td>
                     </tr>
                   );
                 });
