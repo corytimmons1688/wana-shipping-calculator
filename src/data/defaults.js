@@ -40,7 +40,7 @@ export const MOLDS = {
   }
 };
 
-export const CONTAINERS = {"20HC":{label:"20' HC",cost:9500,pallets:10},"40HC":{label:"40' HC",cost:14300,pallets:20}};
+export const CONTAINERS = {"20HC":{label:"20' HC",cost:9500,pallets:10,minPal:8},"40HC":{label:"40' HC",cost:14300,pallets:20,minPal:16}};
 export const PALLET = {basePP:9072,lidPP:30720,airBasePP:7500,airLidPP:25000};
 export const AIR_COST = {base:1.00,lid:0.25};
 export const PARAMS = {baseLeadDays:10,lidLeadDays:7};
