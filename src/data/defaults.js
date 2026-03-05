@@ -10,11 +10,13 @@ export const MARKETS = [
   {name:"Connecticut",goLive:12,priority:false,demand:[11052,11270,14105,12420,12834,13110,13547,13547,13110,13547,13110,13547]},
   {name:"Florida",goLive:12,priority:false,demand:[27983,25346,27846,31954,26177,24372,23590,25179,20520,21204,26190,27063]},
   {name:"Illinois",goLive:8,priority:true,demand:[75082,69269,101060,110880,84348,76315,112499,98208,99000,92070,86130,89001]},
-  {name:"Maryland",goLive:12,priority:false,demand:[22320,21168,24180,22680,23436,22680,21576,21576,20880,21576,20880,21576]},
+  // FIXED: Maryland, Michigan, Missouri corrected to goLive:null (were incorrectly set to 12,
+  // inflating December go-live demand by ~130K units vs Excel source)
+  {name:"Maryland",goLive:null,priority:false,demand:[22320,21168,24180,22680,23436,22680,21576,21576,20880,21576,20880,21576]},
   {name:"Massachusetts",goLive:7,priority:true,demand:[41850,45360,58590,61171,65844,66420,69750,69795,64994,74367,73986,76452]},
-  {name:"Michigan",goLive:12,priority:false,demand:[63536,63113,66307,55510,61068,61502,69774,56565,61716,62156,59946,62538]},
+  {name:"Michigan",goLive:null,priority:false,demand:[63536,63113,66307,55510,61068,61502,69774,56565,61716,62156,59946,62538]},
   {name:"Mississippi",goLive:11,priority:false,demand:[5242,2894,2691,2934,3112,3494,2999,1973,2075,2932,2506,3070]},
-  {name:"Missouri",goLive:12,priority:false,demand:[19790,14918,26381,32634,39010,25200,32240,32240,31200,32240,31200,32240]},
+  {name:"Missouri",goLive:null,priority:false,demand:[19790,14918,26381,32634,39010,25200,32240,32240,31200,32240,31200,32240]},
   {name:"Montana",goLive:12,priority:false,demand:[21266,18620,21700,32640,26040,26250,29295,28210,27930,27807,27300,27776]},
   {name:"Nevada",goLive:null,priority:false,demand:[0,0,25500,26288,31320,23870,27280,19080,24180,21600,22320,0]},
   {name:"New Jersey",goLive:4,priority:true,demand:[0,0,0,5725,43470,73152,58621,72307,47999,26724,53019,34744],skuDetail:NJ_SKU_DETAIL},
@@ -45,7 +47,8 @@ export const MOLDS = {
 export const CONTAINERS = {"20HC":{label:"20' HC",cost:9500,pallets:10,minPal:8},"40HC":{label:"40' HC",cost:14300,pallets:20,minPal:16}};
 export const PALLET = {basePP:9072,lidPP:30720,airBasePP:7500,airLidPP:25000};
 export const AIR_COST = {base:0.40,lid:0.12};
-export const PARAMS = {baseLeadDays:10,lidLeadDays:7};
+// FIXED: baseLeadDays corrected from 10 to 14 (matches Excel Settings and spec: "12-14 days before month start")
+export const PARAMS = {baseLeadDays:14,lidLeadDays:7};
 export const PROTO_MOLDS = [{name:"Lid Mold VN",cost:1300,qty:1},{name:"EBM Jar VN",cost:1850,qty:1},{name:"Lid Mold CN",cost:2000,qty:1},{name:"EBM Jar CN",cost:1000,qty:1},{name:"IBM Jar CN",cost:2000,qty:1}];
 export const EQUIPMENT = [{name:"PE Label Applicator Change Parts",cost:29389,qty:1},{name:"KapsAll Change Parts",cost:17132,qty:1},{name:"Die Tool for Lid Liner",cost:450,qty:1}];
 export const PROTO_TL = [{step:"Confirm Design",start:"Feb 27",end:"Feb 28",days:1},{step:"Mold Prototype Adjust",start:"Feb 28",end:"Mar 10",days:10},{step:"Color Matching",start:"TBD",end:"TBD",days:6},{step:"T1 Samples + Mass Production",start:"Mar 15",end:"Apr 12",days:28},{step:"Printing / Color Matching",start:"Apr 12",end:"Apr 17",days:5}];
