@@ -1,37 +1,22 @@
-export const config = {
-  runtime: "edge"
-};
+export default async function handler(req, res) {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
-export default async function handler(req) {
   if (req.method === "OPTIONS") {
-    return new Response(null, {
-      status: 200,
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type"
-      }
-    });
+    return res.status(200).end();
   }
 
   if (req.method !== "POST") {
-    return new Response(JSON.stringify({ error: "POST only" }), {
-      status: 405,
-      headers: { "Content-Type": "application/json" }
-    });
+    return res.status(405).json({ error: "POST only" });
   }
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
-    return new Response(JSON.stringify({ error: "ANTHROPIC_API_KEY not configured in Vercel environment variables" }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" }
-    });
+    return res.status(500).json({ error: "ANTHROPIC_API_KEY not set" });
   }
 
   try {
-    const body = await req.json();
-
     const response = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {
@@ -40,23 +25,16 @@ export default async function handler(req) {
         "anthropic-version": "2023-06-01"
       },
       body: JSON.stringify({
-        model: body.model || "claude-sonnet-4-5-20250514",
-        max_tokens: body.max_tokens || 1000,
-        system: body.system || "",
-        messages: body.messages || []
+        model: req.body.model || "claude-sonnet-4-5-20250514",
+        max_tokens: req.body.max_tokens || 1000,
+        system: req.body.system || "",
+        messages: req.body.messages || []
       })
     });
 
     const data = await response.json();
-
-    return new Response(JSON.stringify(data), {
-      status: 200,
-      headers: { "Content-Type": "application/json" }
-    });
+    return res.status(200).json(data);
   } catch (err) {
-    return new Response(JSON.stringify({ error: err.message }), {
-      status: 500,
-      headers: { "Content-Type": "application/json" }
-    });
+    return res.status(500).json({ error: err.message });
   }
 }
