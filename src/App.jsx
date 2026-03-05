@@ -16,12 +16,12 @@ export default function App() {
   const [cmp, setCmp] = useState(false);
   const sc = scenarios[active];
   const upd = useCallback(fn => { setScenarios(p => { const nx = dc(p); fn(nx[active]); return nx; }); }, [active]);
-  const gld = useMemo(() => calcGLD(sc.markets), [sc.markets]);
+  const gld = useMemo(() => calcGLD(sc.markets), [sc]);
   const annD = useMemo(() => gld.reduce((a, b) => a + b, 0), [gld]);
-  const weeklyDem = useMemo(() => calcWeeklyDemand(sc.markets), [sc.markets]);
-  const prod = useMemo(() => calcProd(sc.molds), [sc.molds]);
-  const ships = useMemo(() => optimize(sc.markets, sc.molds, sc.shipping, sc.params, sc.containers, sc.pallet, sc.airCost), [sc.markets, sc.molds, sc.shipping, sc.params, sc.containers, sc.pallet, sc.airCost]);
-  const cap = useMemo(() => calcCap(sc.molds, sc.protoMolds, sc.equipment), [sc.molds, sc.protoMolds, sc.equipment]);
+  const weeklyDem = useMemo(() => calcWeeklyDemand(sc.markets), [sc]);
+  const prod = useMemo(() => calcProd(sc.molds), [sc]);
+  const ships = useMemo(() => optimize(sc.markets, sc.molds, sc.shipping, sc.params, sc.containers, sc.pallet, sc.airCost), [sc]);
+  const cap = useMemo(() => calcCap(sc.molds, sc.protoMolds, sc.equipment), [sc]);
   const frt = useMemo(() => {
     const s = {}; let tot = 0, units = 0;
     for (const sh of ships) { if (!s[sh.meth]) s[sh.meth] = { n:0,u:0,c:0,b:0,l:0 }; s[sh.meth].n++; s[sh.meth].u += sh.tQ; s[sh.meth].c += sh.cost; s[sh.meth].b += sh.bQ; s[sh.meth].l += sh.lQ; tot += sh.cost; units += sh.tQ; }
