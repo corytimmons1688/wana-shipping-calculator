@@ -127,7 +127,7 @@ export default function ShippingTab({ ships, prod, frt, gld }) {
               <tr>
                 <th style={th} rowSpan={2}>Week Of</th>
                 <th style={{ ...th, textAlign:"center", borderBottom:"2px solid "+T.GR, color:T.GR }} colSpan={4}>Production</th>
-                <th style={{ ...th, textAlign:"center", borderBottom:"2px solid "+T.AC, color:T.AC }} colSpan={4}>Shipping</th>
+                <th style={{ ...th, textAlign:"center", borderBottom:"2px solid "+T.AC, color:T.AC }} colSpan={5}>Shipping</th>
                 <th style={{ ...th, textAlign:"center", borderBottom:"2px solid "+T.AM, color:T.AM }} colSpan={5}>Inventory at Calyx</th>
               </tr>
               <tr>
@@ -136,7 +136,8 @@ export default function ShippingTab({ ships, prod, frt, gld }) {
                 <th style={{ ...th, textAlign:"right", fontSize:9, color:T.GR }}>Base Cum</th>
                 <th style={{ ...th, textAlign:"right", fontSize:9, color:T.AC }}>Lid Cum</th>
                 <th style={{ ...th, textAlign:"left", fontSize:9 }}>Method</th>
-                <th style={{ ...th, textAlign:"right", fontSize:9 }}>Qty</th>
+                <th style={{ ...th, textAlign:"right", fontSize:9, color:T.GR }}>Bases</th>
+                <th style={{ ...th, textAlign:"right", fontSize:9, color:T.AC }}>Lids</th>
                 <th style={{ ...th, textAlign:"right", fontSize:9 }}>Cost</th>
                 <th style={{ ...th, textAlign:"left", fontSize:9 }}>Arrival</th>
                 <th style={{ ...th, textAlign:"right", fontSize:9, color:T.GR }}>Base Arr</th>
@@ -163,7 +164,8 @@ export default function ShippingTab({ ships, prod, frt, gld }) {
                     <td style={{ ...td, textAlign:"right", color:T.GR, fontSize:11 }}>{r.bC>0?fm(r.bC):""}</td>
                     <td style={{ ...td, textAlign:"right", color:T.AC, fontSize:11 }}>{r.lC>0?fm(r.lC):""}</td>
                     <td style={td}>{firstShip ? <Bg method={firstShip.meth}/> : ""}</td>
-                    <td style={{ ...td, textAlign:"right", fontWeight:firstShip?600:400 }}>{firstShip ? fm(firstShip.tQ) : ""}</td>
+                    <td style={{ ...td, textAlign:"right", fontWeight:firstShip?600:400, color:T.GR }}>{firstShip && firstShip.bQ > 0 ? fm(firstShip.bQ) : ""}</td>
+                    <td style={{ ...td, textAlign:"right", fontWeight:firstShip?600:400, color:T.AC }}>{firstShip && firstShip.lQ > 0 ? fm(firstShip.lQ) : ""}</td>
                     <td style={{ ...td, textAlign:"right", color:firstShip&&firstShip.cost>0?T.AM:T.GR, fontWeight:firstShip?600:400 }}>{firstShip ? (firstShip.cost===0?"FREE":f$(firstShip.cost)) : ""}</td>
                     <td style={{ ...td, color:T.T2, fontSize:11 }}>{firstShip ? dF(firstShip.bAr) : ""}</td>
                     <td style={{ ...td, textAlign:"right", color:T.GR }}>{r.cumArrB>0?fm(r.cumArrB):""}</td>
@@ -180,7 +182,8 @@ export default function ShippingTab({ ships, prod, frt, gld }) {
                     <tr key={"s"+i+"-"+si} onClick={function() { setHl(hl === "u"+i ? null : "u"+i); }} style={{ background: subHl ? hlBg : (i%2===0?"transparent":T.S2), cursor:"pointer" }}>
                       <td style={td}></td><td style={td}></td><td style={td}></td><td style={td}></td><td style={td}></td>
                       <td style={td}><Bg method={esh.meth}/></td>
-                      <td style={{ ...td, textAlign:"right", fontWeight:600 }}>{fm(esh.tQ)}</td>
+                      <td style={{ ...td, textAlign:"right", fontWeight:600, color:T.GR }}>{esh.bQ > 0 ? fm(esh.bQ) : ""}</td>
+                      <td style={{ ...td, textAlign:"right", fontWeight:600, color:T.AC }}>{esh.lQ > 0 ? fm(esh.lQ) : ""}</td>
                       <td style={{ ...td, textAlign:"right", color:esh.cost>0?T.AM:T.GR, fontWeight:600 }}>{esh.cost===0?"FREE":f$(esh.cost)}</td>
                       <td style={{ ...td, color:T.T2, fontSize:11 }}>{dF(esh.bAr)}</td>
                       <td style={td}></td><td style={td}></td><td style={td}></td><td style={td}></td><td style={td}></td>
