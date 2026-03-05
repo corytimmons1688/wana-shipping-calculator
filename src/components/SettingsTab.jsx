@@ -44,96 +44,157 @@ export default function SettingsTab({ sc, cap, upd }) {
 
   const moldSet = () => (
     <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
-      {moldPanel({ label:"Base (Jar / HDPE)", type:"base", color:T.GR, icon:"\u2B22" })}
-      {moldPanel({ label:"Lid (Cap / PP)", type:"lid", color:T.AC, icon:"\u2B21" })}
+      {moldPanel({ label: "Base (Jar / HDPE)", type: "base", color: T.GR, icon: "\u2B22" })}
+      {moldPanel({ label: "Lid (Cap / PP)", type: "lid", color: T.AC, icon: "\u2B21" })}
     </div>
   );
 
   function tlTbl({ data, title }) {
-    return (<div><div style={{ fontSize: 13, fontWeight: 700, color: T.TX, marginBottom: 8 }}>{title}</div>
-      <table style={{ ...tbl, maxWidth: 550 }}><thead><tr><th style={th}>Step</th><th style={th}>Start</th><th style={th}>End</th><th style={{ ...th, textAlign: "right" }}>Days</th></tr></thead><tbody>
-        {data.map((r, i) => <tr key={i} style={{ background: i % 2 === 0 ? "transparent" : T.S2 + "28" }}><td style={{ ...td, fontWeight: 600 }}>{r.step}</td><td style={{ ...td, color: T.T2 }}>{r.start}</td><td style={{ ...td, color: T.T2 }}>{r.end}</td><td style={{ ...td, textAlign: "right", fontWeight: 600 }}>{r.days}</td></tr>)}
-      </tbody></table></div>);
+    return (
+      <div>
+        <div style={{ fontSize: 13, fontWeight: 700, color: T.TX, marginBottom: 8 }}>{title}</div>
+        <table style={{ ...tbl, maxWidth: 550 }}>
+          <thead><tr><th style={th}>Step</th><th style={th}>Start</th><th style={th}>End</th><th style={{ ...th, textAlign: "right" }}>Days</th></tr></thead>
+          <tbody>
+            {data.map((r, i) => (
+              <tr key={i} style={{ background: i % 2 === 0 ? "transparent" : T.S2 + "28" }}>
+                <td style={{ ...td, fontWeight: 600 }}>{r.step}</td>
+                <td style={{ ...td, color: T.T2 }}>{r.start}</td>
+                <td style={{ ...td, color: T.T2 }}>{r.end}</td>
+                <td style={{ ...td, textAlign: "right", fontWeight: 600 }}>{r.days}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
   }
 
   function fcTbl() {
-    let t = 0; for (const r of sc.forecast) t += r.qty;
+    let t = 0;
+    for (const r of sc.forecast) t += r.qty;
     return (
-      <div><div style={{ fontSize: 13, fontWeight: 700, color: T.TX, marginBottom: 8 }}>Supplier Forecast (Canopy Cube)</div>
-        <table style={{ ...tbl, maxWidth: 650 }}><thead><tr><th style={th}>Period</th><th style={{ ...th, textAlign: "right" }}>Qty</th><th style={{ ...th, textAlign: "right" }}>Days</th><th style={th}>Start</th><th style={th}>End</th></tr></thead><tbody>
-          {sc.forecast.map((r, i) => <tr key={i} style={{ background: i % 2 === 0 ? "transparent" : T.S2 + "28" }}><td style={{ ...td, fontWeight: 600 }}>{r.period}</td><td style={{ ...td, textAlign: "right" }}>{fm(r.qty)}</td><td style={{ ...td, textAlign: "right", color: T.T2 }}>{r.days}</td><td style={{ ...td, color: T.T2 }}>{r.start}</td><td style={{ ...td, color: T.T2 }}>{r.end}</td></tr>)}
-          <tr style={{ background: "#dcfce710" }}><td style={{ ...td, fontWeight: 700, color: T.GR, borderTop: "2px solid " + T.GR }}>TOTAL</td><td style={{ ...td, textAlign: "right", fontWeight: 700, color: T.GR, borderTop: "2px solid " + T.GR }}>{fm(t)}</td><td colSpan={3} style={{ ...td, borderTop: "2px solid " + T.GR }} /></tr>
-        </tbody></table></div>
+      <div>
+        <div style={{ fontSize: 13, fontWeight: 700, color: T.TX, marginBottom: 8 }}>Supplier Forecast (Canopy Cube)</div>
+        <table style={{ ...tbl, maxWidth: 650 }}>
+          <thead><tr><th style={th}>Period</th><th style={{ ...th, textAlign: "right" }}>Qty</th><th style={{ ...th, textAlign: "right" }}>Days</th><th style={th}>Start</th><th style={th}>End</th></tr></thead>
+          <tbody>
+            {sc.forecast.map((r, i) => (
+              <tr key={i} style={{ background: i % 2 === 0 ? "transparent" : T.S2 + "28" }}>
+                <td style={{ ...td, fontWeight: 600 }}>{r.period}</td>
+                <td style={{ ...td, textAlign: "right" }}>{fm(r.qty)}</td>
+                <td style={{ ...td, textAlign: "right", color: T.T2 }}>{r.days}</td>
+                <td style={{ ...td, color: T.T2 }}>{r.start}</td>
+                <td style={{ ...td, color: T.T2 }}>{r.end}</td>
+              </tr>
+            ))}
+            <tr style={{ background: "#dcfce710" }}>
+              <td style={{ ...td, fontWeight: 700, color: T.GR, borderTop: "2px solid " + T.GR }}>TOTAL</td>
+              <td style={{ ...td, textAlign: "right", fontWeight: 700, color: T.GR, borderTop: "2px solid " + T.GR }}>{fm(t)}</td>
+              <td colSpan={3} style={{ ...td, borderTop: "2px solid " + T.GR }} />
+            </tr>
+          </tbody>
+        </table>
+      </div>
     );
-  };
+  }
 
-  function pkTbl() { return (
-    <div><div style={{ fontSize: 13, fontWeight: 700, color: T.TX, marginBottom: 8 }}>Packing List</div>
-      <table style={{ ...tbl, maxWidth: 750 }}><thead><tr><th style={th}>Container</th><th style={th}>Item</th><th style={{ ...th, textAlign: "right" }}>Pallets</th><th style={{ ...th, textAlign: "right" }}>Qty/Cont</th><th style={{ ...th, textAlign: "right" }}>Weight</th><th style={{ ...th, textAlign: "right" }}>CBM</th></tr></thead><tbody>
-        {sc.pkl.map((r, i) => <tr key={i} style={{ background: i % 2 === 0 ? "transparent" : T.S2 + "28" }}><td style={{ ...td, fontWeight: 600 }}>{r.cont}</td><td style={td}>{r.item}</td><td style={{ ...td, textAlign: "right" }}>{r.pallets}</td><td style={{ ...td, textAlign: "right" }}>{fm(r.qpc)}</td><td style={{ ...td, textAlign: "right", color: T.T2 }}>{r.wt}</td><td style={{ ...td, textAlign: "right", color: T.T2 }}>{r.cbm}</td></tr>)}
-      </tbody></table></div>
-  );
+  function pkTbl() {
+    return (
+      <div>
+        <div style={{ fontSize: 13, fontWeight: 700, color: T.TX, marginBottom: 8 }}>Packing List</div>
+        <table style={{ ...tbl, maxWidth: 750 }}>
+          <thead><tr><th style={th}>Container</th><th style={th}>Item</th><th style={{ ...th, textAlign: "right" }}>Pallets</th><th style={{ ...th, textAlign: "right" }}>Qty/Cont</th><th style={{ ...th, textAlign: "right" }}>Weight</th><th style={{ ...th, textAlign: "right" }}>CBM</th></tr></thead>
+          <tbody>
+            {sc.pkl.map((r, i) => (
+              <tr key={i} style={{ background: i % 2 === 0 ? "transparent" : T.S2 + "28" }}>
+                <td style={{ ...td, fontWeight: 600 }}>{r.cont}</td>
+                <td style={td}>{r.item}</td>
+                <td style={{ ...td, textAlign: "right" }}>{r.pallets}</td>
+                <td style={{ ...td, textAlign: "right" }}>{fm(r.qpc)}</td>
+                <td style={{ ...td, textAlign: "right", color: T.T2 }}>{r.wt}</td>
+                <td style={{ ...td, textAlign: "right", color: T.T2 }}>{r.cbm}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
 
-  function shipSet() { return (
-    <div style={{ maxWidth: 600 }}>
-      <table style={tbl}><thead><tr><th style={th}>Method</th><th style={{ ...th, textAlign: "right" }}>Transit</th><th style={{ ...th, textAlign: "right" }}>Cost/Unit</th><th style={th}>Notes</th></tr></thead><tbody>
-        {sc.shipping.map((s, i) => <tr key={i}><td style={td}><Bg method={s.method} /></td><td style={{ ...td, textAlign: "right" }}><Ed value={s.transitDays} onChange={v => upd(sc2 => { sc2.shipping[i].transitDays = v; })} /></td><td style={{ ...td, textAlign: "right" }}><Ed value={s.costPerUnit} onChange={v => upd(sc2 => { sc2.shipping[i].costPerUnit = v; })} /></td><td style={{ ...td, color: T.T2, fontSize: 11 }}>{s.notes}</td></tr>)}
-      </tbody></table>
-      <div style={{ marginTop: 14, fontSize: 12, fontWeight: 700, color: T.TX, marginBottom: 6 }}>Container Rates</div>
-      <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-        {Object.entries(sc.containers).map(([k, c]) => (
-          <div key={k} style={{ background: T.S2, borderRadius: 6, padding: "8px 12px", border: "1px solid " + T.BD, minWidth: 140 }}>
-            <div style={{ fontWeight: 700, color: T.AC, fontSize: 12, marginBottom: 4 }}>{c.label}</div>
-            <div style={{ color: T.T2, fontSize: 10 }}>Cost: <Ed value={c.cost} onChange={v => upd(s => { s.containers[k].cost = v; })} /></div>
-            <div style={{ color: T.T2, fontSize: 10 }}>Pallets: <Ed value={c.pallets} onChange={v => upd(s => { s.containers[k].pallets = v; })} /></div>
-            <div style={{ color: T.T2, fontSize: 10 }}>Min Pallets: <Ed value={c.minPal} onChange={v => upd(s => { s.containers[k].minPal = v; })} /></div>
+  function shipSet() {
+    return (
+      <div style={{ maxWidth: 600 }}>
+        <table style={tbl}>
+          <thead><tr><th style={th}>Method</th><th style={{ ...th, textAlign: "right" }}>Transit</th><th style={{ ...th, textAlign: "right" }}>Cost/Unit</th><th style={th}>Notes</th></tr></thead>
+          <tbody>
+            {sc.shipping.map((s, i) => (
+              <tr key={i}>
+                <td style={td}><Bg method={s.method} /></td>
+                <td style={{ ...td, textAlign: "right" }}><Ed value={s.transitDays} onChange={v => upd(sc2 => { sc2.shipping[i].transitDays = v; })} /></td>
+                <td style={{ ...td, textAlign: "right" }}><Ed value={s.costPerUnit} onChange={v => upd(sc2 => { sc2.shipping[i].costPerUnit = v; })} /></td>
+                <td style={{ ...td, color: T.T2, fontSize: 11 }}>{s.notes}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <div style={{ marginTop: 14, fontSize: 12, fontWeight: 700, color: T.TX, marginBottom: 6 }}>Container Rates</div>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+          {Object.entries(sc.containers).map(([k, c]) => (
+            <div key={k} style={{ background: T.S2, borderRadius: 6, padding: "8px 12px", border: "1px solid " + T.BD, minWidth: 140 }}>
+              <div style={{ fontWeight: 700, color: T.AC, fontSize: 12, marginBottom: 4 }}>{c.label}</div>
+              <div style={{ color: T.T2, fontSize: 10 }}>Cost: <Ed value={c.cost} onChange={v => upd(s => { s.containers[k].cost = v; })} /></div>
+              <div style={{ color: T.T2, fontSize: 10 }}>Pallets: <Ed value={c.pallets} onChange={v => upd(s => { s.containers[k].pallets = v; })} /></div>
+              <div style={{ color: T.T2, fontSize: 10 }}>Min Pallets: <Ed value={c.minPal} onChange={v => upd(s => { s.containers[k].minPal = v; })} /></div>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  function parSet() {
+    return (
+      <div style={{ maxWidth: 520 }}>
+        <div style={{ fontSize: 12, fontWeight: 700, color: T.TX, marginBottom: 6 }}>Lead Times & Rounding</div>
+        <div style={{ background: T.S2, borderRadius: 7, padding: 12, border: "1px solid " + T.BD, marginBottom: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "8px 16px", alignItems: "center" }}>
+            <div><div style={{ color: T.TX, fontSize: 12, fontWeight: 600 }}>Base Lead Time</div><div style={{ color: T.T2, fontSize: 8 }}>Days before month start</div></div>
+            <Ed value={sc.params.baseLeadDays} onChange={v => upd(s => { s.params.baseLeadDays = v; })} />
+            <div><div style={{ color: T.TX, fontSize: 12, fontWeight: 600 }}>Lid Lead Time</div><div style={{ color: T.T2, fontSize: 8 }}>Days before month start</div></div>
+            <Ed value={sc.params.lidLeadDays} onChange={v => upd(s => { s.params.lidLeadDays = v; })} />
           </div>
-        ))}
-      </div>
-    </div>
-  );
-
-  function parSet() { return (
-    <div style={{ maxWidth: 520 }}>
-      <div style={{ fontSize: 12, fontWeight: 700, color: T.TX, marginBottom: 6 }}>Lead Times & Rounding</div>
-      <div style={{ background: T.S2, borderRadius: 7, padding: 12, border: "1px solid " + T.BD, marginBottom: 12 }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "8px 16px", alignItems: "center" }}>
-          <div><div style={{ color: T.TX, fontSize: 12, fontWeight: 600 }}>Base Lead Time</div><div style={{ color: T.T2, fontSize: 8 }}>Days before month start</div></div>
-          <Ed value={sc.params.baseLeadDays} onChange={v => upd(s => { s.params.baseLeadDays = v; })} />
-          <div><div style={{ color: T.TX, fontSize: 12, fontWeight: 600 }}>Lid Lead Time</div><div style={{ color: T.T2, fontSize: 8 }}>Days before month start</div></div>
-          <Ed value={sc.params.lidLeadDays} onChange={v => upd(s => { s.params.lidLeadDays = v; })} />
-
+        </div>
+        <div style={{ fontSize: 12, fontWeight: 700, color: T.TX, marginBottom: 6 }}>Ocean / Fast Boat Pallets</div>
+        <div style={{ background: T.S2, borderRadius: 7, padding: 12, border: "1px solid " + T.BD, marginBottom: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "8px 16px", alignItems: "center" }}>
+            <div><div style={{ color: T.TX, fontSize: 12, fontWeight: 600 }}>Bases per Pallet</div></div>
+            <Ed value={sc.pallet.basePP} onChange={v => upd(s => { s.pallet.basePP = v; })} />
+            <div><div style={{ color: T.TX, fontSize: 12, fontWeight: 600 }}>Lids per Pallet</div></div>
+            <Ed value={sc.pallet.lidPP} onChange={v => upd(s => { s.pallet.lidPP = v; })} />
+          </div>
+        </div>
+        <div style={{ fontSize: 12, fontWeight: 700, color: T.TX, marginBottom: 6 }}>Air Pallets</div>
+        <div style={{ background: T.S2, borderRadius: 7, padding: 12, border: "1px solid " + T.BD, marginBottom: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "8px 16px", alignItems: "center" }}>
+            <div><div style={{ color: T.TX, fontSize: 12, fontWeight: 600 }}>Bases per Pallet</div><div style={{ color: T.T2, fontSize: 8 }}>Air freight</div></div>
+            <Ed value={sc.pallet.airBasePP} onChange={v => upd(s => { s.pallet.airBasePP = v; })} />
+            <div><div style={{ color: T.TX, fontSize: 12, fontWeight: 600 }}>Lids per Pallet</div><div style={{ color: T.T2, fontSize: 8 }}>Air freight</div></div>
+            <Ed value={sc.pallet.airLidPP} onChange={v => upd(s => { s.pallet.airLidPP = v; })} />
+          </div>
+        </div>
+        <div style={{ fontSize: 12, fontWeight: 700, color: T.TX, marginBottom: 6 }}>Air Shipping Costs</div>
+        <div style={{ background: T.S2, borderRadius: 7, padding: 12, border: "1px solid " + T.BD }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "8px 16px", alignItems: "center" }}>
+            <div><div style={{ color: T.TX, fontSize: 12, fontWeight: 600 }}>Air Shipping Bases</div><div style={{ color: T.T2, fontSize: 8 }}>Cost per unit</div></div>
+            <Ed value={sc.airCost.base} onChange={v => upd(s => { s.airCost.base = v; })} />
+            <div><div style={{ color: T.TX, fontSize: 12, fontWeight: 600 }}>Air Shipping Lids</div><div style={{ color: T.T2, fontSize: 8 }}>Cost per unit</div></div>
+            <Ed value={sc.airCost.lid} onChange={v => upd(s => { s.airCost.lid = v; })} />
+          </div>
         </div>
       </div>
-      <div style={{ fontSize: 12, fontWeight: 700, color: T.TX, marginBottom: 6 }}>Ocean / Fast Boat Pallets</div>
-      <div style={{ background: T.S2, borderRadius: 7, padding: 12, border: "1px solid " + T.BD, marginBottom: 12 }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "8px 16px", alignItems: "center" }}>
-          <div><div style={{ color: T.TX, fontSize: 12, fontWeight: 600 }}>Bases per Pallet</div></div>
-          <Ed value={sc.pallet.basePP} onChange={v => upd(s => { s.pallet.basePP = v; })} />
-          <div><div style={{ color: T.TX, fontSize: 12, fontWeight: 600 }}>Lids per Pallet</div></div>
-          <Ed value={sc.pallet.lidPP} onChange={v => upd(s => { s.pallet.lidPP = v; })} />
-        </div>
-      </div>
-      <div style={{ fontSize: 12, fontWeight: 700, color: T.TX, marginBottom: 6 }}>Air Pallets</div>
-      <div style={{ background: T.S2, borderRadius: 7, padding: 12, border: "1px solid " + T.BD, marginBottom: 12 }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "8px 16px", alignItems: "center" }}>
-          <div><div style={{ color: T.TX, fontSize: 12, fontWeight: 600 }}>Bases per Pallet</div><div style={{ color: T.T2, fontSize: 8 }}>Air freight</div></div>
-          <Ed value={sc.pallet.airBasePP} onChange={v => upd(s => { s.pallet.airBasePP = v; })} />
-          <div><div style={{ color: T.TX, fontSize: 12, fontWeight: 600 }}>Lids per Pallet</div><div style={{ color: T.T2, fontSize: 8 }}>Air freight</div></div>
-          <Ed value={sc.pallet.airLidPP} onChange={v => upd(s => { s.pallet.airLidPP = v; })} />
-        </div>
-      </div>
-      <div style={{ fontSize: 12, fontWeight: 700, color: T.TX, marginBottom: 6 }}>Air Shipping Costs</div>
-      <div style={{ background: T.S2, borderRadius: 7, padding: 12, border: "1px solid " + T.BD }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "8px 16px", alignItems: "center" }}>
-          <div><div style={{ color: T.TX, fontSize: 12, fontWeight: 600 }}>Air Shipping Bases</div><div style={{ color: T.T2, fontSize: 8 }}>Cost per unit</div></div>
-          <Ed value={sc.airCost.base} onChange={v => upd(s => { s.airCost.base = v; })} />
-          <div><div style={{ color: T.TX, fontSize: 12, fontWeight: 600 }}>Air Shipping Lids</div><div style={{ color: T.T2, fontSize: 8 }}>Cost per unit</div></div>
-          <Ed value={sc.airCost.lid} onChange={v => upd(s => { s.airCost.lid = v; })} />
-        </div>
-      </div>
-    </div>
-  );
+    );
+  }
 
   return (
     <div style={{ padding: "14px 18px" }}>
@@ -144,8 +205,8 @@ export default function SettingsTab({ sc, cap, upd }) {
         })}
       </div>
       {stab === "molds" && moldSet()}
-      {stab === "ptl" && tlTbl({ data:sc.protoTL, title:"Prototype Timeline" })}
-      {stab === "mtl" && tlTbl({ data:sc.prodTL, title:"Production Timeline" })}
+      {stab === "ptl" && tlTbl({ data: sc.protoTL, title: "Prototype Timeline" })}
+      {stab === "mtl" && tlTbl({ data: sc.prodTL, title: "Production Timeline" })}
       {stab === "fc" && fcTbl()}
       {stab === "pkl" && pkTbl()}
       {stab === "ship" && shipSet()}
