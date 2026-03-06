@@ -180,15 +180,18 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd 
       cumDemand += weekDemand;
       var monthDemand = weekDemand;
 
-      // Stock = complete pairs only. You need both components per unit,
-      // so sellable inventory is min(bases arrived, lids arrived) - demand.
-      // Tracking independently produces misleading negatives when one component
-      // is ahead of the other (e.g. bases arrive weeks before lids catch up).
+      // Physical inventory can never be negative — you just have stockouts.
+      // pairsArrived = complete sellable units (need both components).
+      // served = how many orders can actually be filled so far.
+      // stockOnHand = physical surplus (always >= 0).
+      // shortfall = unmet demand (always >= 0), shown separately in red.
       var pairsArrived = Math.min(cumArrB, cumArrL);
       var cumArrived = pairsArrived;
-      var stockOnHand = pairsArrived - cumDemand;
-      var stockB = pairsArrived - cumDemand;
-      var stockL = pairsArrived - cumDemand;
+      var served = Math.min(pairsArrived, cumDemand);
+      var stockOnHand = pairsArrived - served;
+      var shortfall = cumDemand - served;
+      var stockB = stockOnHand;
+      var stockL = stockOnHand;
 
       var mosVal = 0;
       if (stockOnHand > 0 && wkMonth < 12) {
@@ -207,7 +210,7 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd 
         departures: departures, arrivals: arrivals,
         arrB: arrB, arrL: arrL, cumArrB: cumArrB, cumArrL: cumArrL,
         cumArrived: cumArrived, monthDemand: monthDemand,
-        cumDemand: cumDemand, stockOnHand: stockOnHand, stockB: stockB, stockL: stockL,
+        cumDemand: cumDemand, stockOnHand: stockOnHand, shortfall: shortfall, stockB: stockB, stockL: stockL,
         monthsOfStock: mosVal
       });
     }
@@ -298,8 +301,8 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd 
                 <th style={{ ...th, textAlign:"right", fontSize:9, color:T.AC, top:28, zIndex:2 }}>Lid Arrived</th>
                 <th style={{ ...th, textAlign:"right", fontSize:9, top:28, zIndex:2 }}>Wk Demand</th>
                 <th style={{ ...th, textAlign:"right", fontSize:9, top:28, zIndex:2 }}>Cumulative Demand</th>
-                <th style={{ ...th, textAlign:"right", fontSize:9, color:T.GR, top:28, zIndex:2 }}>Base Stk</th>
-                <th style={{ ...th, textAlign:"right", fontSize:9, color:T.AC, top:28, zIndex:2 }}>Lid Stk</th>
+                <th style={{ ...th, textAlign:"right", fontSize:9, color:T.GR, top:28, zIndex:2 }}>Stock</th>
+                <th style={{ ...th, textAlign:"right", fontSize:9, color:"#dc2626", top:28, zIndex:2 }}>Shortfall</th>
                 <th style={{ ...th, textAlign:"right", fontSize:9, top:28, zIndex:2 }}>Mo. Stock</th>
               </tr>
             </thead>
@@ -329,8 +332,8 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd 
                     <td style={{ ...td, textAlign:"right", color:T.AC, fontWeight:r.arrL>0?600:400 }}>{r.arrL>0?fm(r.arrL):""}</td>
                     <td style={{ ...td, textAlign:"right", color:r.monthDemand>0?"#9333ea":T.T2 }}>{r.monthDemand>0?fm(r.monthDemand):""}</td>
                     <td style={{ ...td, textAlign:"right", color:T.T2, fontSize:11 }}>{r.cumDemand>0?fm(r.cumDemand):""}</td>
-                    <td style={{ ...td, textAlign:"right", fontWeight:600, color:r.stockB<0?"#dc2626":r.stockB>0?T.GR:T.T2 }}>{r.cumArrB>0||r.cumDemand>0?fm(r.stockB):""}</td>
-                    <td style={{ ...td, textAlign:"right", fontWeight:600, color:r.stockL<0?"#dc2626":r.stockL>0?T.AC:T.T2 }}>{r.cumArrL>0||r.cumDemand>0?fm(r.stockL):""}</td>
+                    <td style={{ ...td, textAlign:"right", fontWeight:600, color:r.stockOnHand>0?T.GR:T.T2 }}>{r.cumArrB>0||r.cumDemand>0 ? (r.stockOnHand>0?fm(r.stockOnHand):"—") : ""}</td>
+                    <td style={{ ...td, textAlign:"right", fontWeight:600, color:r.shortfall>0?"#dc2626":T.T2 }}>{r.shortfall>0?fm(r.shortfall):""}</td>
                     <td style={{ ...td, textAlign:"right", color:r.monthsOfStock<3&&r.cumDemand>0?"#dc2626":r.monthsOfStock>=3?T.GR:T.T2, fontSize:11 }}>{r.cumDemand>0?r.monthsOfStock.toFixed(1):""}</td>
                   </tr>
                 );
