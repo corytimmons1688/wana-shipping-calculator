@@ -153,6 +153,7 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd,
     var cumDemand = 0, lastDemMonth = -1;
 
     // Map shipments by their SHIP date for the "Shipping Out" columns
+    // Store { sh, idx } so the unified view can call updShipEdit with the correct index
     var shipByWeek = {};
     for (var si = 0; si < ships.length; si++) {
       var sh = ships[si];
@@ -164,7 +165,7 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd,
       }
       if (bestShipWk !== null) {
         if (!shipByWeek[bestShipWk]) shipByWeek[bestShipWk] = [];
-        shipByWeek[bestShipWk].push(sh);
+        shipByWeek[bestShipWk].push({ sh: sh, idx: si });
       }
     }
 
@@ -216,7 +217,7 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd,
 
       // Now add this week's departures to cumulative shipped
       var depB = 0, depL = 0;
-      for (var di = 0; di < departures.length; di++) { depB += departures[di].bQ; depL += departures[di].lQ; }
+      for (var di = 0; di < departures.length; di++) { depB += departures[di].sh.bQ; depL += departures[di].sh.lQ; }
       cumShippedB += depB; cumShippedL += depL;
 
       // Shipments ARRIVING this week — bases and lids tracked separately
@@ -382,12 +383,100 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd,
             </thead>
             <tbody>
               {unified.map(function(r, i) {
-                var firstDep = r.departures.length > 0 ? r.departures[0] : null;
-                var extraDeps = r.departures.length > 1 ? r.departures.slice(1) : [];
+                // departures are now {sh, idx} pairs
+                var firstDepEntry = r.departures.length > 0 ? r.departures[0] : null;
+                var extraDepEntries = r.departures.length > 1 ? r.departures.slice(1) : [];
                 var isHl = hl === "u"+i;
                 var rowBg = isHl ? hlBg : (i%2===0 ? "transparent" : T.S2);
                 var prodBorderR = "3px solid "+T.AC;
 
+                // Build editable cells for a departure entry {sh, idx}
+                function makeDepCells(entry, isFirst) {
+                  if (!entry) {
+                    return [
+                      <td key="m" style={td}></td>,
+                      <td key="b" style={{ ...td, textAlign:"right" }}></td>,
+                      <td key="l" style={{ ...td, textAlign:"right" }}></td>,
+                      <td key="c" style={{ ...td, textAlign:"right" }}></td>,
+                      <td key="t" style={td}></td>
+                    ];
+                  }
+                  var dep = entry.sh, depIdx = entry.idx;
+                  var edited = isEdited(depIdx);
+                  // Method cell
+                  var methTd;
+                  if (editing && editing.idx === depIdx && editing.field === "meth") {
+                    methTd = (
+                      <td key="m" style={td} onClick={function(e){e.stopPropagation();}}>
+                        <select autoFocus value={editValRef.current}
+                          onChange={function(e) { var v=e.target.value; editValRef.current=v; commitEditWith(depIdx,"meth",v); }}
+                          onKeyDown={function(e){if(e.key==="Escape"){e.stopPropagation();cancelEdit();}}}
+                          style={{fontFamily:"inherit",fontSize:11,padding:"2px 4px",border:"1px solid "+T.AC,borderRadius:4,background:"#fff"}}>
+                          {METHODS.map(function(m){return <option key={m} value={m}>{m}</option>;})}
+                        </select>
+                      </td>
+                    );
+                  } else {
+                    methTd = (
+                      <td key="m" style={{...td, cursor:"pointer"}} onClick={function(e){e.stopPropagation(); startEdit(depIdx,"meth",dep.meth);}}>
+                        <Bg method={dep.meth}/>
+                        {edited && <span style={{marginLeft:3,fontSize:8,color:T.AM,fontWeight:700}}>✎</span>}
+                      </td>
+                    );
+                  }
+                  // Bases cell
+                  var bTd;
+                  if (editing && editing.idx === depIdx && editing.field === "bQ") {
+                    bTd = (
+                      <td key="b" style={{...td,textAlign:"right"}} onClick={function(e){e.stopPropagation();}}>
+                        <input autoFocus type="text" defaultValue={String(dep.bQ)}
+                          onChange={function(e){editValRef.current=e.target.value;}}
+                          onBlur={commitFromRef} onKeyDown={handleQtyKeyDown}
+                          style={{width:70,textAlign:"right",fontFamily:"inherit",fontSize:12,padding:"1px 4px",border:"1px solid "+T.GR,borderRadius:4}}/>
+                      </td>
+                    );
+                  } else {
+                    bTd = (
+                      <td key="b" style={{...td,textAlign:"right",color:T.GR,fontWeight:600,cursor:"pointer"}}
+                        onClick={function(e){e.stopPropagation(); startEdit(depIdx,"bQ",dep.bQ);}}
+                        title="Click to edit bases">
+                        {dep.bQ > 0 ? fm(dep.bQ) : ""}
+                      </td>
+                    );
+                  }
+                  // Lids cell
+                  var lTd;
+                  if (editing && editing.idx === depIdx && editing.field === "lQ") {
+                    lTd = (
+                      <td key="l" style={{...td,textAlign:"right"}} onClick={function(e){e.stopPropagation();}}>
+                        <input autoFocus type="text" defaultValue={String(dep.lQ)}
+                          onChange={function(e){editValRef.current=e.target.value;}}
+                          onBlur={commitFromRef} onKeyDown={handleQtyKeyDown}
+                          style={{width:70,textAlign:"right",fontFamily:"inherit",fontSize:12,padding:"1px 4px",border:"1px solid "+T.AC,borderRadius:4}}/>
+                      </td>
+                    );
+                  } else {
+                    lTd = (
+                      <td key="l" style={{...td,textAlign:"right",color:T.AC,fontWeight:600,cursor:"pointer"}}
+                        onClick={function(e){e.stopPropagation(); startEdit(depIdx,"lQ",dep.lQ);}}
+                        title="Click to edit lids">
+                        {dep.lQ > 0 ? fm(dep.lQ) : ""}
+                      </td>
+                    );
+                  }
+                  var costTd = <td key="c" style={{...td,textAlign:"right",color:dep.cost>0?T.AM:T.GR,fontWeight:600}}>{dep.cost===0?"FREE":f$(dep.cost)}</td>;
+                  var transitTd = (
+                    <td key="t" style={{...td,color:T.T2,fontSize:11,lineHeight:"1.5"}}>
+                      <span style={{display:"flex",flexDirection:"column",gap:1}}>
+                        <span style={{color:T.T3}}>{"↑ "}{dFS(dep.bSd)}</span>
+                        <span style={{color:T.AC}}>{"↓ "}{dFS(dep.bAr)}</span>
+                      </span>
+                    </td>
+                  );
+                  return [methTd, bTd, lTd, costTd, transitTd];
+                }
+
+                var firstDepCells = makeDepCells(firstDepEntry, true);
                 var mainRow = (
                   <tr key={"m"+i} onClick={function() { setHl(function(cur) { return cur === "u"+i ? null : "u"+i; }); }} style={{ background: rowBg, cursor:"pointer", transition:"background 0.1s" }}>
                     <td style={td}>{dFS(r.wk)}</td>
@@ -397,11 +486,7 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd,
                     <td style={{ ...td, textAlign:"right", color:T.AC, fontSize:11 }}>{r.lC>0?fm(r.lC):""}</td>
                     <td style={{ ...td, textAlign:"right", color:T.GR, fontWeight:600, background:"#f0fdf408" }}>{r.onHandB>0?fm(r.onHandB):""}</td>
                     <td style={{ ...td, textAlign:"right", color:T.AC, fontWeight:600, background:"#eff6ff08", borderRight:prodBorderR }}>{r.onHandL>0?fm(r.onHandL):""}</td>
-                    <td style={td}>{firstDep ? <Bg method={firstDep.meth}/> : ""}</td>
-                    <td style={{ ...td, textAlign:"right", fontWeight:firstDep?600:400, color:T.GR }}>{firstDep && firstDep.bQ > 0 ? fm(firstDep.bQ) : ""}</td>
-                    <td style={{ ...td, textAlign:"right", fontWeight:firstDep?600:400, color:T.AC }}>{firstDep && firstDep.lQ > 0 ? fm(firstDep.lQ) : ""}</td>
-                    <td style={{ ...td, textAlign:"right", color:firstDep&&firstDep.cost>0?T.AM:T.GR, fontWeight:firstDep?600:400 }}>{firstDep ? (firstDep.cost===0?"FREE":f$(firstDep.cost)) : ""}</td>
-                    <td style={{ ...td, color:T.T2, fontSize:11, lineHeight:"1.5" }}>{firstDep ? <span style={{display:"flex",flexDirection:"column",gap:1}}><span style={{color:T.T3}}>{"↑ "}{dFS(firstDep.bSd)}</span><span style={{color:T.AC}}>{"↓ "}{dFS(firstDep.bAr)}</span></span> : ""}</td>
+                    {firstDepCells}
                     <td style={{ ...td, textAlign:"right", color:T.GR, fontWeight:r.arrB>0?600:400, borderLeft:"3px solid "+T.AM }}>{r.arrB>0?fm(r.arrB):""}</td>
                     <td style={{ ...td, textAlign:"right", color:T.AC, fontWeight:r.arrL>0?600:400 }}>{r.arrL>0?fm(r.arrL):""}</td>
                     <td style={{ ...td, textAlign:"right", color:r.monthDemand>0?"#9333ea":T.T2 }}>{r.monthDemand>0?fm(r.monthDemand):""}</td>
@@ -412,15 +497,12 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd,
                   </tr>
                 );
 
-                var subRows = extraDeps.map(function(ea, si) {
+                var subRows = extraDepEntries.map(function(entry, si) {
+                  var subDepCells = makeDepCells(entry, false);
                   return (
                     <tr key={"s"+i+"-"+si} onClick={function() { setHl(function(cur) { return cur === "u"+i ? null : "u"+i; }); }} style={{ background: isHl ? hlBg : (i%2===0?"transparent":T.S2), cursor:"pointer" }}>
                       <td style={td}></td><td style={td}></td><td style={td}></td><td style={td}></td><td style={td}></td><td style={td}></td><td style={{ ...td, borderRight:prodBorderR }}></td>
-                      <td style={td}><Bg method={ea.meth}/></td>
-                      <td style={{ ...td, textAlign:"right", fontWeight:600, color:T.GR }}>{ea.bQ > 0 ? fm(ea.bQ) : ""}</td>
-                      <td style={{ ...td, textAlign:"right", fontWeight:600, color:T.AC }}>{ea.lQ > 0 ? fm(ea.lQ) : ""}</td>
-                      <td style={{ ...td, textAlign:"right", color:ea.cost>0?T.AM:T.GR, fontWeight:600 }}>{ea.cost===0?"FREE":f$(ea.cost)}</td>
-                      <td style={{ ...td, color:T.T2, fontSize:11, lineHeight:"1.5" }}><span style={{display:"flex",flexDirection:"column",gap:1}}><span style={{color:T.T3}}>{"↑ "}{dFS(ea.bSd)}</span><span style={{color:T.AC}}>{"↓ "}{dFS(ea.bAr)}</span></span></td>
+                      {subDepCells}
                       <td style={{ ...td, borderLeft:"3px solid "+T.AM }}></td><td style={td}></td><td style={td}></td><td style={td}></td><td style={td}></td><td style={td}></td><td style={td}></td>
                     </tr>
                   );
