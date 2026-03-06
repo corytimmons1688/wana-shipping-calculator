@@ -189,10 +189,8 @@ export default function SettingsTab({ sc, cap, upd }) {
         <div style={{ fontSize: 12, fontWeight: 700, color: T.TX, marginBottom: 6 }}>Air Shipping Costs</div>
         <div style={{ background: T.S2, borderRadius: 7, padding: 12, border: "1px solid " + T.BD }}>
           <div style={{ display: "grid", gridTemplateColumns: "1fr auto", gap: "8px 16px", alignItems: "center" }}>
-            <div><div style={{ color: T.TX, fontSize: 12, fontWeight: 600 }}>Air Shipping Bases</div><div style={{ color: T.T2, fontSize: 8 }}>Cost per unit</div></div>
-            <Ed value={sc.airCost.base} onChange={v => upd(s => { s.airCost.base = v; })} />
-            <div><div style={{ color: T.TX, fontSize: 12, fontWeight: 600 }}>Air Shipping Lids</div><div style={{ color: T.T2, fontSize: 8 }}>Cost per unit</div></div>
-            <Ed value={sc.airCost.lid} onChange={v => upd(s => { s.airCost.lid = v; })} />
+            <div><div style={{ color: T.TX, fontSize: 12, fontWeight: 600 }}>Air Pallet Rate</div><div style={{ color: T.T2, fontSize: 8 }}>Cost per pallet (partial pallets charged full rate)</div></div>
+            <Ed value={sc.airCost.palletRate} onChange={v => upd(s => { s.airCost.palletRate = v; })} />
           </div>
         </div>
       </div>
