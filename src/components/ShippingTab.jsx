@@ -8,13 +8,18 @@ import { optimize as runOptimize, calcGLD } from "../utils/calc";
 // FIXED: safe date formatter - returns "—" for null/undefined instead of crashing
 function dFS(d) { return d ? dF(d) : "\u2014"; }
 
-export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd }) {
+export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd, updShipEdit, clearShipEdits, hasShipEdits }) {
   var svState = useState("unified");
   var sv = svState[0], setSv = svState[1];
   var hlState = useState(null);
   var hl = hlState[0], setHl = hlState[1];
   var optState = useState(null); // null | "running" | {saved, original}
   var optStatus = optState[0], setOptStatus = optState[1];
+  // Inline editing state: { idx, field } or null
+  var editingState = useState(null);
+  var editing = editingState[0], setEditing = editingState[1];
+  var editValState = useState("");
+  var editVal = editValState[0], setEditVal = editValState[1];
 
   var doOptimize = useCallback(function() {
     if (!sc) return;
@@ -97,7 +102,40 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd 
     }, 50);
   }, [sc, upd]);
 
-  var unified = useMemo(function() {
+  var METHODS = ["Standard Ocean", "Fast Boat", "Air"];
+
+  function startEdit(idx, field, curVal) {
+    setEditing({ idx: idx, field: field });
+    setEditVal(String(curVal));
+  }
+
+  function commitEdit() {
+    if (!editing) return;
+    var idx = editing.idx, field = editing.field;
+    if (field === "meth") {
+      if (METHODS.indexOf(editVal) >= 0) updShipEdit(idx, { meth: editVal });
+    } else if (field === "bQ" || field === "lQ") {
+      var n = parseInt(editVal.replace(/,/g, ""), 10);
+      if (!isNaN(n) && n >= 0) {
+        var fields = {};
+        fields[field] = n;
+        updShipEdit(idx, fields);
+      }
+    }
+    setEditing(null);
+  }
+
+  function cancelEdit() { setEditing(null); }
+
+  function handleKeyDown(e) {
+    if (e.key === "Enter") commitEdit();
+    if (e.key === "Escape") cancelEdit();
+  }
+
+  // Check if a shipment has manual edits
+  function isEdited(idx) {
+    return sc.shipEdits && sc.shipEdits.some(function(e) { return e.idx === idx; });
+  }
     if (!prod || !ships || !gld) return [];
     var rows = [];
     var cumArrB = 0, cumArrL = 0;
@@ -264,6 +302,17 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd 
         }}>
           {optStatus === "running" ? "⟳ Optimizing…" : "⚡ Optimize Shipping Cost"}
         </button>
+        {hasShipEdits && (
+          <button onClick={function() { clearShipEdits(); }} style={{
+            padding:"6px 14px", borderRadius:6, border:"1px solid #d97706", cursor:"pointer",
+            background:"#fffbeb", color:"#d97706", fontWeight:600, fontSize:11, fontFamily:"inherit"
+          }}>↺ Reset Manual Edits</button>
+        )}
+        {hasShipEdits && (
+          <span style={{ fontSize:11, color:T.AM, fontWeight:600 }}>
+            ✎ {(sc.shipEdits || []).length} manual edit{(sc.shipEdits || []).length !== 1 ? "s" : ""} active
+          </span>
+        )}
         {optStatus && optStatus !== "running" && (
           <div style={{ display:"flex", gap:12, alignItems:"center", padding:"6px 14px", borderRadius:6, background: optStatus.saved > 0 ? "#dcfce7" : T.S2, border:"1px solid "+(optStatus.saved > 0 ? "#16a34a" : T.BD) }}>
             {optStatus.saved > 0 ? (
@@ -375,6 +424,9 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd 
 
       {sv==="shipments" && (
         <div style={{ overflowX:"auto", maxHeight:"calc(100vh - 240px)", overflowY:"auto" }}>
+          <div style={{ marginBottom:8, fontSize:11, color:T.T2 }}>
+            Click <span style={{ color:T.AC, fontWeight:700 }}>method</span>, <span style={{ color:T.GR, fontWeight:700 }}>bases</span>, or <span style={{ color:T.AC, fontWeight:700 }}>lids</span> to edit. Arrival dates and cost update automatically.
+          </div>
           <table style={tbl}><thead><tr>
             <th style={th}>#</th><th style={th}>Mo.</th><th style={th}>Method</th><th style={th}>Container</th>
             <th style={{ ...th, textAlign:"center" }}>Pallets</th>
@@ -384,28 +436,114 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd 
             <th style={th}>Ship Date</th><th style={th}>Arrival</th>
             <th style={{ ...th, textAlign:"right" }}>Cost</th>
             <th style={{ ...th, textAlign:"right" }}>$/Unit</th>
+            <th style={{ ...th, textAlign:"center" }}>Edit</th>
           </tr></thead><tbody>
-            {ships.length===0 && <tr><td colSpan={12} style={{ ...td, textAlign:"center", color:T.T2, padding:18 }}>No shipments</td></tr>}
+            {ships.length===0 && <tr><td colSpan={13} style={{ ...td, textAlign:"center", color:T.T2, padding:18 }}>No shipments</td></tr>}
             {ships.map(function(sh,i) {
               var cpu = sh.tQ>0 ? sh.cost/sh.tQ : 0;
               var isHl2 = hl === "d"+i;
+              var edited = isEdited(i);
+              var rowBg = isHl2 ? hlBg : edited ? "#fffbeb" : (i%2===0?"transparent":T.S2);
+
+              // Method cell — click to cycle through methods
+              var methCell;
+              if (editing && editing.idx === i && editing.field === "meth") {
+                methCell = (
+                  <td style={td}>
+                    <select autoFocus value={editVal}
+                      onChange={function(e) { setEditVal(e.target.value); }}
+                      onBlur={commitEdit}
+                      onKeyDown={handleKeyDown}
+                      style={{ fontFamily:"inherit", fontSize:11, padding:"2px 4px", border:"1px solid "+T.AC, borderRadius:4, background:"#fff", cursor:"pointer" }}>
+                      {METHODS.map(function(m) { return <option key={m} value={m}>{m}</option>; })}
+                    </select>
+                  </td>
+                );
+              } else {
+                methCell = (
+                  <td style={{ ...td, cursor:"pointer" }} onClick={function(e) { e.stopPropagation(); startEdit(i, "meth", sh.meth); }}>
+                    <span title="Click to change method"><Bg method={sh.meth}/></span>
+                    {sh.preShip && <span style={{ marginLeft:4, fontSize:8, color:T.GR, fontWeight:700 }}>PRE</span>}
+                    {sh.lateDelivery && <span style={{ marginLeft:4, fontSize:8, color:"#dc2626", fontWeight:700 }}>LATE</span>}
+                    {edited && <span style={{ marginLeft:4, fontSize:8, color:T.AM, fontWeight:700 }}>✎</span>}
+                  </td>
+                );
+              }
+
+              // Bases qty cell
+              var bCell;
+              if (editing && editing.idx === i && editing.field === "bQ") {
+                bCell = (
+                  <td style={{ ...td, textAlign:"right" }}>
+                    <input autoFocus type="text" value={editVal}
+                      onChange={function(e) { setEditVal(e.target.value); }}
+                      onBlur={commitEdit} onKeyDown={handleKeyDown}
+                      style={{ width:80, textAlign:"right", fontFamily:"inherit", fontSize:12, padding:"1px 4px", border:"1px solid "+T.GR, borderRadius:4 }} />
+                  </td>
+                );
+              } else {
+                bCell = (
+                  <td style={{ ...td, textAlign:"right", color:T.GR, fontWeight:600, cursor:"pointer" }}
+                    onClick={function(e) { e.stopPropagation(); startEdit(i, "bQ", sh.bQ); }}
+                    title="Click to edit bases quantity">
+                    {fm(sh.bQ)}
+                  </td>
+                );
+              }
+
+              // Lids qty cell
+              var lCell;
+              if (editing && editing.idx === i && editing.field === "lQ") {
+                lCell = (
+                  <td style={{ ...td, textAlign:"right" }}>
+                    <input autoFocus type="text" value={editVal}
+                      onChange={function(e) { setEditVal(e.target.value); }}
+                      onBlur={commitEdit} onKeyDown={handleKeyDown}
+                      style={{ width:80, textAlign:"right", fontFamily:"inherit", fontSize:12, padding:"1px 4px", border:"1px solid "+T.AC, borderRadius:4 }} />
+                  </td>
+                );
+              } else {
+                lCell = (
+                  <td style={{ ...td, textAlign:"right", color:T.AC, fontWeight:600, cursor:"pointer" }}
+                    onClick={function(e) { e.stopPropagation(); startEdit(i, "lQ", sh.lQ); }}
+                    title="Click to edit lids quantity">
+                    {fm(sh.lQ)}
+                  </td>
+                );
+              }
+
               return (
-                // FIXED: functional updater to avoid stale hl closure
-                <tr key={i} onClick={function() { setHl(function(cur) { return cur === "d"+i ? null : "d"+i; }); }} style={{ background: isHl2 ? hlBg : (i%2===0?"transparent":T.S2), cursor:"pointer", transition:"background 0.1s" }}>
+                <tr key={i} onClick={function() { setHl(function(cur) { return cur === "d"+i ? null : "d"+i; }); }}
+                  style={{ background: rowBg, cursor:"pointer", transition:"background 0.1s",
+                    outline: edited ? "1px solid #f59e0b" : "none", outlineOffset:"-1px" }}>
                   <td style={{ ...td, color:T.T2 }}>{i+1}</td>
                   <td style={{ ...td, fontWeight:600 }}>{MO[sh.mo]}</td>
-                  <td style={td}><Bg method={sh.meth}/>{sh.preShip && <span style={{ marginLeft:4, fontSize:8, color:T.GR, fontWeight:700 }}>PRE</span>}{sh.consolidated && <span style={{ marginLeft:4, fontSize:8, color:T.AM, fontWeight:700 }}>COMB</span>}{sh.lateDelivery && <span style={{ marginLeft:4, fontSize:8, color:"#dc2626", fontWeight:700 }}>LATE</span>}</td>
+                  {methCell}
                   <td style={{ ...td, color:T.T2, fontSize:11 }}>{sh.cn}</td>
                   <td style={{ ...td, textAlign:"center", fontSize:10, color:T.T2 }}>{sh.bPal != null ? (sh.bPal + "B/" + sh.lPal + "L") : "\u2014"}</td>
-                  <td style={{ ...td, textAlign:"right", color:T.GR, fontWeight:600 }}>{fm(sh.bQ)}</td>
-                  <td style={{ ...td, textAlign:"right", color:T.AC, fontWeight:600 }}>{fm(sh.lQ)}</td>
+                  {bCell}
+                  {lCell}
                   <td style={{ ...td, textAlign:"right", fontWeight:700 }}>{fm(sh.tQ)}</td>
-                  {/* FIXED: dFS() handles null dates safely */}
                   <td style={{ ...td, color:T.T2, fontSize:11 }}>{dFS(sh.bSd)}</td>
                   <td style={{ ...td, color:T.T2, fontSize:11 }}>{dFS(sh.bAr)}</td>
                   <td style={{ ...td, textAlign:"right", color:sh.cost>0?T.AM:T.GR, fontWeight:700 }}>{sh.cost===0?"FREE":f$(sh.cost)}</td>
                   <td style={{ ...td, textAlign:"right", color:T.T2, fontSize:11 }}>{sh.cost===0?"$0.00":fC(cpu)}</td>
-                </tr>);
+                  <td style={{ ...td, textAlign:"center" }}>
+                    {edited && (
+                      <button onClick={function(e) {
+                        e.stopPropagation();
+                        // Remove this specific shipment's edit
+                        upd(function(s) {
+                          if (s.shipEdits) s.shipEdits = s.shipEdits.filter(function(e2) { return e2.idx !== i; });
+                        });
+                      }} title="Revert this shipment to optimized" style={{
+                        background:"none", border:"1px solid "+T.BD, borderRadius:4, cursor:"pointer",
+                        color:T.T2, fontSize:10, padding:"1px 5px", fontFamily:"inherit"
+                      }}>↺</button>
+                    )}
+                  </td>
+                </tr>
+              );
             })}
           </tbody></table>
         </div>
