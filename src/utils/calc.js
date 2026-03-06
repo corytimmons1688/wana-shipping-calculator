@@ -381,10 +381,13 @@ export function calcWeeklyDemand(mkts) {
     if (mk.goLive == null) continue;
     if (mk.skuDetail && mk.skuDetail.weeks && mk.skuDetail.skus) {
       const det = mk.skuDetail;
+      const goLiveMonth = mk.goLive; // 1-indexed: 1=Jan, 4=Apr, etc.
       for (const sku of det.skus) {
         for (let wi = 0; wi < sku.weekly.length && wi < det.weeks.length; wi++) {
           if (sku.weekly[wi] <= 0) continue;
           const skuDate = new Date(det.weeks[wi]);
+          // Skip SKU weeks that fall before the market's go-live month
+          if (skuDate.getMonth() + 1 < goLiveMonth) continue;
           for (let pwi = 0; pwi < weeks.length; pwi++) {
             if (Math.abs(weeks[pwi].wk - skuDate) < 4 * 86400000) { weeks[pwi].demand += sku.weekly[wi]; break; }
           }
