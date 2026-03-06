@@ -135,8 +135,8 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem }) {
               <tr>
                 <th style={{ ...th, top:0, zIndex:3 }} rowSpan={2}>Week Of</th>
                 <th style={{ ...th, textAlign:"center", borderBottom:"2px solid "+T.GR, color:T.GR, top:0, zIndex:3 }} colSpan={4}>Production</th>
-                <th style={{ ...th, textAlign:"center", borderBottom:"2px solid "+T.AC, color:T.AC, top:0, zIndex:3 }} colSpan={5}>Arriving This Week <span style={{fontSize:9,opacity:0.6}}>(↑ departed · ↓ arrived)</span></th>
-                <th style={{ ...th, textAlign:"center", borderBottom:"2px solid "+T.AM, color:T.AM, top:0, zIndex:3 }} colSpan={7}>Inventory at Calyx</th>
+                <th style={{ ...th, textAlign:"center", borderBottom:"2px solid "+T.AC, color:T.AC, top:0, zIndex:3 }} colSpan={5}>Shipping Out <span style={{fontSize:9,opacity:0.6}}>(↑ departs · ↓ arrives)</span></th>
+                <th style={{ ...th, textAlign:"center", borderBottom:"2px solid "+T.AM, color:T.AM, top:0, zIndex:3, borderLeft:"3px solid "+T.AM }} colSpan={7}>Inventory at Calyx</th>
               </tr>
               <tr>
                 <th style={{ ...th, textAlign:"right", fontSize:9, color:T.GR, top:28, zIndex:2 }}>Base Wk</th>
@@ -148,8 +148,8 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem }) {
                 <th style={{ ...th, textAlign:"right", fontSize:9, color:T.AC, top:28, zIndex:2 }}>Lids</th>
                 <th style={{ ...th, textAlign:"right", fontSize:9, top:28, zIndex:2 }}>Cost</th>
                 <th style={{ ...th, textAlign:"left", fontSize:9, top:28, zIndex:2 }}>Transit</th>
-                <th style={{ ...th, textAlign:"right", fontSize:9, color:T.GR, top:28, zIndex:2 }}>Base In</th>
-                <th style={{ ...th, textAlign:"right", fontSize:9, color:T.AC, top:28, zIndex:2 }}>Lid In</th>
+                <th style={{ ...th, textAlign:"right", fontSize:9, color:T.GR, top:28, zIndex:2, borderLeft:"3px solid "+T.AM }}>Base Arrived</th>
+                <th style={{ ...th, textAlign:"right", fontSize:9, color:T.AC, top:28, zIndex:2 }}>Lid Arrived</th>
                 <th style={{ ...th, textAlign:"right", fontSize:9, top:28, zIndex:2 }}>Wk Demand</th>
                 <th style={{ ...th, textAlign:"right", fontSize:9, top:28, zIndex:2 }}>Cum Demand</th>
                 <th style={{ ...th, textAlign:"right", fontSize:9, color:T.GR, top:28, zIndex:2 }}>Base Stk</th>
@@ -177,7 +177,7 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem }) {
                     <td style={{ ...td, textAlign:"right", fontWeight:firstArr?600:400, color:T.AC }}>{firstArr && firstArr.lQ > 0 ? fm(firstArr.lQ) : ""}</td>
                     <td style={{ ...td, textAlign:"right", color:firstArr&&firstArr.cost>0?T.AM:T.GR, fontWeight:firstArr?600:400 }}>{firstArr ? (firstArr.cost===0?"FREE":f$(firstArr.cost)) : ""}</td>
                     <td style={{ ...td, color:T.T2, fontSize:11, lineHeight:"1.5" }}>{firstArr ? <span style={{display:"flex",flexDirection:"column",gap:1}}><span style={{color:T.T3}}>↑ {dFS(firstArr.bSd)}</span><span style={{color:T.AC}}>↓ {dFS(firstArr.bAr)}</span></span> : ""}</td>
-                    <td style={{ ...td, textAlign:"right", color:T.GR, fontWeight:r.arrB>0?600:400 }}>{r.arrB>0?fm(r.arrB):""}</td>
+                    <td style={{ ...td, textAlign:"right", color:T.GR, fontWeight:r.arrB>0?600:400, borderLeft:"3px solid "+T.AM }}>{r.arrB>0?fm(r.arrB):""}</td>
                     <td style={{ ...td, textAlign:"right", color:T.AC, fontWeight:r.arrL>0?600:400 }}>{r.arrL>0?fm(r.arrL):""}</td>
                     <td style={{ ...td, textAlign:"right", color:r.monthDemand>0?"#9333ea":T.T2 }}>{r.monthDemand>0?fm(r.monthDemand):""}</td>
                     <td style={{ ...td, textAlign:"right", color:T.T2, fontSize:11 }}>{r.cumDemand>0?fm(r.cumDemand):""}</td>
@@ -198,7 +198,7 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem }) {
                       <td style={{ ...td, textAlign:"right", color:ea.cost>0?T.AM:T.GR, fontWeight:600 }}>{ea.cost===0?"FREE":f$(ea.cost)}</td>
                       {/* show departure + arrival dates */}
                       <td style={{ ...td, color:T.T2, fontSize:11, lineHeight:"1.5" }}><span style={{display:"flex",flexDirection:"column",gap:1}}><span style={{color:T.T3}}>↑ {dFS(ea.bSd)}</span><span style={{color:T.AC}}>↓ {dFS(ea.bAr)}</span></span></td>
-                      <td style={td}></td><td style={td}></td><td style={td}></td><td style={td}></td><td style={td}></td><td style={td}></td><td style={td}></td>
+                      <td style={{ ...td, borderLeft:"3px solid "+T.AM }}></td><td style={td}></td><td style={td}></td><td style={td}></td><td style={td}></td><td style={td}></td><td style={td}></td>
                     </tr>
                   );
                 });
