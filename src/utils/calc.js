@@ -221,38 +221,42 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
     }
   }
 
-  // PHASE 2 — Fast Boat lid shipments (only when cheaper than Air per unit)
-  // FIX: Air lids cost $0.12/unit. FB 20HC ($9,500) breaks even at 79,167 lids.
-  // Without this check, more molds -> more lids available -> Phase 2 packs them
-  // into FB containers that cost MORE per lid than Air -> cost goes UP with molds.
+  // PHASE 2 — Fast Boat lid shipments (scan multiple production weeks)
+  // FIX: Instead of checking a single ship-by date, iterate backwards through
+  // production weeks. The lid production ramp (168K/wk from May 25) creates
+  // large available pools at specific weeks that a single-date check misses.
   if (fb) {
     for (const d of demands) {
-      if (d.lNeed <= 0) continue;
+      if (d.lNeed <= 0 || d.lNeed < pal.lidPP) continue;
       const lSD = addDays(d.lDeadline, -fb.transitDays);
-
-      if (d.lNeed >= pal.lidPP) {
+      // Get all production weeks that can ship FB and arrive on time
+      const fbWeeks = prod.filter(pw => pw.wk <= lSD);
+      // Try each week from latest to earliest, looking for available lids
+      for (let wi = fbWeeks.length - 1; wi >= 0 && d.lNeed >= pal.lidPP; wi--) {
+        const shipDate = fbWeeks[wi].wk;
+        const a = availAt(shipDate);
+        if (a.lS < pal.lidPP) continue; // need at least 1 pallet of lids
         const bMaxFB = Math.max(d.bNeed, padBases);
-        const a = availAt(lSD);
         let remB = Math.min(a.bS, bMaxFB);
         let remL = Math.min(a.lS, d.lNeed);
         for (const ckKey of ["40HC", "20HC"]) {
           const ck = cont[ckKey];
           const maxPal = ck.pallets;
           const minPal = ck.minPal || (maxPal <= 10 ? 8 : 16);
-          while (d.lNeed > 0 && remL > 0) {
+          while (d.lNeed >= pal.lidPP && remL >= pal.lidPP) {
             const r = packOne(remB, remL, maxPal, minPal, pal.basePP, pal.lidPP, false);
             if (!r || r.lQ === 0) break;
             // Only ship via FB if cheaper than equivalent Air cost for this container
             const airEquiv = (r.lQ * airCost.lid) + (r.bQ * airCost.base);
             if (ck.cost >= airEquiv) break;
-            const arrDate = addDays(lSD, fb.transitDays);
+            const arrDate = addDays(shipDate, fb.transitDays);
             res.push({ mo: d.mo, meth: "Fast Boat", cn: ck.label,
               bQ: r.bQ, lQ: r.lQ, tQ: r.bQ + r.lQ, cost: ck.cost,
-              bSd: new Date(lSD), lSd: new Date(lSD), bAr: arrDate, lAr: arrDate,
+              bSd: new Date(shipDate), lSd: new Date(shipDate), bAr: arrDate, lAr: arrDate,
               preShip: false, bPal: r.bPallets, lPal: r.lPallets });
             d.bNeed -= r.bQ; d.lNeed -= r.lQ;
             remB -= r.bQ; remL -= r.lQ;
-            const a2 = availAt(lSD);
+            const a2 = availAt(shipDate);
             remB = Math.min(a2.bS, Math.max(0, Math.max(d.bNeed, padBases)));
             remL = Math.min(a2.lS, Math.max(0, d.lNeed));
           }
