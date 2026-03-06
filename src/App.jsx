@@ -22,37 +22,48 @@ export default function App() {
   const prod = useMemo(() => calcProd(sc.molds), [sc]);
   const ships = useMemo(() => optimize(sc.markets, sc.molds, sc.shipping, sc.params, sc.containers, sc.pallet, sc.airCost), [sc]);
 
-  // Apply manual edits on top of the optimized ships.
-  // Each edit in sc.shipEdits is { idx, meth?, bQ?, lQ? }.
-  // Cost and arrival dates are recalculated from the override values.
-  // shipAdditions are brand-new shipments: { id, wkMs, mo, meth, bQ, lQ }
+  // Apply manual edits + deletions on top of the optimized ships.
   const displayShips = useMemo(() => {
+    const deletedSet = new Set(sc.shipDeletions || []);
     const editMap = {};
     for (const e of (sc.shipEdits || [])) editMap[e.idx] = e;
-    const edited = ships.map((sh, i) => {
-      const ed = editMap[i];
-      if (!ed) return sh;
-      const meth = ed.meth !== undefined ? ed.meth : sh.meth;
-      const bQ   = ed.bQ  !== undefined ? ed.bQ  : sh.bQ;
-      const lQ   = ed.lQ  !== undefined ? ed.lQ  : sh.lQ;
-      const tQ   = bQ + lQ;
-      const methObj = sc.shipping.find(s => s.method === meth) || sc.shipping.find(s => s.method === sh.meth);
-      const tDays = methObj ? methObj.transitDays : 10;
-      const bAr = new Date(sh.bSd); bAr.setDate(bAr.getDate() + tDays);
-      const lAr = new Date(sh.lSd); lAr.setDate(lAr.getDate() + tDays);
-      let cost = sh.cost;
-      if (meth === "Air") {
-        cost = bQ * sc.airCost.base + lQ * sc.airCost.lid;
-      } else if (meth === "Standard Ocean") {
-        cost = 0;
-      } else {
-        const totalPallets = Math.ceil((bQ||0) / sc.pallet.basePP) + Math.ceil((lQ||0) / sc.pallet.lidPP);
-        const c20 = sc.containers["20HC"], c40 = sc.containers["40HC"];
-        if (totalPallets <= c20.pallets) cost = c20.cost;
-        else cost = c40.cost;
-      }
-      return { ...sh, meth, bQ, lQ, tQ, cost, bAr, lAr, cn: meth === "Air" ? "Air" : sh.cn };
-    });
+
+    const airPalletRate = sc.airCost.palletRate || 3000;
+    const abPP = sc.pallet.airBasePP || 7500;
+    const alPP = sc.pallet.airLidPP || 25000;
+
+    function airCostFor(bQ, lQ) {
+      return (Math.ceil((bQ||0) / abPP) + Math.ceil((lQ||0) / alPP)) * airPalletRate;
+    }
+
+    const edited = ships
+      .map((sh, i) => {
+        if (deletedSet.has(i)) return null; // deleted — excluded
+        const ed = editMap[i];
+        const origIdx = i; // preserve for delete/restore
+        if (!ed) return { ...sh, origIdx };
+        const meth = ed.meth !== undefined ? ed.meth : sh.meth;
+        const bQ   = ed.bQ  !== undefined ? ed.bQ  : sh.bQ;
+        const lQ   = ed.lQ  !== undefined ? ed.lQ  : sh.lQ;
+        const tQ   = bQ + lQ;
+        const methObj = sc.shipping.find(s => s.method === meth) || sc.shipping.find(s => s.method === sh.meth);
+        const tDays = methObj ? methObj.transitDays : 10;
+        const bAr = new Date(sh.bSd); bAr.setDate(bAr.getDate() + tDays);
+        const lAr = new Date(sh.lSd); lAr.setDate(lAr.getDate() + tDays);
+        let cost = sh.cost;
+        if (meth === "Air") {
+          cost = airCostFor(bQ, lQ);
+        } else if (meth === "Standard Ocean") {
+          cost = 0;
+        } else {
+          const totalPallets = Math.ceil((bQ||0) / sc.pallet.basePP) + Math.ceil((lQ||0) / sc.pallet.lidPP);
+          const c20 = sc.containers["20HC"], c40 = sc.containers["40HC"];
+          cost = totalPallets <= c20.pallets ? c20.cost : c40.cost;
+        }
+        return { ...sh, meth, bQ, lQ, tQ, cost, bAr, lAr, cn: meth === "Air" ? "Air" : sh.cn, origIdx };
+      })
+      .filter(Boolean);
+
     // Append manual additions
     for (const add of (sc.shipAdditions || [])) {
       const methObj = sc.shipping.find(s => s.method === add.meth);
@@ -60,7 +71,7 @@ export default function App() {
       const bSd = new Date(add.wkMs);
       const bAr = new Date(add.wkMs); bAr.setDate(bAr.getDate() + tDays);
       let cost = 0;
-      if (add.meth === "Air") cost = (add.bQ||0) * sc.airCost.base + (add.lQ||0) * sc.airCost.lid;
+      if (add.meth === "Air") cost = airCostFor(add.bQ, add.lQ);
       else if (add.meth === "Fast Boat") {
         const tp = Math.ceil((add.bQ||0) / sc.pallet.basePP) + Math.ceil((add.lQ||0) / sc.pallet.lidPP);
         cost = tp <= sc.containers["20HC"].pallets ? sc.containers["20HC"].cost : sc.containers["40HC"].cost;
@@ -71,7 +82,7 @@ export default function App() {
         bPal: 0, lPal: 0, preShip: false, isAddition: true, addId: add.id });
     }
     return edited;
-  }, [ships, sc.shipEdits, sc.shipAdditions, sc.shipping, sc.airCost, sc.pallet, sc.containers]);
+  }, [ships, sc.shipEdits, sc.shipDeletions, sc.shipAdditions, sc.shipping, sc.airCost, sc.pallet, sc.containers]);
 
   const updShipEdit = useCallback((idx, fields) => {
     upd(s => {
@@ -101,11 +112,24 @@ export default function App() {
     upd(s => { if (s.shipAdditions) s.shipAdditions = s.shipAdditions.filter(a => a.id !== id); });
   }, [upd]);
 
-  const clearShipEdits = useCallback(() => {
-    upd(s => { s.shipEdits = []; s.shipAdditions = []; });
+  const deleteShipment = useCallback((idx) => {
+    upd(s => {
+      if (!s.shipDeletions) s.shipDeletions = [];
+      if (!s.shipDeletions.includes(idx)) s.shipDeletions.push(idx);
+    });
   }, [upd]);
 
-  const hasShipEdits = (sc.shipEdits && sc.shipEdits.length > 0) || (sc.shipAdditions && sc.shipAdditions.length > 0);
+  const restoreShipment = useCallback((idx) => {
+    upd(s => { if (s.shipDeletions) s.shipDeletions = s.shipDeletions.filter(i => i !== idx); });
+  }, [upd]);
+
+  const clearShipEdits = useCallback(() => {
+    upd(s => { s.shipEdits = []; s.shipAdditions = []; s.shipDeletions = []; });
+  }, [upd]);
+
+  const hasShipEdits = (sc.shipEdits && sc.shipEdits.length > 0) ||
+    (sc.shipAdditions && sc.shipAdditions.length > 0) ||
+    (sc.shipDeletions && sc.shipDeletions.length > 0);
   const cap = useMemo(() => calcCap(sc.molds, sc.protoMolds, sc.equipment), [sc]);
   const frt = useMemo(() => {
     const s = {}; let tot = 0, units = 0;
@@ -161,7 +185,7 @@ const mainTabs = [{ k:"demand", l:"Market Demand", i:"📊" },{ k:"shipping", l:
           {mainTabs.map(t => { const a = tab === t.k; return <button key={t.k} onClick={() => setTab(t.k)} style={{ padding:"9px 16px", cursor:"pointer", border:"none", borderBottom:a ? "2px solid "+T.AC : "2px solid transparent", background:"transparent", color:a ? T.AC : T.T2, fontWeight:a ? 700 : 500, fontSize:12, display:"flex", alignItems:"center", gap:4, whiteSpace:"nowrap", fontFamily:"inherit" }}><span>{t.i}</span>{t.l}</button>; })}
         </div>
         {tab === "demand" && <DemandTab sc={sc} gld={gld} annD={annD} upd={upd} />}
-        {tab === "shipping" && <ShippingTab ships={displayShips} prod={prod} frt={frt} gld={gld} weeklyDem={weeklyDem} sc={sc} upd={upd} updShipEdit={updShipEdit} addShipment={addShipment} updShipAddition={updShipAddition} removeShipAddition={removeShipAddition} clearShipEdits={clearShipEdits} hasShipEdits={hasShipEdits} />}
+        {tab === "shipping" && <ShippingTab ships={displayShips} prod={prod} frt={frt} gld={gld} weeklyDem={weeklyDem} sc={sc} upd={upd} updShipEdit={updShipEdit} addShipment={addShipment} updShipAddition={updShipAddition} removeShipAddition={removeShipAddition} deleteShipment={deleteShipment} restoreShipment={restoreShipment} clearShipEdits={clearShipEdits} hasShipEdits={hasShipEdits} />}
         {tab === "settings" && <SettingsTab sc={sc} cap={cap} upd={upd} />}
       </>)}
       <AiAssistant sc={sc} gld={gld} ships={ships} prod={prod} frt={frt} cap={cap} />
