@@ -180,10 +180,15 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd 
       cumDemand += weekDemand;
       var monthDemand = weekDemand;
 
-      var cumArrived = cumArrB + cumArrL;
-      var stockOnHand = cumArrived - cumDemand;
-      var stockB = cumArrB - cumDemand;
-      var stockL = cumArrL - cumDemand;
+      // Stock = complete pairs only. You need both components per unit,
+      // so sellable inventory is min(bases arrived, lids arrived) - demand.
+      // Tracking independently produces misleading negatives when one component
+      // is ahead of the other (e.g. bases arrive weeks before lids catch up).
+      var pairsArrived = Math.min(cumArrB, cumArrL);
+      var cumArrived = pairsArrived;
+      var stockOnHand = pairsArrived - cumDemand;
+      var stockB = pairsArrived - cumDemand;
+      var stockL = pairsArrived - cumDemand;
 
       var mosVal = 0;
       if (stockOnHand > 0 && wkMonth < 12) {
