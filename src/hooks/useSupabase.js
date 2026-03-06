@@ -63,6 +63,14 @@ export function useSupabase(scenarios, setScenarios) {
           if (sc.molds && sc.molds.lid && sc.molds.lid.proto && sc.molds.lid.proto.avail === "2026-03-15") {
             sc.molds.lid.proto.avail = "2026-03-23";
           }
+          // Migrate: airCost changed from {base, lid} per-unit to {palletRate} model
+          if (!sc.airCost || !sc.airCost.palletRate) {
+            sc.airCost = { palletRate: 3000 };
+          }
+          // Migrate: ensure manual ship arrays exist
+          if (!sc.shipDeletions) sc.shipDeletions = [];
+          if (!sc.shipAdditions) sc.shipAdditions = [];
+          if (!sc.shipEdits) sc.shipEdits = [];
         }
         setScenarios(loaded);
         setStatus("saved");
