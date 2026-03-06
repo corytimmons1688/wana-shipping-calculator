@@ -97,7 +97,7 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
   // Air pallet sizes — used in Phases 0, 2, 3, 4 for cost comparisons
   const abPP = pal.airBasePP || 7500, alPP = pal.airLidPP || 25000;
   // Safe pallet rate — fallback guards against stale/missing airCost shape
-  const palletRate = (airCost && palletRate) || 3000;
+  const palletRate = (airCost && airCost.palletRate) || 3000;
 
   let oc = null, fb = null, ar = null;
   for (const s of ship) {
