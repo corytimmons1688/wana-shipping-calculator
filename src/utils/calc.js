@@ -158,6 +158,67 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
         fillAt("Standard Ocean", d, extraWeeks[i].wk, oc.transitDays, padBases, d.lNeed, false, true, null);
       }
     }
+
+    // PHASE 1.5 — Consolidate sub-pallet lid residuals into Ocean pre-shipment.
+    // After Phase 1, Ocean container rounding leaves small lid residuals (<1 pallet)
+    // per month. These accumulate (e.g. Sep 16K + Oct 9K + Nov 5K + Dec 28K = 59K)
+    // and the last month's residual falls to expensive Air. Fix: sum all sub-pallet
+    // lid residuals where ocean is feasible, round up to full pallets, and pre-ship
+    // via free Ocean container with base padding.
+    {
+      const subPalletDemands = demands.filter(d => d.lNeed > 0 && d.lNeed < pal.lidPP);
+      if (subPalletDemands.length > 0) {
+        // Find earliest sub-pallet month where Ocean is actually feasible (production exists)
+        let feasibleDemands = [];
+        let shipByDate = null;
+        for (const d of subPalletDemands) {
+          const ocLD = addDays(d.lDeadline, -oc.transitDays);
+          const hasProduction = prod.some(pw => pw.wk <= ocLD);
+          if (hasProduction) {
+            feasibleDemands.push(d);
+            if (!shipByDate || ocLD < shipByDate) shipByDate = ocLD;
+          }
+        }
+        const totalLidResidual = feasibleDemands.reduce((a, d) => a + d.lNeed, 0);
+        if (totalLidResidual > 0 && shipByDate) {
+          const lidPals = Math.ceil(totalLidResidual / pal.lidPP);
+          const lidQty = lidPals * pal.lidPP;
+          // Try to find a production week with available lids
+          const validWeeks = prod.filter(pw => pw.wk <= shipByDate);
+          let shipped = false;
+          for (let i = validWeeks.length - 1; i >= 0 && !shipped; i--) {
+            const shipDate = validWeeks[i].wk;
+            const a = availAt(shipDate);
+            if (a.lS < lidQty) continue;
+            // Find a container that fits lid pallets + base padding
+            for (const ckKey of ["20HC", "40HC"]) {
+              const ck = cont[ckKey];
+              const maxPal = ck.pallets;
+              const minPal = ck.minPal || (maxPal <= 10 ? 8 : 16);
+              if (lidPals > maxPal) continue;
+              const basePals = Math.min(maxPal - lidPals, Math.floor(a.bS / pal.basePP));
+              if (basePals + lidPals < minPal) continue;
+              const bQ = basePals * pal.basePP;
+              const arrDate = addDays(shipDate, oc.transitDays);
+              res.push({ mo: feasibleDemands[0].mo, meth: "Standard Ocean", cn: ck.label,
+                bQ, lQ: lidQty, tQ: bQ + lidQty, cost: 0,
+                bSd: new Date(shipDate), lSd: new Date(shipDate),
+                bAr: arrDate, lAr: arrDate, preShip: true, bPal: basePals, lPal: lidPals });
+              // Credit lid residuals across all feasible months
+              let rem = lidQty;
+              for (const sd of feasibleDemands) {
+                const credit = Math.min(rem, sd.lNeed);
+                sd.lNeed -= credit; rem -= credit;
+                if (rem <= 0) break;
+              }
+              feasibleDemands[0].bNeed = Math.max(0, feasibleDemands[0].bNeed - bQ);
+              shipped = true;
+              break;
+            }
+          }
+        }
+      }
+    }
   }
 
   // PHASE 2 — Fast Boat lid shipments (only when cheaper than Air per unit)
