@@ -212,7 +212,7 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd 
       rows.push({
         wk: w.wk, bW: w.bW, lW: w.lW, bC: w.bC, lC: w.lC,
         onHandB: onHandB, onHandL: onHandL,
-        departures: departures, arrivals: arrivals,
+        departures: departures,
         arrB: arrB, arrL: arrL, cumArrB: cumArrB, cumArrL: cumArrL,
         cumArrived: cumArrived, monthDemand: monthDemand,
         cumDemand: cumDemand, stockOnHand: stockOnHand, stockB: stockB, stockL: stockL,
