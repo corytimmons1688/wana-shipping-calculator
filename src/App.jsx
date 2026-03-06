@@ -28,7 +28,7 @@ export default function App() {
     const editMap = {};
     for (const e of (sc.shipEdits || [])) editMap[e.idx] = e;
 
-    const airPalletRate = sc.airCost.palletRate || 3000;
+    const airPalletRate = (sc.airCost && sc.airCost.palletRate) || 3000;
     const abPP = sc.pallet.airBasePP || 7500;
     const alPP = sc.pallet.airLidPP || 25000;
 
