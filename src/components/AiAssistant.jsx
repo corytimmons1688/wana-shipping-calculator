@@ -31,7 +31,7 @@ function buildContext(sc, gld, ships, prod, frt, cap, airCost) {
   if (airShips.length > 0) {
     lines.push("AIR SHIPMENTS (detail):");
     for (var ash of airShips) {
-      lines.push("- " + mo[ash.mo] + ": " + ash.bQ.toLocaleString() + " bases ($" + (ash.bQ * airCost.base).toLocaleString() + ") + " + ash.lQ.toLocaleString() + " lids ($" + (ash.lQ * airCost.lid).toLocaleString() + ") = $" + ash.cost.toLocaleString());
+      lines.push("- " + mo[ash.mo] + ": " + ash.bQ.toLocaleString() + " bases + " + ash.lQ.toLocaleString() + " lids = $" + ash.cost.toLocaleString());
     }
     lines.push("");
   }
@@ -53,7 +53,7 @@ function buildContext(sc, gld, ships, prod, frt, cap, airCost) {
   for (var sm of sc.shipping) {
     lines.push("- " + sm.method + ": " + sm.transitDays + " day transit");
   }
-  lines.push("- Air cost: $" + airCost.base + "/base, $" + airCost.lid + "/lid");
+  lines.push("- Air cost: $" + airCost.palletRate + "/pallet (partial pallets charged full rate)");
   lines.push("- Containers: 20'HC $" + sc.containers["20HC"].cost.toLocaleString() + " (" + sc.containers["20HC"].pallets + " pallets, min " + sc.containers["20HC"].minPal + "), 40'HC $" + sc.containers["40HC"].cost.toLocaleString() + " (" + sc.containers["40HC"].pallets + " pallets, min " + sc.containers["40HC"].minPal + ")");
   lines.push("- Ocean/FB pallets: " + sc.pallet.basePP.toLocaleString() + " bases/pallet, " + sc.pallet.lidPP.toLocaleString() + " lids/pallet");
   lines.push("- Air pallets: " + (sc.pallet.airBasePP || 7500).toLocaleString() + " bases/pallet, " + (sc.pallet.airLidPP || 25000).toLocaleString() + " lids/pallet");
