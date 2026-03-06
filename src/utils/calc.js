@@ -96,6 +96,8 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
   const gld = calcGLD(mkts), prod = calcProd(molds), res = [];
   // Air pallet sizes — used in Phases 0, 2, 3, 4 for cost comparisons
   const abPP = pal.airBasePP || 7500, alPP = pal.airLidPP || 25000;
+  // Safe pallet rate — fallback guards against stale/missing airCost shape
+  const palletRate = (airCost && palletRate) || 3000;
 
   let oc = null, fb = null, ar = null;
   for (const s of ship) {
@@ -213,7 +215,7 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
             const maxP = ck.pallets, minP = ck.minPal || (maxP <= 10 ? 8 : 16);
             const r = packOne(Math.min(a.bS, d.bNeed), Math.min(a.lS, d.lNeed), maxP, minP, pal.basePP, pal.lidPP);
             if (!r) continue;
-            const airEquiv = Math.ceil(r.bQ / abPP) * airCost.palletRate + Math.ceil(r.lQ / alPP) * airCost.palletRate;
+            const airEquiv = Math.ceil(r.bQ / abPP) * palletRate + Math.ceil(r.lQ / alPP) * palletRate;
             if (ck.cost >= airEquiv) continue; // Air cheaper, skip FB
             const arrDate = addDays(fbWeeks[wi].wk, fb.transitDays);
             res.push({ mo: d.mo, meth: "Fast Boat", cn: ck.label,
@@ -242,7 +244,7 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
           if (bShip > 0 && aB.bS >= abPP) bShip = Math.min(Math.ceil(bShip / abPP) * abPP, aB.bS);
           if (bShip > 0) {
             res.push({ mo: d.mo, meth: "Air", cn: "Air", bQ: bShip, lQ: 0, tQ: bShip,
-              cost: Math.ceil(bShip / abPP) * airCost.palletRate,
+              cost: Math.ceil(bShip / abPP) * palletRate,
               bSd: new Date(bSD), lSd: new Date(bSD),
               bAr: addDays(bSD, ar.transitDays), lAr: addDays(bSD, ar.transitDays),
               bPal: Math.ceil(bShip / abPP), lPal: 0, preShip: false,
@@ -258,7 +260,7 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
           if (lShip > 0 && aL.lS >= alPP) lShip = Math.min(Math.ceil(lShip / alPP) * alPP, aL.lS);
           if (lShip > 0) {
             res.push({ mo: d.mo, meth: "Air", cn: "Air", bQ: 0, lQ: lShip, tQ: lShip,
-              cost: Math.ceil(lShip / alPP) * airCost.palletRate,
+              cost: Math.ceil(lShip / alPP) * palletRate,
               bSd: new Date(lSD), lSd: new Date(lSD),
               bAr: addDays(lSD, ar.transitDays), lAr: addDays(lSD, ar.transitDays),
               bPal: 0, lPal: Math.ceil(lShip / alPP), preShip: false,
@@ -315,7 +317,7 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
           while (d.lNeed >= pal.lidPP && remL >= pal.lidPP) {
             const r = packOne(remB, remL, maxPal, minPal, pal.basePP, pal.lidPP, false);
             if (!r || r.lQ === 0) break;
-            const airEquiv = Math.ceil(r.lQ / alPP) * airCost.palletRate + Math.ceil(r.bQ / abPP) * airCost.palletRate;
+            const airEquiv = Math.ceil(r.lQ / alPP) * palletRate + Math.ceil(r.bQ / abPP) * palletRate;
             if (ck.cost >= airEquiv) break;
             const arrDate = addDays(shipDate, fb.transitDays);
             res.push({ mo: d.mo, meth: "Fast Boat", cn: ck.label,
@@ -348,7 +350,7 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
         if (d.bNeed <= 0) break;
         const ck = cont[ckKey];
         if (actualPals > ck.pallets) continue;
-        const airCostForQty = Math.ceil(actualUnits / abPP) * airCost.palletRate;
+        const airCostForQty = Math.ceil(actualUnits / abPP) * palletRate;
         if (ck.cost >= airCostForQty) continue; // Air is cheaper or equal
         const arrDate = addDays(bSD, fb.transitDays);
         res.push({ mo: d.mo, meth: "Fast Boat", cn: ck.label,
@@ -382,7 +384,7 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
         if (bShip > 0 && aB.bS >= abPP) bShip = Math.min(Math.ceil(bShip / abPP) * abPP, aB.bS);
         if (bShip > 0) {
           res.push({ mo: d.mo, meth: "Air", cn: "Air", bQ: bShip, lQ: 0, tQ: bShip,
-            cost: Math.ceil(bShip / abPP) * airCost.palletRate,
+            cost: Math.ceil(bShip / abPP) * palletRate,
             bSd: new Date(bSD), lSd: new Date(bSD),
             bAr: addDays(bSD, ar.transitDays), lAr: addDays(bSD, ar.transitDays),
             bPal: Math.ceil(bShip / abPP), lPal: 0, preShip: false,
@@ -398,7 +400,7 @@ export function optimize(mkts, molds, ship, par, cont, pal, airCost) {
         if (lShip > 0 && aL.lS >= alPP) lShip = Math.min(Math.ceil(lShip / alPP) * alPP, aL.lS);
         if (lShip > 0) {
           res.push({ mo: d.mo, meth: "Air", cn: "Air", bQ: 0, lQ: lShip, tQ: lShip,
-            cost: Math.ceil(lShip / alPP) * airCost.palletRate,
+            cost: Math.ceil(lShip / alPP) * palletRate,
             bSd: new Date(lSD), lSd: new Date(lSD),
             bAr: addDays(lSD, ar.transitDays), lAr: addDays(lSD, ar.transitDays),
             bPal: 0, lPal: Math.ceil(lShip / alPP), preShip: false,
