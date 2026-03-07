@@ -205,14 +205,26 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd,
       // True fulfillable inventory = min(bases, lids) - demand.
       var stockOnHand = Math.min(cumArrB, cumArrL) - cumDemand;
 
+      // Mo. Stock: how many months of FUTURE demand does current stockOnHand cover?
+      // Uses strictly future weekly demand (weeks after this one) grouped by month,
+      // so the current month is handled correctly as a partial bucket — avoiding
+      // the double-count that occurs when using gld[wkMonth] (full month) while
+      // cumDemand has already consumed some of this month's weekly demand.
       var mosVal = 0;
-      if (stockOnHand > 0 && wkMonth < 12) {
+      if (stockOnHand > 0 && weeklyDem) {
         var remStock = stockOnHand;
-        for (var fm2 = wkMonth; fm2 < 12; fm2++) {
-          var mDem = gld[fm2] || 0;
-          if (mDem <= 0) continue;
-          if (remStock >= mDem) { remStock -= mDem; mosVal += 1; }
-          else { mosVal += remStock / mDem; remStock = 0; break; }
+        var futureMoMap = {};
+        for (var fi = 0; fi < weeklyDem.length; fi++) {
+          if (weeklyDem[fi].wk.getTime() <= wt) continue; // only weeks AFTER current
+          var fwMo = weeklyDem[fi].wk.getMonth();
+          futureMoMap[fwMo] = (futureMoMap[fwMo] || 0) + (weeklyDem[fi].demand || 0);
+        }
+        var sortedFutureMos = Object.keys(futureMoMap).map(Number).sort(function(a, b) { return a - b; });
+        for (var sfi = 0; sfi < sortedFutureMos.length; sfi++) {
+          var fmDem = futureMoMap[sortedFutureMos[sfi]] || 0;
+          if (fmDem <= 0) continue;
+          if (remStock >= fmDem) { remStock -= fmDem; mosVal += 1; }
+          else { mosVal += remStock / fmDem; remStock = 0; break; }
         }
       }
 
