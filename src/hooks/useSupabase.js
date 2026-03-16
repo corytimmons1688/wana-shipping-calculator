@@ -4,6 +4,7 @@
 // If DB is empty on first load, immediately saves the default scenarios.
 
 import { useEffect, useRef, useCallback, useState } from "react";
+import { MARKETS, initScenarioCOOpt2, mkScenario } from "../data/defaults";
 
 const SUPABASE_URL = "https://fxdyiurjioesdmedmgzu.supabase.co";
 const ANON_KEY     = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ4ZHlpdXJqaW9lc2RtZWRtZ3p1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI3MzIzOTYsImV4cCI6MjA4ODMwODM5Nn0.5ueK5iXQ35oThb02ClX3iErPwYR4tPih9GtBAmhDQYk";
@@ -71,6 +72,20 @@ export function useSupabase(scenarios, setScenarios) {
           if (!sc.shipDeletions) sc.shipDeletions = [];
           if (!sc.shipAdditions) sc.shipAdditions = [];
           if (!sc.shipEdits) sc.shipEdits = [];
+          // Migrate: patch NY and CO markets with SKU detail + updated demand (Mar 2026 rebrand)
+          if (sc.markets) {
+            for (const mk of sc.markets) {
+              const def = MARKETS.find(d => d.name === mk.name);
+              if (def && def.skuDetail && !mk.skuDetail) {
+                mk.skuDetail = JSON.parse(JSON.stringify(def.skuDetail));
+                mk.demand = [...def.demand];
+              }
+            }
+          }
+        }
+        // Migrate: add Colorado Option 2 scenario if missing
+        if (!loaded.some(s => s.name === "Colorado Option 2")) {
+          loaded.push(mkScenario("Colorado Option 2", initScenarioCOOpt2()));
         }
         setScenarios(loaded);
         setStatus("saved");
