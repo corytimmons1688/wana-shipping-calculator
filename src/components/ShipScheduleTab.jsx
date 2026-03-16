@@ -6,6 +6,7 @@ import { T, tbl, th, td } from "../utils/theme";
 
 var GROUPS = ["Black Sparkle", "White"];
 var GROUP_COLORS = { "Black Sparkle": { hd: "#1a1a2e", tx: "#fff" }, "White": { hd: "#6b7280", tx: "#fff" } };
+var METHOD_COLORS = { "Standard Ocean": T.GR, "Fast Boat": T.AC, "Air": T.AM };
 
 // Build weekly SKU ship schedule from displayShips + skuDemand
 function buildSchedule(ships, skuDemand) {
@@ -158,6 +159,23 @@ export default function ShipScheduleTab({ sc, ships, prod, gld }) {
   var byS = schedule.bySku;
   var noShips = wks.length === 0;
 
+  // Compute dominant shipping method color per week column
+  var weekMC = [];
+  for (var wci = 0; wci < wks.length; wci++) {
+    var mq = {};
+    for (var wsi = 0; wsi < wks[wci].shipments.length; wsi++) {
+      var sh2 = wks[wci].shipments[wsi];
+      var mt = sh2.meth || "Standard Ocean";
+      mq[mt] = (mq[mt] || 0) + (sh2.bQ || 0) + (sh2.lQ || 0);
+    }
+    var bestM = "Standard Ocean", bestQ = 0;
+    var mk = Object.keys(mq);
+    for (var mki = 0; mki < mk.length; mki++) {
+      if (mq[mk[mki]] > bestQ) { bestQ = mq[mk[mki]]; bestM = mk[mki]; }
+    }
+    weekMC.push(METHOD_COLORS[bestM] || T.TX);
+  }
+
   var totalBasesScheduled = 0, totalLidsScheduled = 0;
   for (var tsi = 0; tsi < (ships || []).length; tsi++) {
     totalBasesScheduled += (ships[tsi].bQ || 0);
@@ -168,12 +186,12 @@ export default function ShipScheduleTab({ sc, ships, prod, gld }) {
     <div style={{ padding: "14px 18px" }}>
       {/* Pipeline Summary Cards: Bases & Lids */}
       {pipeline && (
-        <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>
           {[{label:"Bases",color:T.GR,d:pipeline.base},{label:"Lids",color:T.AC,d:pipeline.lid}].map(function(it) {
             var d = it.d;
             var covPct = d.demand > 0 ? Math.round(d.shipped / d.demand * 100) : 0;
             return (
-              <div key={it.label} style={{ flex:"1 1 300px", background:T.S2, borderRadius:7, padding:"10px 14px", border:"1px solid "+it.color, minWidth:300 }}>
+              <div key={it.label} style={{ background:T.S2, borderRadius:7, padding:"10px 14px", border:"1px solid "+it.color }}>
                 <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:8 }}>
                   <span style={{ color:it.color, fontWeight:700, fontSize:13 }}>{it.label}</span>
                   <span style={{ color:T.T2, fontSize:10 }}>{covPct}% of demand shipped</span>
@@ -238,9 +256,9 @@ export default function ShipScheduleTab({ sc, ships, prod, gld }) {
                   for (var si2 = 0; si2 < w.shipments.length; si2++) meths[w.shipments[si2].meth] = true;
                   var methList = Object.keys(meths).join(", ");
                   return (
-                    <th key={wi2} style={{ ...th, textAlign: "right", minWidth: 72, fontSize: 9 }}>
+                    <th key={wi2} style={{ ...th, textAlign: "right", minWidth: 72, fontSize: 9, borderTop: "3px solid " + weekMC[wi2] }}>
                       <div>{dF(w.wk)}</div>
-                      <div style={{ fontSize: 8, color: T.T2, fontWeight: 400, marginTop: 1 }}>{methList}</div>
+                      <div style={{ fontSize: 8, color: weekMC[wi2], fontWeight: 600, marginTop: 1 }}>{methList}</div>
                     </th>
                   );
                 })}
@@ -270,7 +288,7 @@ export default function ShipScheduleTab({ sc, ships, prod, gld }) {
                       {g.name} ({g.baseSku})
                     </td>
                     {groupWkTotals.map(function(v, wi4) {
-                      return <td key={wi4} style={{ ...td, textAlign: "right", fontWeight: 700, color: gc.tx, background: gc.hd, fontSize: 10, borderBottom: "2px solid " + gc.hd }}>{v > 0 ? fm(Math.round(v)) : ""}</td>;
+                      return <td key={wi4} style={{ ...td, textAlign: "right", fontWeight: 700, color: v > 0 ? weekMC[wi4] : gc.tx, background: gc.hd, fontSize: 10, borderBottom: "2px solid " + gc.hd }}>{v > 0 ? fm(Math.round(v)) : ""}</td>;
                     })}
                     <td style={{ ...td, textAlign: "right", fontWeight: 700, color: gc.tx, background: gc.hd, fontSize: 10, borderBottom: "2px solid " + gc.hd }}>{fm(Math.round(groupGrand))}</td>
                   </tr>
@@ -290,7 +308,7 @@ export default function ShipScheduleTab({ sc, ships, prod, gld }) {
                       <td style={{ ...td, textAlign: "center", fontSize: 9, color: T.T2 }}>{row.cat}</td>
                       {skuWeekly.map(function(v, wi5) {
                         var hasVal = v > 0;
-                        return <td key={wi5} style={{ ...td, textAlign: "right", color: hasVal ? T.TX : T.T2 + "30", fontSize: 11, background: hasVal ? "#f0fdf440" : undefined }}>{hasVal ? fm(Math.round(v)) : ""}</td>;
+                        return <td key={wi5} style={{ ...td, textAlign: "right", color: hasVal ? weekMC[wi5] : T.T2 + "30", fontWeight: hasVal ? 600 : 400, fontSize: 11, background: hasVal ? weekMC[wi5] + "10" : undefined }}>{hasVal ? fm(Math.round(v)) : ""}</td>;
                       })}
                       <td style={{ ...td, textAlign: "right", fontWeight: 700, fontSize: 11 }}>{rowTotal > 0 ? fm(Math.round(rowTotal)) : ""}</td>
                     </tr>
@@ -310,7 +328,7 @@ export default function ShipScheduleTab({ sc, ships, prod, gld }) {
                 return (
                   <tr style={{ background: T.GR + "10" }}>
                     <td colSpan={2} style={{ ...td, fontWeight: 700, color: T.GR, borderTop: "2px solid " + T.GR, fontSize: 11, position: "sticky", left: 0, zIndex: 2, background: T.GR + "10" }}>BASES SUBTOTAL</td>
-                    {bT.map(function(v, i) { return <td key={i} style={{ ...td, textAlign: "right", fontWeight: 700, color: T.GR, borderTop: "2px solid " + T.GR, fontSize: 11 }}>{v > 0 ? fm(Math.round(v)) : ""}</td>; })}
+                    {bT.map(function(v, i) { return <td key={i} style={{ ...td, textAlign: "right", fontWeight: 700, color: v > 0 ? weekMC[i] : T.GR, borderTop: "2px solid " + T.GR, fontSize: 11 }}>{v > 0 ? fm(Math.round(v)) : ""}</td>; })}
                     <td style={{ ...td, textAlign: "right", fontWeight: 700, color: T.GR, borderTop: "2px solid " + T.GR, fontSize: 12 }}>{fm(Math.round(basesGrand))}</td>
                   </tr>
                 );
@@ -333,7 +351,7 @@ export default function ShipScheduleTab({ sc, ships, prod, gld }) {
                 return (
                   <tr style={{ background: T.AC + "08" }}>
                     <td colSpan={2} style={{ ...td, fontWeight: 600, color: T.AC, fontSize: 11, position: "sticky", left: 0, zIndex: 2, background: T.AC + "08" }}>Lid Quantity</td>
-                    {lT.map(function(v, i) { return <td key={i} style={{ ...td, textAlign: "right", fontWeight: 600, color: T.AC, fontSize: 11, background: v > 0 ? "#eff6ff40" : undefined }}>{v > 0 ? fm(Math.round(v)) : ""}</td>; })}
+                    {lT.map(function(v, i) { return <td key={i} style={{ ...td, textAlign: "right", fontWeight: 600, color: v > 0 ? weekMC[i] : T.AC, fontSize: 11, background: v > 0 ? weekMC[i] + "10" : undefined }}>{v > 0 ? fm(Math.round(v)) : ""}</td>; })}
                     <td style={{ ...td, textAlign: "right", fontWeight: 700, color: T.AC, fontSize: 12 }}>{fm(Math.round(lidsGrand))}</td>
                   </tr>
                 );
@@ -349,7 +367,7 @@ export default function ShipScheduleTab({ sc, ships, prod, gld }) {
                 return (
                   <tr style={{ background: T.AC + "10" }}>
                     <td colSpan={2} style={{ ...td, fontWeight: 700, color: T.AC, borderTop: "2px solid " + T.AC, fontSize: 11, position: "sticky", left: 0, zIndex: 2, background: T.AC + "10" }}>LIDS SUBTOTAL</td>
-                    {lT2.map(function(v, i) { return <td key={i} style={{ ...td, textAlign: "right", fontWeight: 700, color: T.AC, borderTop: "2px solid " + T.AC, fontSize: 11 }}>{v > 0 ? fm(Math.round(v)) : ""}</td>; })}
+                    {lT2.map(function(v, i) { return <td key={i} style={{ ...td, textAlign: "right", fontWeight: 700, color: v > 0 ? weekMC[i] : T.AC, borderTop: "2px solid " + T.AC, fontSize: 11 }}>{v > 0 ? fm(Math.round(v)) : ""}</td>; })}
                     <td style={{ ...td, textAlign: "right", fontWeight: 700, color: T.AC, borderTop: "2px solid " + T.AC, fontSize: 12 }}>{fm(Math.round(lidsGrand2))}</td>
                   </tr>
                 );
@@ -367,7 +385,7 @@ export default function ShipScheduleTab({ sc, ships, prod, gld }) {
                 return (
                   <tr style={{ background: T.AM + "10" }}>
                     <td colSpan={2} style={{ ...td, fontWeight: 700, color: T.AM, borderTop: "3px solid " + T.AM, fontSize: 11, position: "sticky", left: 0, zIndex: 2, background: T.AM + "10" }}>TOTAL (B + L)</td>
-                    {cT.map(function(v, i) { return <td key={i} style={{ ...td, textAlign: "right", fontWeight: 700, color: T.AM, borderTop: "3px solid " + T.AM, fontSize: 11 }}>{v > 0 ? fm(Math.round(v)) : ""}</td>; })}
+                    {cT.map(function(v, i) { return <td key={i} style={{ ...td, textAlign: "right", fontWeight: 700, color: v > 0 ? weekMC[i] : T.AM, borderTop: "3px solid " + T.AM, fontSize: 11 }}>{v > 0 ? fm(Math.round(v)) : ""}</td>; })}
                     <td style={{ ...td, textAlign: "right", fontWeight: 700, color: T.AM, borderTop: "3px solid " + T.AM, fontSize: 12 }}>{fm(Math.round(combinedGrand))}</td>
                   </tr>
                 );
