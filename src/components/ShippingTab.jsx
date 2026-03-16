@@ -5,6 +5,7 @@ import { T, tbl, th, td } from "../utils/theme";
 import { Bg } from "./Shared";
 import { calcGLD } from "../utils/calc";
 import SkuPlanTab from "./SkuPlanTab";
+import ShipScheduleTab from "./ShipScheduleTab";
 
 // FIXED: safe date formatter - returns "—" for null/undefined instead of crashing
 function dFS(d) { return d ? dF(d) : "\u2014"; }
@@ -336,7 +337,7 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd,
       </div>
 
       <div style={{ display:"flex", gap:5, marginBottom:12 }}>
-        {[["unified","Production \u2192 Shipping \u2192 Inventory"],["shipments","Shipment Details"],["production","Production Only"],["skuplan","SKU Plan"]].map(function(v) {
+        {[["unified","Production \u2192 Shipping \u2192 Inventory"],["shipschedule","Ship Schedule"],["skuplan","SKU Plan"],["shipments","Shipment Details"],["production","Production Only"]].map(function(v) {
           var k = v[0], l = v[1], a = sv===k;
           return <button key={k} onClick={function() { setSv(k); setHl(null); }} style={{ padding:"4px 12px", borderRadius:5, border:"1px solid "+(a?T.AC:T.BD), background:a?T.AC+"15":"transparent", color:a?T.AC:T.T2, cursor:"pointer", fontSize:11, fontWeight:600, fontFamily:"inherit" }}>{l}</button>;
         })}
@@ -810,7 +811,9 @@ export default function ShippingTab({ ships, prod, frt, gld, weeklyDem, sc, upd,
         </div>
       )}
 
-      {sv==="skuplan" && <SkuPlanTab sc={sc} upd={upd} ships={ships} />}
+      {sv==="shipschedule" && <ShipScheduleTab sc={sc} ships={ships} />}
+
+      {sv==="skuplan" && <SkuPlanTab sc={sc} upd={upd} />}
     </div>
   );
 }
