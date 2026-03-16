@@ -62,28 +62,31 @@ function buildSchedule(ships, skuDemand) {
     var wkShips = weeks[wki].shipments;
     for (var shi = 0; shi < wkShips.length; shi++) {
       var s = wkShips[shi];
-      var mo = s.mo;
 
-      // Try target month demand first; fall back to annual if month has zero demand
+      // Use ARRIVAL month for proportions — that's when inventory is available
+      // and determines which SKUs are actually needed
+      var arrMo = s.bAr ? s.bAr.getMonth() : (s.mo != null ? s.mo : -1);
+
+      // Try arrival month demand; fall back to annual if that month has zero demand
       var useMonthly = false;
       var totalDem = 0;
-      if (mo != null && mo >= 0 && mo <= 11) {
+      if (arrMo >= 0 && arrMo <= 11) {
         for (var ski = 0; ski < allSkus.length; ski++) {
           var dem = skuDemand[allSkus[ski]];
-          if (dem) totalDem += (dem[mo] || 0);
+          if (dem) totalDem += (dem[arrMo] || 0);
         }
         if (totalDem > 0) useMonthly = true;
       }
       if (!useMonthly) totalDem = totalAnnualDem;
       if (totalDem <= 0) continue;
 
-      // Distribute bQ proportionally
+      // Distribute bQ proportionally based on arrival month demand
       var allocated = 0;
       var skuAllocs = [];
       for (var ski2 = 0; ski2 < allSkus.length; ski2++) {
         var skuCode = allSkus[ski2];
         var skuDem = useMonthly
-          ? ((skuDemand[skuCode] && skuDemand[skuCode][mo]) || 0)
+          ? ((skuDemand[skuCode] && skuDemand[skuCode][arrMo]) || 0)
           : (annualDem[skuCode] || 0);
         if (skuDem <= 0) { skuAllocs.push(0); continue; }
         var share = Math.round(s.bQ * skuDem / totalDem);
