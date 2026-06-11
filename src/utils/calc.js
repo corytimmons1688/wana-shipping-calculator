@@ -7,7 +7,7 @@ export function calcGLD(mkts) {
 }
 
 // Parse "YYYY-MM-DD" as LOCAL midnight (not UTC) so dates display correctly in all timezones.
-function parseLocalDate(s) {
+export function parseLocalDate(s) {
   if (!s) return new Date(NaN);
   const p = s.split("-").map(Number);
   return new Date(p[0], p[1] - 1, p[2]);

@@ -33,4 +33,6 @@ export const MASTER_SKUS = [
   { sku:"PL-WCB-LTO-01", name:"Razzcherry Rocket LTO",     cat:"LTO",     base:"White" },
   // HD (CO Wave 3 assorted — no individual SKU codes yet)
   { sku:"PL-WCB-HD-01",  name:"High Dose Assorted",         cat:"HD",      base:"White" },
+  // All assorted variants (Med + non-Med) consolidate to one SKU
+  { sku:"PL-WCB-490-00", name:"Assorted (Med & Rec)",       cat:"HD",      base:"White" },
 ];
