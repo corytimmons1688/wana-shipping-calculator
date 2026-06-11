@@ -1,0 +1,22 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+.vercel/
+
+# Local env overrides (committed .env holds shared config)
+.env.local
+.env*.local
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS / editor cruft
+.DS_Store
+.idea/
+.vscode/
+*.swp
