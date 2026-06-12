@@ -317,34 +317,102 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
         const hasActivity = (r) => (mw.byKey[r.key] && Object.keys(mw.byKey[r.key]).length > 0) || r.onHand !== 0 || r.inTransit > 0;
         const visibleKeys = overviewGroups.flatMap((g) => g.rows.filter(hasActivity).map((r) => r.key));
         const exportMrp = async () => {
-          const XLSX = await import("xlsx");
-          const aoa = [];
-          aoa.push(["MRP — weekly demand vs projected on hand"]);
-          aoa.push([`Scenario: ${sc.name}`, `Generated: ${new Date().toLocaleDateString("en-US")}`]);
-          aoa.push([]);
-          aoa.push(["SKU / row", ...mrpCols.map((g) => `${g.label} (wk ${g.idx + 11})`)]);
+          const mod = await import("exceljs");
+          const ExcelJS = mod.default || mod;
+          const wb = new ExcelJS.Workbook();
+          const ws = wb.addWorksheet("MRP", { views: [{ state: "frozen", xSplit: 1, ySplit: 5 }] });
+          ws.columns = [{ width: 44 }, ...mrpCols.map(() => ({ width: 9.5 }))];
+
+          const C = { // mirror src/utils/theme.js
+            border: "FFD0D4DD", surface: "FFEEF0F4", text: "FF1A1A2E", muted: "FF6B7280",
+            blue: "FF2563EB", blueTint: "FFE8F0FE", green: "FF16A34A", greenDark: "FF166534",
+            redText: "FF991B1B", redFill: "FFFEE2E2", totalFill: "FFF5F6F8",
+            groupColors: { "Bases (PB-)": "FF334155", "Lids — Black Sparkle base": "FF1A1A2E", "Lids — White / Custom Color base": "FF64748B", "Unmapped": "FFB45309" },
+          };
+          const thinBottom = { bottom: { style: "thin", color: { argb: C.border } } };
+          const fill = (argb) => ({ type: "pattern", pattern: "solid", fgColor: { argb } });
+
+          const title = ws.addRow(["MRP — weekly demand vs projected on hand"]);
+          title.getCell(1).font = { bold: true, size: 13, color: { argb: C.text } };
+          const sub = ws.addRow([`Scenario: ${sc.name}   ·   Generated ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}`]);
+          sub.getCell(1).font = { size: 9, color: { argb: C.muted } };
+          ws.addRow([]);
+
+          const moRow = ws.addRow(["", ...mrpCols.map((g) => g.date.toLocaleDateString("en-US", { month: "long" }))]);
+          let start = 2;
+          for (let i = 2; i <= mrpCols.length + 1; i++) {
+            const isLast = i === mrpCols.length + 1;
+            if (isLast || moRow.getCell(i + 1).value !== moRow.getCell(i).value) {
+              if (i > start) ws.mergeCells(moRow.number, start, moRow.number, i);
+              start = i + 1;
+            }
+          }
+          moRow.eachCell((cell) => { cell.font = { bold: true, size: 9, color: { argb: C.text } }; cell.alignment = { horizontal: "center" }; cell.border = thinBottom; });
+
+          const wkRow = ws.addRow(["SKU / week", ...mrpCols.map((g) => `${g.label}\nwk ${g.idx + 11}`)]);
+          wkRow.height = 24;
+          wkRow.eachCell((cell, col) => {
+            cell.font = { bold: true, size: 8.5, color: { argb: C.muted } };
+            cell.alignment = { horizontal: col === 1 ? "left" : "right", vertical: "bottom", wrapText: true };
+            cell.border = { bottom: { style: "medium", color: { argb: C.border } } };
+            if (col > 1 && mrpCols[col - 2].idx === inv.todayIdx) cell.fill = fill(C.blueTint);
+          });
+
+          const numFmt = "#,##0";
           for (const grp of overviewGroups) {
             const rows = grp.rows.filter(hasActivity);
             if (!rows.length) continue;
-            aoa.push([grp.name.toUpperCase()]);
+            const gRow = ws.addRow([grp.name.toUpperCase()]);
+            ws.mergeCells(gRow.number, 1, gRow.number, mrpCols.length + 1);
+            gRow.getCell(1).font = { bold: true, size: 8.5, color: { argb: C.groupColors[grp.name] || C.muted } };
+            gRow.getCell(1).fill = fill(C.surface);
+
             for (const r of rows) {
               const code = r.key.startsWith("~") ? "unmapped" : r.key;
-              aoa.push([`${r.name} (${code}) — projected on hand`, ...mrpCols.map((g) => (r.proj[g.idx] == null ? "" : Math.round(r.proj[g.idx])))]);
+              const ohRow = ws.addRow([`${r.name}  (${code}) — projected on hand`, ...mrpCols.map((g) => (r.proj[g.idx] == null ? null : Math.round(r.proj[g.idx])))]);
+              ohRow.eachCell({ includeEmpty: false }, (cell, col) => {
+                cell.border = thinBottom;
+                if (col === 1) { cell.font = { bold: true, size: 9.5, color: { argb: C.text } }; return; }
+                cell.numFmt = numFmt;
+                const v = cell.value;
+                if (typeof v === "number" && v < 0) { cell.font = { bold: true, size: 9.5, color: { argb: C.redText } }; cell.fill = fill(C.redFill); }
+                else cell.font = { bold: true, size: 9.5, color: { argb: C.text } };
+              });
+
               const dm = mw.byKey[r.key] || {};
               for (const mname of Object.keys(dm)) {
-                aoa.push([`    ${mname} demand`, ...mrpCols.map((g) => Math.round(dm[mname][g.idx]) || 0)]);
+                const mRow = ws.addRow([`        ${mname} demand`, ...mrpCols.map((g) => (dm[mname][g.idx] > 0 ? Math.round(dm[mname][g.idx]) : null))]);
+                mRow.eachCell({ includeEmpty: false }, (cell, col) => {
+                  cell.font = { size: 9, color: { argb: C.muted } };
+                  if (col > 1) cell.numFmt = numFmt;
+                });
               }
-              aoa.push(["    Total demand", ...mrpCols.map((g) => Math.round(r.demand[g.idx]) || 0)]);
-              aoa.push(["    Receipts (in transit)", ...mrpCols.map((g) => Math.round(r.arrivals[g.idx]) || 0)]);
+              const tRow = ws.addRow(["        Total demand", ...mrpCols.map((g) => (r.demand[g.idx] > 0 ? Math.round(r.demand[g.idx]) : null))]);
+              tRow.eachCell({ includeEmpty: false }, (cell, col) => {
+                cell.font = { bold: true, size: 9, color: { argb: C.muted } };
+                cell.fill = fill(C.totalFill);
+                if (col > 1) cell.numFmt = numFmt;
+              });
+              const rRow = ws.addRow(["        Receipts (in transit)", ...mrpCols.map((g) => (r.arrivals[g.idx] > 0 ? Math.round(r.arrivals[g.idx]) : null))]);
+              rRow.eachCell({ includeEmpty: false }, (cell, col) => {
+                cell.font = { bold: col > 1, size: 9, color: { argb: col === 1 ? C.green : C.greenDark } };
+                cell.border = thinBottom;
+                if (col > 1) cell.numFmt = "+#,##0";
+              });
             }
           }
-          aoa.push([]);
-          aoa.push(["On hand row = prior week balance + receipts − demand, starting from current on hand. Demand rows cover markets with item-level forecasts; base (PB-) demand derives from lid demand per market."]);
-          const ws = XLSX.utils.aoa_to_sheet(aoa);
-          ws["!cols"] = [{ wch: 46 }, ...mrpCols.map(() => ({ wch: 10 }))];
-          const wb = XLSX.utils.book_new();
-          XLSX.utils.book_append_sheet(wb, ws, "MRP");
-          XLSX.writeFile(wb, `Wana-MRP-${todayISO()}.xlsx`);
+
+          ws.addRow([]);
+          const note = ws.addRow(["On hand row = prior week balance + receipts − demand, starting from current on hand. Demand rows cover markets with item-level forecasts; base (PB-) demand derives from lid demand per market. Red = projected shortage."]);
+          note.getCell(1).font = { italic: true, size: 8.5, color: { argb: C.muted } };
+
+          const buf = await wb.xlsx.writeBuffer();
+          const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+          const a = document.createElement("a");
+          a.href = URL.createObjectURL(blob);
+          a.download = `Wana-MRP-${todayISO()}.xlsx`;
+          a.click();
+          URL.revokeObjectURL(a.href);
         };
         const moGroups = [];
         for (const g of mrpCols) {
