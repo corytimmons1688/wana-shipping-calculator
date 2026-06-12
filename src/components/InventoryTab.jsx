@@ -316,6 +316,36 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
         const mrpCols = grid.slice(inv.todayIdx);
         const hasActivity = (r) => (mw.byKey[r.key] && Object.keys(mw.byKey[r.key]).length > 0) || r.onHand !== 0 || r.inTransit > 0;
         const visibleKeys = overviewGroups.flatMap((g) => g.rows.filter(hasActivity).map((r) => r.key));
+        const exportMrp = async () => {
+          const XLSX = await import("xlsx");
+          const aoa = [];
+          aoa.push(["MRP — weekly demand vs projected on hand"]);
+          aoa.push([`Scenario: ${sc.name}`, `Generated: ${new Date().toLocaleDateString("en-US")}`]);
+          aoa.push([]);
+          aoa.push(["SKU / row", ...mrpCols.map((g) => `${g.label} (wk ${g.idx + 11})`)]);
+          for (const grp of overviewGroups) {
+            const rows = grp.rows.filter(hasActivity);
+            if (!rows.length) continue;
+            aoa.push([grp.name.toUpperCase()]);
+            for (const r of rows) {
+              const code = r.key.startsWith("~") ? "unmapped" : r.key;
+              aoa.push([`${r.name} (${code}) — projected on hand`, ...mrpCols.map((g) => (r.proj[g.idx] == null ? "" : Math.round(r.proj[g.idx])))]);
+              const dm = mw.byKey[r.key] || {};
+              for (const mname of Object.keys(dm)) {
+                aoa.push([`    ${mname} demand`, ...mrpCols.map((g) => Math.round(dm[mname][g.idx]) || 0)]);
+              }
+              aoa.push(["    Total demand", ...mrpCols.map((g) => Math.round(r.demand[g.idx]) || 0)]);
+              aoa.push(["    Receipts (in transit)", ...mrpCols.map((g) => Math.round(r.arrivals[g.idx]) || 0)]);
+            }
+          }
+          aoa.push([]);
+          aoa.push(["On hand row = prior week balance + receipts − demand, starting from current on hand. Demand rows cover markets with item-level forecasts; base (PB-) demand derives from lid demand per market."]);
+          const ws = XLSX.utils.aoa_to_sheet(aoa);
+          ws["!cols"] = [{ wch: 46 }, ...mrpCols.map(() => ({ wch: 10 }))];
+          const wb = XLSX.utils.book_new();
+          XLSX.utils.book_append_sheet(wb, ws, "MRP");
+          XLSX.writeFile(wb, `Wana-MRP-${todayISO()}.xlsx`);
+        };
         const moGroups = [];
         for (const g of mrpCols) {
           const last = moGroups[moGroups.length - 1];
@@ -330,6 +360,7 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
               <span style={{ fontSize: 11, fontWeight: 700 }}>MRP — weekly demand vs projected on hand</span>
               <button onClick={() => setMrpCollapsed(new Set())} style={{ padding: "3px 9px", borderRadius: 4, border: "1px solid " + T.BD, background: "transparent", color: T.T2, cursor: "pointer", fontSize: 10 }}>Expand all</button>
               <button onClick={() => setMrpCollapsed(new Set(visibleKeys))} style={{ padding: "3px 9px", borderRadius: 4, border: "1px solid " + T.BD, background: "transparent", color: T.T2, cursor: "pointer", fontSize: 10 }}>Collapse all</button>
+              <button onClick={exportMrp} style={{ padding: "3px 11px", borderRadius: 4, border: "1px solid " + T.GR, background: T.GR + "10", color: T.GR, cursor: "pointer", fontSize: 10, fontWeight: 700 }}>⬇ Download Excel</button>
               <span style={{ fontSize: 9.5, color: T.T2 }}>On hand row = prior week balance + receipts − demand, starting from current on hand. Click a SKU to toggle its market breakdown.</span>
             </div>
             <div style={{ overflowX: "auto" }}>
