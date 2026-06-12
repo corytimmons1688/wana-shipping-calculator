@@ -65,21 +65,6 @@ export default function ItemForecastTab({ sc, upd }) {
   const grandTotal = fc.rows.reduce((a, r) => a + r.total, 0);
   const gatedUnits = sel ? fc.rows.reduce((a, r) => a + r.weekly.reduce((x, v, i) => x + (r.gated[i] ? v : 0), 0), 0) : 0;
 
-  const applyTotals = () => {
-    if (!mkSel || mkSel.goLive == null) return;
-    if (!window.confirm(`Overwrite ${sel}'s monthly Market Demand (months from go-live) with this item forecast's monthly sums?`)) return;
-    upd((s) => {
-      const mk = s.markets.find((m) => m.name === sel);
-      if (!mk) return;
-      for (let mo = 0; mo < 12; mo++) {
-        if (mo + 1 < mk.goLive) continue;
-        let sum = 0;
-        fc.rows.forEach((r) => r.weekly.forEach((v, i) => { if (!r.gated[i] && fc.grid[i].mo === mo) sum += v; }));
-        mk.demand[mo] = Math.round(sum);
-      }
-    });
-  };
-
   const chip = (label, active, onClick, sub) => (
     <button key={label} onClick={onClick} style={{ padding: "4px 12px", borderRadius: 999, cursor: "pointer", fontSize: 11, fontFamily: "inherit",
       border: "1px solid " + (active ? T.AC : T.BD), background: active ? T.AC : "transparent", color: active ? "#fff" : T.T2, fontWeight: active ? 700 : 500 }}>
@@ -108,10 +93,10 @@ export default function ItemForecastTab({ sc, upd }) {
           <span style={{ fontSize: 9, color: T.T2 }}>{sel ? sel + " 2026 forecast" : "Macro 2026 forecast"} </span>
           <span style={{ fontWeight: 700, fontFamily: "'JetBrains Mono',monospace", fontSize: 13, color: T.AC }}>{fm(Math.round(grandTotal))}</span>
         </div>
-        {sel && isWeeklyMkt && (
-          <button onClick={applyTotals} style={{ padding: "5px 11px", borderRadius: 5, border: "1px solid " + T.AM, background: T.AM + "10", color: T.AM, cursor: "pointer", fontSize: 10, fontWeight: 600 }}>
-            Apply totals to Market Demand
-          </button>
+        {sel && (
+          <span style={{ fontSize: 10, color: T.T2, background: T.S2, border: "1px solid " + T.BD, borderRadius: 5, padding: "4px 9px" }}>
+            Market Demand rolls up from these items automatically
+          </span>
         )}
         {sel && gatedUnits > 0 && (
           <span style={{ fontSize: 10, color: T.AM, background: T.AM + "12", border: "1px solid " + T.AM + "44", borderRadius: 5, padding: "4px 9px" }}>

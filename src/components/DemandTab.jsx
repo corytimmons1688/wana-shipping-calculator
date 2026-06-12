@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { MO } from "../data/defaults";
+import { marketMonthlyDemand } from "../utils/calc";
 import { fm } from "../utils/format";
 import { T, tbl, th, td } from "../utils/theme";
 import { Ed } from "./Shared";
@@ -17,9 +18,10 @@ export default function DemandTab({ sc, gld, annD, upd }) {
   }
 
   var allT = 0;
-  for (var ai = 0; ai < sc.markets.length; ai++)
-    for (var aj = 0; aj < sc.markets[ai].demand.length; aj++)
-      allT += sc.markets[ai].demand[aj];
+  for (var ai = 0; ai < sc.markets.length; ai++) {
+    var aMd = marketMonthlyDemand(sc.markets[ai]);
+    for (var aj = 0; aj < aMd.length; aj++) allT += aMd[aj];
+  }
 
   return (
     <div style={{ padding: "14px 18px" }}>
@@ -41,8 +43,9 @@ export default function DemandTab({ sc, gld, annD, upd }) {
           <th style={{ ...th, textAlign: "right", minWidth: 78 }}>Annual</th>
         </tr></thead><tbody>
           {sc.markets.map(function(mk, mi) {
-            var ann = 0; for (var di = 0; di < mk.demand.length; di++) ann += mk.demand[di];
             var hasSku = mk.skuDetail && mk.skuDetail.skus && mk.skuDetail.skus.length > 0;
+            var md = marketMonthlyDemand(mk);
+            var ann = 0; for (var di = 0; di < md.length; di++) ann += md[di];
             var isExp = expanded[mi];
 
             var mainRow = (
@@ -52,6 +55,7 @@ export default function DemandTab({ sc, gld, annD, upd }) {
                   {hasSku && <span style={{ marginRight: 4, fontSize: 10, color: T.AC }}>{isExp ? "\u25BC" : "\u25B6"}</span>}
                   {mk.name}
                   {hasSku && <span style={{ marginLeft: 4, fontSize: 9, color: T.T2 }}>({mk.skuDetail.skus.length} SKUs)</span>}
+                  {hasSku && <span title="Monthly values roll up automatically from the SKU-level forecast" style={{ marginLeft: 4, fontSize: 8, color: T.AC, border: "1px solid " + T.AC + "55", borderRadius: 3, padding: "0 3px" }}>Σ auto</span>}
                 </td>
                 <td style={{ ...td, textAlign: "center" }}>
                   <select value={mk.goLive || ""} onChange={function(e) { var v = e.target.value === "" ? null : Number(e.target.value); upd(function(s) { s.markets[mi].goLive = v; }); }} style={{ background: T.S2, border: "1px solid " + T.BD, color: T.AC, borderRadius: 3, padding: "1px 2px", fontSize: 11, fontFamily: "'JetBrains Mono',monospace", width: 56 }}>
@@ -59,9 +63,12 @@ export default function DemandTab({ sc, gld, annD, upd }) {
                     {MO.map(function(m, i) { return <option key={i} value={i + 1}>{m}</option>; })}
                   </select>
                 </td>
-                {mk.demand.map(function(d, di) {
+                {md.map(function(d, di) {
                   var isGL = mk.goLive === di + 1;
                   var isAct = mk.goLive != null && di + 1 >= mk.goLive;
+                  if (hasSku) {
+                    return <td key={di} title="Rolled up from SKU-level forecast — edit items in the Item Forecast tab" style={{ ...td, textAlign: "right", background: isGL ? "#bbf7d0" : undefined }}><span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12, color: isGL ? T.GR : isAct ? T.TX : T.T2 }}>{fm(d)}</span></td>;
+                  }
                   return <td key={di} style={{ ...td, textAlign: "right", background: isGL ? "#bbf7d0" : undefined }}><Ed value={d} onChange={function(v) { upd(function(s) { s.markets[mi].demand[di] = v; }); }} style={{ color: isGL ? T.GR : isAct ? T.TX : T.T2 }} /></td>;
                 })}
                 <td style={{ ...td, textAlign: "right", fontWeight: 700 }}>{fm(ann)}</td>

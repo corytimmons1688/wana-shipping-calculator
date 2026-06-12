@@ -1,8 +1,31 @@
+// Effective monthly demand for a market: rolls up SKU-level detail when
+// present so the market row always matches its itemized forecast; falls
+// back to the manually entered demand array for aggregate-only markets.
+export function marketMonthlyDemand(mk) {
+  if (!mk.skuDetail || !mk.skuDetail.skus || !mk.skuDetail.skus.length) return mk.demand || new Array(12).fill(0);
+  const det = mk.skuDetail;
+  const out = new Array(12).fill(0);
+  for (const sku of det.skus) {
+    if (sku.monthly) {
+      for (let m = 0; m < 12; m++) out[m] += sku.monthly[m] || 0;
+    } else if (sku.weekly && det.weeks) {
+      for (let wi = 0; wi < sku.weekly.length && wi < det.weeks.length; wi++) {
+        const v = sku.weekly[wi] || 0;
+        if (v <= 0) continue;
+        out[parseLocalDate(det.weeks[wi]).getMonth()] += v;
+      }
+    }
+  }
+  return out.map((v) => Math.round(v));
+}
+
 export function calcGLD(mkts) {
   const r = new Array(12).fill(0);
-  for (let m = 0; m < 12; m++)
-    for (let i = 0; i < mkts.length; i++)
-      if (mkts[i].goLive != null && mkts[i].goLive <= m + 1) r[m] += mkts[i].demand[m];
+  for (let i = 0; i < mkts.length; i++) {
+    const md = marketMonthlyDemand(mkts[i]);
+    for (let m = 0; m < 12; m++)
+      if (mkts[i].goLive != null && mkts[i].goLive <= m + 1) r[m] += md[m];
+  }
   return r;
 }
 
