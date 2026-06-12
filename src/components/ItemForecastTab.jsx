@@ -152,7 +152,7 @@ export default function ItemForecastTab({ sc, upd }) {
                     <td colSpan={cols.length + 2} style={{ ...td, background: T.S2, fontWeight: 700, fontSize: 10, color: GROUP_COLORS[grp.name] || GROUP_COLORS.default, textTransform: "uppercase", letterSpacing: "0.5px" }}>{grp.name}</td>
                   </tr>,
                   ...grp.rows.map((r) => (
-                    <tr key={grp.name + r.key + r.market}>
+                    <tr key={`${grp.name}|${r.key}|${r.market}|${r.si}|${r.name}`}>
                       <td style={{ ...td, ...stickyCol }}>
                         <div style={{ fontWeight: 600, fontSize: 11, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{r.name}</div>
                         <div style={{ fontSize: 9, color: T.T2, fontFamily: "'JetBrains Mono',monospace" }}>{r.sku || "unmapped"}</div>

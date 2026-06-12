@@ -5,7 +5,7 @@
 // open POs, and targets. Actuals are shared across scenarios (Supabase `actuals`).
 
 import { useState, useMemo } from "react";
-import { calcSkuWeeklyForecast, calcSkuInventory, shipmentEta, buildWeekGrid, skuInfo } from "../utils/inventory";
+import { calcSkuWeeklyForecast, calcSkuInventory, calcSkuMarketWeekly, shipmentEta, buildWeekGrid, skuInfo } from "../utils/inventory";
 import { parseLocalDate } from "../utils/calc";
 import { MASTER_SKUS, BASE_TYPES } from "../data/skuMaster";
 import { Ed } from "./Shared";
@@ -72,10 +72,12 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
   const [expShip, setExpShip] = useState(null);
   const [outMkt, setOutMkt] = useState("All");
   const [adjVal, setAdjVal] = useState("");
+  const [mrpCollapsed, setMrpCollapsed] = useState(() => new Set());
   const today = new Date();
 
   const fc = useMemo(() => calcSkuWeeklyForecast(sc.markets), [sc.markets]);
   const inv = useMemo(() => calcSkuInventory(actuals, fc, today), [actuals, fc]); // eslint-disable-line
+  const mw = useMemo(() => calcSkuMarketWeekly(sc.markets), [sc.markets]);
   const grid = useMemo(() => buildWeekGrid(), []);
 
   // ── shared mutation helpers ────────────────────────────────────────────────
@@ -216,6 +218,7 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
 
       <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
         {subBtn("overview", "Overview")}
+        {subBtn("mrp", "MRP")}
         {subBtn("inbound", "Inbound (factory → Calyx)")}
         {subBtn("outbound", "Outbound to Wana")}
         {subBtn("pos", "Open POs")}
@@ -309,11 +312,108 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
         </div>
       )}
 
+      {view === "mrp" && (() => {
+        const mrpCols = grid.slice(inv.todayIdx);
+        const hasActivity = (r) => (mw.byKey[r.key] && Object.keys(mw.byKey[r.key]).length > 0) || r.onHand !== 0 || r.inTransit > 0;
+        const visibleKeys = overviewGroups.flatMap((g) => g.rows.filter(hasActivity).map((r) => r.key));
+        const moGroups = [];
+        for (const g of mrpCols) {
+          const last = moGroups[moGroups.length - 1];
+          if (last && last.mo === g.mo) last.span++;
+          else moGroups.push({ mo: g.mo, span: 1, label: g.date.toLocaleDateString("en-US", { month: "long" }) });
+        }
+        const stickyName = { position: "sticky", left: 0, background: T.S1, zIndex: 1, minWidth: 196, maxWidth: 220, borderRight: "1px solid " + T.BD };
+        const numCell = { ...td, textAlign: "right", fontFamily: "'JetBrains Mono',monospace", fontSize: 10.5, minWidth: 52, padding: "3px 6px" };
+        return (
+          <div style={{ background: T.S1, border: "1px solid " + T.BD, borderRadius: 6 }}>
+            <div style={{ padding: "8px 12px", display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+              <span style={{ fontSize: 11, fontWeight: 700 }}>MRP — weekly demand vs projected on hand</span>
+              <button onClick={() => setMrpCollapsed(new Set())} style={{ padding: "3px 9px", borderRadius: 4, border: "1px solid " + T.BD, background: "transparent", color: T.T2, cursor: "pointer", fontSize: 10 }}>Expand all</button>
+              <button onClick={() => setMrpCollapsed(new Set(visibleKeys))} style={{ padding: "3px 9px", borderRadius: 4, border: "1px solid " + T.BD, background: "transparent", color: T.T2, cursor: "pointer", fontSize: 10 }}>Collapse all</button>
+              <span style={{ fontSize: 9.5, color: T.T2 }}>On hand row = prior week balance + receipts − demand, starting from current on hand. Click a SKU to toggle its market breakdown.</span>
+            </div>
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ ...tbl, fontSize: 10.5 }}>
+                <thead>
+                  <tr>
+                    <th style={{ ...th, ...stickyName, zIndex: 3 }}></th>
+                    {moGroups.map((g, i) => (
+                      <th key={i} colSpan={g.span} style={{ ...th, textAlign: "center", color: T.TX, borderLeft: "1px solid " + T.BD }}>{g.label}</th>
+                    ))}
+                  </tr>
+                  <tr>
+                    <th style={{ ...th, ...stickyName, top: 29, zIndex: 3 }}>SKU / week</th>
+                    {mrpCols.map((g) => (
+                      <th key={g.idx} style={{ ...th, top: 29, textAlign: "right", minWidth: 52, background: g.idx === inv.todayIdx ? T.AC + "14" : T.S1 }}>
+                        {g.label}<br /><span style={{ fontWeight: 400, color: T.T2 }}>wk {g.idx + 11}</span>
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {overviewGroups.map((grp) => {
+                    const rows = grp.rows.filter(hasActivity);
+                    if (!rows.length) return null;
+                    return [
+                      <tr key={"h" + grp.name}><td colSpan={mrpCols.length + 1} style={{ ...td, background: T.S2, fontWeight: 700, fontSize: 10, color: grp.color, textTransform: "uppercase", letterSpacing: "0.5px", position: "sticky", left: 0 }}>{grp.name}</td></tr>,
+                      ...rows.map((r) => {
+                        const collapsed = mrpCollapsed.has(r.key);
+                        const dm = mw.byKey[r.key] || {};
+                        const dmMarkets = Object.keys(dm);
+                        const toggle = () => setMrpCollapsed((p) => { const n = new Set(p); n.has(r.key) ? n.delete(r.key) : n.add(r.key); return n; });
+                        const out = [
+                          <tr key={r.key} onClick={toggle} style={{ cursor: "pointer" }}>
+                            <td style={{ ...td, ...stickyName, padding: "4px 8px" }}>
+                              <span style={{ color: T.T2, fontSize: 9, marginRight: 4 }}>{collapsed ? "▶" : "▼"}</span>
+                              <span style={{ fontWeight: 700, fontSize: 10.5 }}>{r.name}</span>
+                              <div style={{ fontSize: 8.5, color: T.T2, fontFamily: "'JetBrains Mono',monospace", paddingLeft: 13 }}>{r.key.startsWith("~") ? "unmapped" : r.key} · on hand {fm(Math.round(r.onHand))}</div>
+                            </td>
+                            {mrpCols.map((g) => {
+                              const v = r.proj[g.idx];
+                              const neg = v != null && v < 0;
+                              return <td key={g.idx} style={{ ...numCell, fontWeight: 700, color: neg ? "#991b1b" : T.TX, background: neg ? "#fee2e2" : g.idx === inv.todayIdx ? T.AC + "0A" : undefined }}>{v == null ? "—" : fm(Math.round(v))}</td>;
+                            })}
+                          </tr>,
+                        ];
+                        if (!collapsed) {
+                          for (const mname of dmMarkets) {
+                            out.push(
+                              <tr key={r.key + mname}>
+                                <td style={{ ...td, ...stickyName, padding: "2px 8px 2px 22px", fontSize: 9.5, color: T.T2 }}>↳ {mname} demand</td>
+                                {mrpCols.map((g) => { const v = dm[mname][g.idx]; return <td key={g.idx} style={{ ...numCell, color: v > 0 ? T.TX : T.BD }}>{v > 0 ? fm(Math.round(v)) : "—"}</td>; })}
+                              </tr>
+                            );
+                          }
+                          out.push(
+                            <tr key={r.key + "tot"}>
+                              <td style={{ ...td, ...stickyName, padding: "2px 8px 2px 22px", fontSize: 9.5, fontWeight: 700, color: T.T2 }}>Total demand</td>
+                              {mrpCols.map((g) => { const v = r.demand[g.idx]; return <td key={g.idx} style={{ ...numCell, fontWeight: 600, color: v > 0 ? T.TX : T.BD, background: T.S2 + "44" }}>{v > 0 ? fm(Math.round(v)) : "—"}</td>; })}
+                            </tr>,
+                            <tr key={r.key + "rcv"}>
+                              <td style={{ ...td, ...stickyName, padding: "2px 8px 2px 22px", fontSize: 9.5, color: T.GR }}>Receipts (in transit)</td>
+                              {mrpCols.map((g) => { const v = r.arrivals[g.idx]; return <td key={g.idx} style={{ ...numCell, color: v > 0 ? T.GR : T.BD, fontWeight: v > 0 ? 700 : 400 }}>{v > 0 ? "+" + fm(Math.round(v)) : "—"}</td>; })}
+                            </tr>
+                          );
+                        }
+                        return out;
+                      }),
+                    ];
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div style={{ padding: "6px 12px", fontSize: 9, color: T.T2, borderTop: "1px solid " + T.BD }}>
+              Demand rows show each market with item-level forecast (NJ, NY, CO, MA); base (PB-) demand derives from lid demand per market. Bold SKU row = projected on hand at end of each week; red = projected shortage.
+            </div>
+          </div>
+        );
+      })()}
+
       {view === "inbound" && (
         <div style={{ background: T.S1, border: "1px solid " + T.BD, borderRadius: 6, overflowX: "auto" }}>
           <div style={{ padding: "8px 12px", display: "flex", alignItems: "center", gap: 10 }}>
             <button onClick={addInbound} style={{ padding: "4px 12px", borderRadius: 5, border: "1px solid " + T.GR, background: T.GR + "10", color: T.GR, cursor: "pointer", fontSize: 11, fontWeight: 700 }}>+ Add inbound shipment</button>
-            <span style={{ fontSize: 10, color: T.T2 }}>ETA derives from the latest leg date (ship → trucking → rail). Click a row to edit line items.</span>
+            <span style={{ fontSize: 10, color: T.T2 }}>Set ETA directly, or it derives from the latest leg date. Click a row to edit line items.</span>
           </div>
           <table style={{ ...tbl, fontSize: 11 }}>
             <thead><tr>
@@ -337,7 +437,14 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
                     <td style={{ ...td }}><DateEd value={sh.shipDate} onChange={(v) => updIn(sh.id, (s) => { s.shipDate = v; })} /></td>
                     <td style={{ ...td }}><DateEd value={sh.truckDate} onChange={(v) => updIn(sh.id, (s) => { s.truckDate = v; })} /></td>
                     <td style={{ ...td }}><DateEd value={sh.railDate} onChange={(v) => updIn(sh.id, (s) => { s.railDate = v; })} /></td>
-                    <td style={{ ...td, fontWeight: 700, fontFamily: "'JetBrains Mono',monospace" }}>{sh.received ? "—" : dF(shipmentEta(sh))}</td>
+                    <td style={{ ...td }}>
+                      {sh.received ? <span style={{ color: T.T2 }}>—</span> : (
+                        <span>
+                          <DateEd value={sh.eta || ""} onChange={(v) => updIn(sh.id, (s) => { s.eta = v; })} />
+                          {!sh.eta && <div style={{ fontSize: 8.5, color: T.T2 }}>auto: {dF(shipmentEta(sh))}</div>}
+                        </span>
+                      )}
+                    </td>
                     <td style={{ ...td }}><StatusChipIn sh={sh} today={today} onReceive={() => updIn(sh.id, (s) => { s.received = true; })} /></td>
                     <td style={{ ...td, textAlign: "right", fontFamily: "'JetBrains Mono',monospace", fontWeight: 700 }}>{fm(units)}</td>
                     <td style={{ ...td }}>

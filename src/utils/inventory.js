@@ -135,13 +135,39 @@ export function calcBaseWeeklyDemand(bySku) {
   return out;
 }
 
-// ETA = latest leg date (ship → trucking → rail). Null if received or no dates.
+// ETA: explicit sh.eta wins; else latest leg date (ship → trucking → rail).
+// Null if received or undated.
 export function shipmentEta(sh) {
   if (sh.received) return null;
+  if (sh.eta) {
+    const d = parseLocalDate(sh.eta);
+    if (!isNaN(d)) return d;
+  }
   const ds = [sh.shipDate, sh.truckDate, sh.railDate].filter(Boolean)
     .map(parseLocalDate).filter((d) => !isNaN(d));
   if (!ds.length) return null;
   return new Date(Math.max(...ds.map((d) => d.getTime())));
+}
+
+// Per-market active (go-live-gated) weekly demand per SKU key, including
+// derived PB- base demand per market — feeds the MRP view's market rows.
+export function calcSkuMarketWeekly(mkts) {
+  const byKey = {};
+  const markets = [];
+  for (const mk of mkts) {
+    if (!mk.skuDetail || !mk.skuDetail.skus || !mk.skuDetail.skus.length) continue;
+    markets.push(mk.name);
+    const fc = calcSkuWeeklyForecast(mkts, { market: mk.name });
+    const merged = { ...fc.bySku };
+    const baseD = calcBaseWeeklyDemand(fc.bySku);
+    for (const bs of Object.keys(baseD)) merged[bs] = baseD[bs];
+    for (const key of Object.keys(merged)) {
+      if (!merged[key].some((v) => v > 0)) continue;
+      if (!byKey[key]) byKey[key] = {};
+      byKey[key][mk.name] = merged[key];
+    }
+  }
+  return { markets, byKey };
 }
 
 // Core inventory state per SKU from actual flows + forecast projection.

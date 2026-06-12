@@ -88,6 +88,10 @@ export function useSupabase(scenarios, setScenarios) {
             // deliberately does NOT touch ma.demand or ma.goLive.
             const ma = sc.markets.find(m => m.name === "Massachusetts");
             if (ma && !ma.skuDetail) ma.skuDetail = JSON.parse(JSON.stringify(MA_SKU_DETAIL));
+            // Migrate (Jun 12 2026): MA monthly demand due first week of month —
+            // replaces the old Jun-29-anchored weekly layout exactly once.
+            if (ma && ma.skuDetail && ma.skuDetail.weeks && ma.skuDetail.weeks[0] === "2026-06-29")
+              ma.skuDetail = JSON.parse(JSON.stringify(MA_SKU_DETAIL));
           }
         }
         setScenarios(loaded);
