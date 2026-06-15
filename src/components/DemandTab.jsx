@@ -82,8 +82,10 @@ function buildDemandModel(markets, grid, firstWkByMonth) {
     rows.push({ mi, name: mk.name, goLive, priority: mk.priority, kind, weekly: parentWeekly, gated: parentGated, annual, skuRows, editAt });
   });
 
+  // Window to ACTIVE (post-go-live) demand only — pre-go-live cells are hidden,
+  // so they no longer drag the window back to the start of the grid.
   let lo = Infinity, hi = -Infinity;
-  for (const row of rows) row.weekly.forEach((v, i) => { if (v > 0) { if (i < lo) lo = i; if (i > hi) hi = i; } });
+  for (const row of rows) row.weekly.forEach((v, i) => { if (v > 0 && !row.gated[i]) { if (i < lo) lo = i; if (i > hi) hi = i; } });
   if (lo === Infinity) { lo = 0; hi = Math.min(NUM_WEEKS - 1, 12); }
   return { rows, weeklyGLD, lo, hi };
 }
@@ -238,17 +240,18 @@ export default function DemandTab({ sc, gld, annD, upd }) {
     }
     const gldAnnual = model.weeklyGLD.reduce((a, b) => a + b, 0);
 
-    const numCell = (i, gated, extra) => ({ ...td, textAlign: "right", fontFamily: "'JetBrains Mono',monospace", fontSize: 11, background: i === todayIdx ? T.AC + "0A" : undefined, opacity: gated ? 0.45 : 1, textDecoration: gated ? "line-through" : "none", ...(extra || {}) });
+    const numCell = (i, extra) => ({ ...td, textAlign: "right", fontFamily: "'JetBrains Mono',monospace", fontSize: 11, background: i === todayIdx ? T.AC + "0A" : undefined, ...(extra || {}) });
+    const blankCell = (i) => <td key={i} style={numCell(i, { color: T.BD })}>{"—"}</td>;
 
-    const editCell = (i, gated, value, onChange) => (
-      <td key={i} style={numCell(i, gated)} title={gated ? "Before go-live — excluded from go-live demand" : undefined}>
+    const editCell = (i, value, onChange) => (
+      <td key={i} style={numCell(i)}>
         <Ed value={Math.round(value || 0)} onChange={onChange} />
       </td>
     );
+    // Pre-go-live cells are hidden entirely (kept in the DB, just not shown).
     const staticCell = (i, gated, value) => (
-      <td key={i} style={numCell(i, gated, { color: value > 0 ? T.TX : T.BD })} title={gated ? "Before go-live — excluded from go-live demand" : undefined}>
-        {value > 0 ? fm(Math.round(value)) : "—"}
-      </td>
+      (gated || !(value > 0)) ? <td key={i} style={numCell(i, { color: T.BD })}>{"—"}</td>
+        : <td key={i} style={numCell(i, { color: T.TX })}>{fm(Math.round(value))}</td>
     );
 
     const weekHeader = (g) => (
@@ -277,9 +280,9 @@ export default function DemandTab({ sc, gld, annD, upd }) {
             const i = g.idx;
             if (row.kind === "aggregate") {
               const ea = row.editAt[i];
-              if (!ea) return <td key={i} style={numCell(i, false, { color: T.BD })}>{"—"}</td>;
+              if (!ea || row.gated[i]) return blankCell(i);
               const mo = ea.mo;
-              return editCell(i, row.gated[i], (sc.markets[mi] && sc.markets[mi].demand || [])[mo], (v) => upd((s) => {
+              return editCell(i, (sc.markets[mi] && sc.markets[mi].demand || [])[mo], (v) => upd((s) => {
                 const m = s.markets[mi];
                 if (m && Array.isArray(m.demand)) { const n = Number(v); m.demand[mo] = isNaN(n) ? 0 : n; }
               }));
@@ -304,16 +307,16 @@ export default function DemandTab({ sc, gld, annD, upd }) {
               {cols.map((g) => {
                 const i = g.idx;
                 const ea = sr.editAt[i];
-                if (!ea) return <td key={i} style={numCell(i, false, { color: T.BD })}>{"—"}</td>;
+                if (!ea || sr.gated[i]) return blankCell(i);
                 if (ea.kind === "weekly") {
                   const wi = ea.wi;
-                  return editCell(i, sr.gated[i], (sc.markets[mi] && sc.markets[mi].skuDetail && sc.markets[mi].skuDetail.skus[sr.si] && sc.markets[mi].skuDetail.skus[sr.si].weekly || [])[wi], (v) => upd((s) => {
+                  return editCell(i, (sc.markets[mi] && sc.markets[mi].skuDetail && sc.markets[mi].skuDetail.skus[sr.si] && sc.markets[mi].skuDetail.skus[sr.si].weekly || [])[wi], (v) => upd((s) => {
                     const sk = s.markets[mi] && s.markets[mi].skuDetail && s.markets[mi].skuDetail.skus[sr.si];
                     if (sk && Array.isArray(sk.weekly) && wi < sk.weekly.length) { const n = Number(v); sk.weekly[wi] = isNaN(n) ? 0 : n; }
                   }));
                 }
                 const mo = ea.mo;
-                return editCell(i, sr.gated[i], (sc.markets[mi] && sc.markets[mi].skuDetail && sc.markets[mi].skuDetail.skus[sr.si] && sc.markets[mi].skuDetail.skus[sr.si].monthly || [])[mo], (v) => upd((s) => {
+                return editCell(i, (sc.markets[mi] && sc.markets[mi].skuDetail && sc.markets[mi].skuDetail.skus[sr.si] && sc.markets[mi].skuDetail.skus[sr.si].monthly || [])[mo], (v) => upd((s) => {
                   const sk = s.markets[mi] && s.markets[mi].skuDetail && s.markets[mi].skuDetail.skus[sr.si];
                   if (sk && Array.isArray(sk.monthly)) { const n = Number(v); sk.monthly[mo] = isNaN(n) ? 0 : n; }
                 }));
@@ -353,7 +356,7 @@ export default function DemandTab({ sc, gld, annD, upd }) {
           </tbody>
         </table>
         <div style={{ padding: "6px 4px", fontSize: 9.5, color: T.T2 }}>
-          Each cell is editable: detail-market SKU rows write per-week (or per-month for monthly-format markets); aggregate markets place each month's total in the month's first week. Pre-go-live cells are struck and excluded from go-live demand. Note: the Shipping Calculator spreads each month's aggregate demand evenly across its weeks, while this view shows it in the first week.
+          Each cell is editable: detail-market SKU rows write per-week (or per-month for monthly-format markets); aggregate markets place each month's total in the month's first week. Demand before a market's go-live date is hidden here (still stored — switch to Monthly or change go-live to see it). Note: the Shipping Calculator spreads each month's aggregate demand evenly across its weeks, while this view shows it in the first week.
         </div>
       </div>
     );

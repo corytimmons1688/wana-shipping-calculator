@@ -34,7 +34,7 @@ export default function ItemForecastTab({ sc, upd }) {
   // Visible week window = first..last week carrying any value.
   const { lo, hi } = useMemo(() => {
     let lo = Infinity, hi = -Infinity;
-    for (const r of fc.rows) r.weekly.forEach((v, i) => { if (v > 0) { if (i < lo) lo = i; if (i > hi) hi = i; } });
+    for (const r of fc.rows) r.weekly.forEach((v, i) => { if (v > 0 && !r.gated[i]) { if (i < lo) lo = i; if (i > hi) hi = i; } });
     if (lo === Infinity) { lo = Math.max(0, todayIdx); hi = Math.min(fc.grid.length - 1, lo + 12); }
     return { lo, hi };
   }, [fc, todayIdx]);
@@ -100,7 +100,7 @@ export default function ItemForecastTab({ sc, upd }) {
         )}
         {sel && gatedUnits > 0 && (
           <span style={{ fontSize: 10, color: T.AM, background: T.AM + "12", border: "1px solid " + T.AM + "44", borderRadius: 5, padding: "4px 9px" }}>
-            ⚠ {fm(Math.round(gatedUnits))} units fall before {sel}'s go-live month — shown struck-through, excluded from totals. Adjust go-live in Market Demand to include them.
+            ⚠ {fm(Math.round(gatedUnits))} units fall before {sel}'s go-live month — hidden here (still stored), excluded from totals. Adjust go-live in Market Demand to include them.
           </span>
         )}
       </div>
@@ -145,27 +145,26 @@ export default function ItemForecastTab({ sc, upd }) {
                       {cols.map((g) => {
                         const i = g.idx;
                         const raw = r.weekly[i];
-                        const gated = r.gated[i] && raw > 0;
+                        const cellBg = i === todayIdx ? T.AC + "0A" : undefined;
+                        // Demand before go-live is hidden (kept in the data, excluded from totals).
+                        if (r.gated[i]) {
+                          return <td key={i} style={{ ...td, textAlign: "right", fontFamily: "'JetBrains Mono',monospace", background: cellBg, color: T.BD }}>{"—"}</td>;
+                        }
                         const wi = wiByGrid ? wiByGrid[i] : undefined;
                         const editable = sel && isWeeklyMkt && r.fmt === "weekly" && wi !== undefined;
-                        const cellBg = i === todayIdx ? T.AC + "0A" : undefined;
                         if (editable) {
                           const det = mkSel.skuDetail.skus[r.si];
                           return (
-                            <td key={i} style={{ ...td, textAlign: "right", background: cellBg, opacity: gated ? 0.45 : 1 }} title={gated ? "Before go-live — excluded from totals" : undefined}>
-                              <span style={{ textDecoration: gated ? "line-through" : "none" }}>
-                                <Ed value={Math.round(det.weekly[wi] || 0)} onChange={(v) => upd((s) => {
-                                  const mk = s.markets.find((m) => m.name === sel);
-                                  if (mk && mk.skuDetail && mk.skuDetail.skus[r.si]) mk.skuDetail.skus[r.si].weekly[wi] = Number(v) || 0;
-                                })} />
-                              </span>
+                            <td key={i} style={{ ...td, textAlign: "right", background: cellBg }}>
+                              <Ed value={Math.round(det.weekly[wi] || 0)} onChange={(v) => upd((s) => {
+                                const mk = s.markets.find((m) => m.name === sel);
+                                if (mk && mk.skuDetail && mk.skuDetail.skus[r.si]) mk.skuDetail.skus[r.si].weekly[wi] = Number(v) || 0;
+                              })} />
                             </td>
                           );
                         }
                         return (
-                          <td key={i} style={{ ...td, textAlign: "right", fontFamily: "'JetBrains Mono',monospace", background: cellBg,
-                            color: raw > 0 ? (gated ? T.T2 + "88" : T.TX) : T.BD, textDecoration: gated ? "line-through" : "none" }}
-                            title={gated ? "Before go-live — excluded from totals" : undefined}>
+                          <td key={i} style={{ ...td, textAlign: "right", fontFamily: "'JetBrains Mono',monospace", background: cellBg, color: raw > 0 ? T.TX : T.BD }}>
                             {raw > 0 ? fm(Math.round(raw)) : "—"}
                           </td>
                         );
