@@ -73,7 +73,10 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
   const [outMkt, setOutMkt] = useState("All");
   const [adjVal, setAdjVal] = useState("");
   const [mrpCollapsed, setMrpCollapsed] = useState(() => new Set());
-  const today = new Date();
+  // Inventory model "as of" date — anchored to the June 1, 2026 launch start
+  // (a Monday on the week grid). Nothing has shipped/been consumed before this,
+  // so the projection begins June 1 rather than at the partially-elapsed today.
+  const today = new Date(2026, 5, 1);
 
   const fc = useMemo(() => calcSkuWeeklyForecast(sc.markets), [sc.markets]);
   const inv = useMemo(() => calcSkuInventory(actuals, fc, today), [actuals, fc]); // eslint-disable-line
