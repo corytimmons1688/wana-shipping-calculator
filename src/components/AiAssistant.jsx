@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { T } from "../utils/theme";
 import { fm, f$ } from "../utils/format";
+import { marketMonthlyDemand } from "../utils/calc";
 
 function buildContext(sc, gld, ships, prod, frt, cap, airCost) {
   var mo = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -70,7 +71,7 @@ function buildContext(sc, gld, ships, prod, frt, cap, airCost) {
   lines.push("MARKETS:");
   for (var mk of sc.markets) {
     if (mk.goLive != null) {
-      var ann = mk.demand.reduce(function(a,b){ return a+b; }, 0);
+      var ann = marketMonthlyDemand(mk).reduce(function(a,b){ return a+b; }, 0);
       lines.push("- " + mk.name + ": go-live " + mo[mk.goLive - 1] + ", annual " + ann.toLocaleString() + (mk.priority ? " (PRIORITY)" : ""));
     }
   }

@@ -1,11 +1,15 @@
 import { useState, useMemo, useCallback } from "react";
 import { useSupabase } from "./hooks/useSupabase";
+import { useActuals } from "./hooks/useActuals";
 import { initScenario, initScenarioCOOpt2, mkScenario } from "./data/defaults";
+import { DEFAULT_ACTUALS } from "./data/rebrandForecasts";
 import { calcGLD, calcProd, calcCap, calcWeeklyDemand } from "./utils/calc";
 import { fm, f$, fC, dc } from "./utils/format";
 import { T, tbl, th, td } from "./utils/theme";
 import DemandTab from "./components/DemandTab";
+import ItemForecastTab from "./components/ItemForecastTab";
 import ShippingTab from "./components/ShippingTab";
+import InventoryTab from "./components/InventoryTab";
 import SettingsTab from "./components/SettingsTab";
 import AiAssistant from "./components/AiAssistant";
 
@@ -18,6 +22,8 @@ export default function App() {
   const [dropIdx, setDropIdx] = useState(null);
   const sc = scenarios[active];
   const upd = useCallback(fn => { setScenarios(p => { const nx = dc(p); fn(nx[active]); return nx; }); }, [active]);
+  const [actuals, setActuals] = useState(() => dc(DEFAULT_ACTUALS));
+  const updActuals = useCallback(fn => { setActuals(p => { const nx = dc(p); fn(nx); return nx; }); }, []);
   const gld = useMemo(() => calcGLD(sc.markets), [sc]);
   const annD = useMemo(() => gld.reduce((a, b) => a + b, 0), [gld]);
   const weeklyDem = useMemo(() => calcWeeklyDemand(sc.markets), [sc]);
@@ -149,6 +155,7 @@ export default function App() {
     setActive(a => { if (a === from) return to; if (from < a && to >= a) return a - 1; if (from > a && to <= a) return a + 1; return a; });
   };
   const { status: syncStatus, error: syncError } = useSupabase(scenarios, setScenarios);
+  const { status: actStatus, error: actError } = useActuals(actuals, setActuals);
   const [renaming, setRenaming] = useState(null);
   const [renameVal, setRenameVal] = useState("");
   const CmpView = () => {
@@ -157,7 +164,7 @@ export default function App() {
     const rows = [{ l:"Go-Live Demand", k:"gld", fn:fm },{ l:"Total Freight", k:"freight", fn:f$, best:minFr },{ l:"Base Molds", k:"bM", fn:fm },{ l:"Lid Molds", k:"lM", fn:fm }];
     return (<div style={{ padding:"16px 18px" }}><div style={{ fontSize:15, fontWeight:700, color:T.TX, marginBottom:12 }}>Scenario Comparison</div><div style={{ overflowX:"auto" }}><table style={tbl}><thead><tr><th style={th}>Metric</th>{data.map((d, i) => <th key={i} style={{ ...th, textAlign:"right" }}>{d.name}</th>)}</tr></thead><tbody>{rows.map((r, ri) => (<tr key={ri}><td style={{ ...td, fontWeight:600 }}>{r.l}</td>{data.map((d, i) => { const v = d[r.k]; const best = r.best != null && v === r.best; return <td key={i} style={{ ...td, textAlign:"right", fontWeight:700, color:best ? T.GR : T.TX }}>{r.fn(v)}</td>; })}</tr>))}</tbody></table></div></div>);
   };
-const mainTabs = [{ k:"demand", l:"Market Demand", i:"📊" },{ k:"shipping", l:"Shipping Calculator", i:"📦" },{ k:"settings", l:"Settings", i:"⚙️" }];
+const mainTabs = [{ k:"demand", l:"Market Demand", i:"📊" },{ k:"forecast", l:"Item Forecast", i:"📈" },{ k:"shipping", l:"Shipping Calculator", i:"📦" },{ k:"inventory", l:"Inventory", i:"📋" },{ k:"settings", l:"Settings", i:"⚙️" }];
   return (
     <div style={{ background:T.BG, color:T.TX, minHeight:"100vh", fontFamily:"'DM Sans','Segoe UI',sans-serif", fontSize:14 }}>
       <div style={{ padding:"10px 18px", background:T.S1, borderBottom:"1px solid "+T.BD, display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:8 }}>
@@ -169,6 +176,11 @@ const mainTabs = [{ k:"demand", l:"Market Demand", i:"📊" },{ k:"shipping", l:
               {syncStatus==="loading"?"⟳ Loading…":syncStatus==="saving"?"⟳ Saving…":syncStatus==="saved"?"✓ Saved":syncStatus==="error"?"✕ Sync error":"○ Connecting…"}
             </span>
           </div>
+          {(actStatus === "saving" || actStatus === "error") && (
+            <div title={actError || ""} style={{ background:T.S2, borderRadius:5, padding:"3px 9px", border:"1px solid "+(actStatus==="error"?"#dc2626":T.AM), display:"flex", alignItems:"center", gap:4 }}>
+              <span style={{ fontSize:9, color: actStatus==="error"?"#dc2626":T.AM }}>{actStatus==="error"?"✕ Inventory sync":"⟳ Inventory…"}</span>
+            </div>
+          )}
         </div>
       </div>
       <div style={{ display:"flex", alignItems:"center", gap:6, padding:"7px 18px", background:T.S2, borderBottom:"1px solid "+T.BD, flexWrap:"wrap" }}>
@@ -193,6 +205,8 @@ const mainTabs = [{ k:"demand", l:"Market Demand", i:"📊" },{ k:"shipping", l:
           {mainTabs.map(t => { const a = tab === t.k; return <button key={t.k} onClick={() => setTab(t.k)} style={{ padding:"9px 16px", cursor:"pointer", border:"none", borderBottom:a ? "2px solid "+T.AC : "2px solid transparent", background:"transparent", color:a ? T.AC : T.T2, fontWeight:a ? 700 : 500, fontSize:12, display:"flex", alignItems:"center", gap:4, whiteSpace:"nowrap", fontFamily:"inherit" }}><span>{t.i}</span>{t.l}</button>; })}
         </div>
         {tab === "demand" && <DemandTab sc={sc} gld={gld} annD={annD} upd={upd} />}
+        {tab === "forecast" && <ItemForecastTab sc={sc} upd={upd} />}
+        {tab === "inventory" && <InventoryTab sc={sc} actuals={actuals} updActuals={updActuals} />}
         {tab === "shipping" && <ShippingTab ships={displayShips} prod={prod} frt={frt} gld={gld} weeklyDem={weeklyDem} sc={sc} upd={upd} updShipEdit={updShipEdit} addShipment={addShipment} updShipAddition={updShipAddition} removeShipAddition={removeShipAddition} deleteShipment={deleteShipment} restoreShipment={restoreShipment} clearShipEdits={clearShipEdits} hasShipEdits={hasShipEdits} />}
         {tab === "settings" && <SettingsTab sc={sc} cap={cap} upd={upd} />}
       </>)}

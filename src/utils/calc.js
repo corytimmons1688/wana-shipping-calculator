@@ -1,13 +1,52 @@
+// A market's week-precise active start ("YYYY-MM-DD"). When set it overrides
+// the month-level goLive everywhere demand is gated (e.g. NJ: demand begins
+// the week of May 25 even though its official go-live month is June).
+export function marketActiveFrom(mk) {
+  return mk && mk.activeFrom ? parseLocalDate(mk.activeFrom) : null;
+}
+
+// Effective monthly demand for a market: rolls up SKU-level detail when
+// present so the market row always matches its itemized forecast; falls
+// back to the manually entered demand array for aggregate-only markets.
+// Weekly entries before the market's activeFrom date are excluded (the
+// values stay in the data, just not rolled up).
+export function marketMonthlyDemand(mk) {
+  if (!mk.skuDetail || !mk.skuDetail.skus || !mk.skuDetail.skus.length) return mk.demand || new Array(12).fill(0);
+  const det = mk.skuDetail;
+  const af = marketActiveFrom(mk);
+  const out = new Array(12).fill(0);
+  for (const sku of det.skus) {
+    if (sku.monthly) {
+      for (let m = 0; m < 12; m++) out[m] += sku.monthly[m] || 0;
+    } else if (sku.weekly && det.weeks) {
+      for (let wi = 0; wi < sku.weekly.length && wi < det.weeks.length; wi++) {
+        const v = sku.weekly[wi] || 0;
+        if (v <= 0) continue;
+        const wd = parseLocalDate(det.weeks[wi]);
+        if (af && wd < af) continue;
+        out[wd.getMonth()] += v;
+      }
+    }
+  }
+  return out.map((v) => Math.round(v));
+}
+
 export function calcGLD(mkts) {
   const r = new Array(12).fill(0);
-  for (let m = 0; m < 12; m++)
-    for (let i = 0; i < mkts.length; i++)
-      if (mkts[i].goLive != null && mkts[i].goLive <= m + 1) r[m] += mkts[i].demand[m];
+  for (let i = 0; i < mkts.length; i++) {
+    const mk = mkts[i];
+    const md = marketMonthlyDemand(mk); // already activeFrom-gated when set
+    const af = marketActiveFrom(mk);
+    for (let m = 0; m < 12; m++) {
+      const active = af ? true : (mk.goLive != null && mk.goLive <= m + 1);
+      if (active) r[m] += md[m];
+    }
+  }
   return r;
 }
 
 // Parse "YYYY-MM-DD" as LOCAL midnight (not UTC) so dates display correctly in all timezones.
-function parseLocalDate(s) {
+export function parseLocalDate(s) {
   if (!s) return new Date(NaN);
   const p = s.split("-").map(Number);
   return new Date(p[0], p[1] - 1, p[2]);
@@ -473,7 +512,8 @@ export function calcWeeklyDemand(mkts) {
     weeks.push({ wk, demand: 0 });
   }
   for (const mk of mkts) {
-    if (mk.goLive == null) continue;
+    const af = marketActiveFrom(mk);
+    if (mk.goLive == null && !af) continue;
     if (mk.skuDetail && mk.skuDetail.skus) {
       const det = mk.skuDetail;
       const goLiveMonth = mk.goLive;
@@ -483,7 +523,7 @@ export function calcWeeklyDemand(mkts) {
           for (let wi = 0; wi < sku.weekly.length && wi < det.weeks.length; wi++) {
             if (sku.weekly[wi] <= 0) continue;
             const skuDate = parseLocalDate(det.weeks[wi]);
-            if (skuDate.getMonth() + 1 < goLiveMonth) continue;
+            if (af ? skuDate < af : skuDate.getMonth() + 1 < goLiveMonth) continue;
             for (let pwi = 0; pwi < weeks.length; pwi++) {
               if (Math.abs(weeks[pwi].wk - skuDate) < 4 * 86400000) { weeks[pwi].demand += sku.weekly[wi]; break; }
             }
