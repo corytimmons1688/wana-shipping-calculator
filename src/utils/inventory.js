@@ -4,7 +4,7 @@
 // so the new views tie out with the Shipping Calculator's weekly demand series.
 
 import { MASTER_SKUS, BASE_TYPES } from "../data/skuMaster";
-import { parseLocalDate } from "./calc";
+import { parseLocalDate, marketActiveFrom } from "./calc";
 
 export const WEEK0 = new Date(2026, 2, 9);
 export const NUM_WEEKS = 43;
@@ -71,6 +71,7 @@ export function calcSkuWeeklyForecast(mkts, opts = {}) {
     if (market && mk.name !== market) continue;
     const det = mk.skuDetail;
     const goLive = mk.goLive;
+    const af = marketActiveFrom(mk);
     det.skus.forEach((sku, si) => {
       const key = resolveSkuKey(sku.sku, sku.name);
       const weekly = new Array(NUM_WEEKS).fill(0);
@@ -83,7 +84,7 @@ export function calcSkuWeeklyForecast(mkts, opts = {}) {
           const idx = weekIdxOf(d, "round");
           if (idx < 0 || idx >= NUM_WEEKS) continue;
           weekly[idx] += v;
-          if (goLive == null || d.getMonth() + 1 < goLive) gated[idx] = true;
+          if (af ? d < af : (goLive == null || d.getMonth() + 1 < goLive)) gated[idx] = true;
         }
       } else if (sku.monthly) {
         for (let mo = 0; mo < 12; mo++) {
@@ -92,7 +93,7 @@ export function calcSkuWeeklyForecast(mkts, opts = {}) {
           const mWeeks = grid.filter((g) => g.mo === mo);
           if (!mWeeks.length) continue;
           const g8 = goLive == null || mo + 1 < goLive;
-          mWeeks.forEach((g) => { weekly[g.idx] += v / mWeeks.length; if (g8) gated[g.idx] = true; });
+          mWeeks.forEach((g) => { weekly[g.idx] += v / mWeeks.length; if (af ? g.date < af : g8) gated[g.idx] = true; });
         }
       }
       const active = weekly.map((v, i) => (gated[i] ? 0 : v));

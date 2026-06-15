@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { MO } from "../data/defaults";
-import { marketMonthlyDemand, parseLocalDate } from "../utils/calc";
+import { marketMonthlyDemand, parseLocalDate, marketActiveFrom } from "../utils/calc";
 import { buildWeekGrid, weekIdxOf, NUM_WEEKS } from "../utils/inventory";
 import { fm } from "../utils/format";
 import { T, tbl, th, td } from "../utils/theme";
@@ -18,6 +18,8 @@ function buildDemandModel(markets, grid, firstWkByMonth) {
 
   markets.forEach((mk, mi) => {
     const goLive = mk.goLive;
+    const af = marketActiveFrom(mk);
+    const gatedAt = (gi) => (af ? grid[gi].date < af : (goLive == null || grid[gi].mo + 1 < goLive));
     const md = marketMonthlyDemand(mk);
     const annual = md.reduce((a, b) => a + b, 0);
     const det = mk.skuDetail;
@@ -25,7 +27,7 @@ function buildDemandModel(markets, grid, firstWkByMonth) {
 
     const parentWeekly = new Array(NUM_WEEKS).fill(0);
     const parentGated = new Array(NUM_WEEKS).fill(false);
-    for (let i = 0; i < NUM_WEEKS; i++) parentGated[i] = goLive == null || grid[i].mo + 1 < goLive;
+    for (let i = 0; i < NUM_WEEKS; i++) parentGated[i] = gatedAt(i);
 
     let kind = "aggregate";
     const skuRows = [];
@@ -45,7 +47,7 @@ function buildDemandModel(markets, grid, firstWkByMonth) {
           weekly[gi] += v;
           parentWeekly[gi] += v;
           if (eAt[gi] === undefined) eAt[gi] = { kind: "weekly", wi };
-          if (goLive == null || grid[gi].mo + 1 < goLive) gated[gi] = true;
+          if (gatedAt(gi)) gated[gi] = true;
         }
         skuRows.push({ si, name: sku.name, sku: sku.sku || "", cat: sku.cat || "—", fmt: "weekly", weekly, gated, editAt: eAt });
       });
@@ -63,7 +65,7 @@ function buildDemandModel(markets, grid, firstWkByMonth) {
           weekly[gi] += v;
           parentWeekly[gi] += v;
           eAt[gi] = { kind: "monthly", mo };
-          if (goLive == null || mo + 1 < goLive) gated[gi] = true;
+          if (gatedAt(gi)) gated[gi] = true;
         }
         skuRows.push({ si, name: sku.name, sku: sku.sku || "", cat: sku.cat || "—", fmt: "monthly", weekly, gated, editAt: eAt });
       });
