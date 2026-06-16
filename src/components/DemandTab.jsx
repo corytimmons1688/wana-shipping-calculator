@@ -308,20 +308,39 @@ export default function DemandTab({ sc, gld, annD, upd }) {
               <td style={{ ...td, textAlign: "center", fontSize: 9, color: T.T2 }}>{sr.cat}</td>
               {cols.map((g) => {
                 const i = g.idx;
+                if (row.gated[i]) return blankCell(i); // before go-live / active start — hidden
                 const ea = sr.editAt[i];
-                if (!ea || sr.gated[i]) return blankCell(i);
-                if (ea.kind === "weekly") {
+                if (ea && ea.kind === "weekly") {
                   const wi = ea.wi;
                   return editCell(i, (sc.markets[mi] && sc.markets[mi].skuDetail && sc.markets[mi].skuDetail.skus[sr.si] && sc.markets[mi].skuDetail.skus[sr.si].weekly || [])[wi], (v) => upd((s) => {
                     const sk = s.markets[mi] && s.markets[mi].skuDetail && s.markets[mi].skuDetail.skus[sr.si];
                     if (sk && Array.isArray(sk.weekly) && wi < sk.weekly.length) { const n = Number(v); sk.weekly[wi] = isNaN(n) ? 0 : n; }
                   }));
                 }
-                const mo = ea.mo;
-                return editCell(i, (sc.markets[mi] && sc.markets[mi].skuDetail && sc.markets[mi].skuDetail.skus[sr.si] && sc.markets[mi].skuDetail.skus[sr.si].monthly || [])[mo], (v) => upd((s) => {
-                  const sk = s.markets[mi] && s.markets[mi].skuDetail && s.markets[mi].skuDetail.skus[sr.si];
-                  if (sk && Array.isArray(sk.monthly)) { const n = Number(v); sk.monthly[mo] = isNaN(n) ? 0 : n; }
-                }));
+                if (ea && ea.kind === "monthly") {
+                  const mo = ea.mo;
+                  return editCell(i, (sc.markets[mi] && sc.markets[mi].skuDetail && sc.markets[mi].skuDetail.skus[sr.si] && sc.markets[mi].skuDetail.skus[sr.si].monthly || [])[mo], (v) => upd((s) => {
+                    const sk = s.markets[mi] && s.markets[mi].skuDetail && s.markets[mi].skuDetail.skus[sr.si];
+                    if (sk && Array.isArray(sk.monthly)) { const n = Number(v); sk.monthly[mo] = isNaN(n) ? 0 : n; }
+                  }));
+                }
+                // No data slot for this active week yet. Weekly-format markets:
+                // editing adds the week to skuDetail (kept aligned across all SKUs).
+                if (row.kind === "detailWeekly") {
+                  return editCell(i, 0, (v) => upd((s) => {
+                    const det = s.markets[mi] && s.markets[mi].skuDetail;
+                    if (!det || !Array.isArray(det.weeks) || !Array.isArray(det.skus)) return;
+                    let wi = det.weeks.indexOf(g.key);
+                    if (wi === -1) {
+                      wi = det.weeks.length;
+                      det.weeks.push(g.key);
+                      det.skus.forEach((sk) => { if (!Array.isArray(sk.weekly)) sk.weekly = []; while (sk.weekly.length <= wi) sk.weekly.push(0); });
+                    }
+                    const sk = det.skus[sr.si];
+                    if (sk && Array.isArray(sk.weekly)) { const n = Number(v); sk.weekly[wi] = isNaN(n) ? 0 : n; }
+                  }));
+                }
+                return blankCell(i); // monthly-format markets: only the month's first-week cell is editable
               })}
               <td style={{ ...td, textAlign: "right", fontSize: 10, fontStyle: "italic", color: T.T2, borderLeft: "2px solid " + T.BD }}>{fm(Math.round(annual))}</td>
             </tr>
