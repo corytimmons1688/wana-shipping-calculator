@@ -514,12 +514,24 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
 
       {view === "factory" && (() => {
         const startIdx = 21; // week 32 = Aug 3, 2026
+        // Net requirements (lot-for-lot): per SKU, walk from the projected on-hand
+        // entering week 32, netting each week's demand against available stock +
+        // scheduled inbound receipts. Only the shortfall the factory must produce
+        // is listed. Excludes open POs not yet shipped (see Open POs tab).
         const rows = [];
         for (const key of Object.keys(inv.perSku)) {
           const r = inv.perSku[key];
+          let avail = (r.proj && r.proj[startIdx - 1] != null) ? r.proj[startIdx - 1] : (r.onHand || 0);
           for (let w = startIdx; w < grid.length; w++) {
-            const q = Math.round(r.demand[w] || 0);
-            if (q > 0) rows.push({ key, name: r.name, cat: r.cat, isBase: r.isBase, qty: q, idx: w, label: grid[w].label, wk: w + 11, date: grid[w].key });
+            const supply = avail + (r.arrivals[w] || 0);
+            const dem = r.demand[w] || 0;
+            const net = dem - supply;
+            if (net > 0.5) {
+              rows.push({ key, name: r.name, cat: r.cat, isBase: r.isBase, qty: Math.round(net), idx: w, label: grid[w].label, wk: w + 11, date: grid[w].key });
+              avail = 0; // produced exactly the shortfall this week
+            } else {
+              avail = -net; // leftover available carried forward
+            }
           }
         }
         rows.sort((a, b) => a.idx - b.idx || (a.isBase ? 0 : 1) - (b.isBase ? 0 : 1) || b.qty - a.qty || a.name.localeCompare(b.name));
@@ -532,9 +544,9 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
           const ws = wb.addWorksheet("Factory Priority");
           ws.columns = [{ width: 7 }, { width: 11 }, { width: 18 }, { width: 30 }, { width: 16 }, { width: 14 }];
           const head = ["Week", "Date", "SKU", "Item", "Type", "Quantity"];
-          const t = ws.addRow(["Factory Priority — production needed from week 32 (Aug 3, 2026)"]);
+          const t = ws.addRow(["Factory Priority — net production requirements from week 32 (Aug 3, 2026)"]);
           t.getCell(1).font = { bold: true, size: 13 };
-          ws.addRow([`Scenario: ${sc.name}   ·   Generated ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}   ·   ${rows.length} line items, ${totalUnits.toLocaleString()} units`]).getCell(1).font = { size: 9, color: { argb: "FF6B7280" } };
+          ws.addRow([`Net of projected on-hand + scheduled inbound · Scenario: ${sc.name} · Generated ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })} · ${rows.length} line items, ${totalUnits.toLocaleString()} units`]).getCell(1).font = { size: 9, color: { argb: "FF6B7280" } };
           ws.addRow([]);
           const hr = ws.addRow(head);
           hr.eachCell((c) => { c.font = { bold: true, size: 10, color: { argb: "FF6B7280" } }; c.border = { bottom: { style: "medium", color: { argb: "FFD0D4DD" } } }; });
@@ -552,9 +564,9 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
         return (
           <div style={{ background: T.S1, border: "1px solid " + T.BD, borderRadius: 6 }}>
             <div style={{ padding: "8px 12px", display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-              <span style={{ fontSize: 11, fontWeight: 700 }}>Factory Priority — production needed from week 32 (Aug 3)</span>
+              <span style={{ fontSize: 11, fontWeight: 700 }}>Factory Priority — net requirements from week 32 (Aug 3)</span>
               <button onClick={exportFactory} style={{ padding: "3px 11px", borderRadius: 4, border: "1px solid " + T.GR, background: T.GR + "10", color: T.GR, cursor: "pointer", fontSize: 10, fontWeight: 700 }}>⬇ Download Excel</button>
-              <span style={{ marginLeft: "auto", fontSize: 10, color: T.T2 }}>{rows.length} line items · {fm(totalUnits)} units · ordered by need date</span>
+              <span style={{ marginLeft: "auto", fontSize: 10, color: T.T2 }}>{rows.length} line items · {fm(totalUnits)} net units · ordered by need date</span>
             </div>
             <div style={{ overflowX: "auto" }}>
               <table style={{ ...tbl, fontSize: 11 }}>
@@ -585,7 +597,7 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
               </table>
             </div>
             <div style={{ padding: "6px 12px", fontSize: 9, color: T.T2, borderTop: "1px solid " + T.BD }}>
-              Each row is a SKU quantity needed by its week (active go-live-gated demand for the scenario "{sc.name}"), ordered by date so the factory builds the earliest-needed first. Bases (PB-) are derived from lid demand. Heavy line = new week.
+              Net requirements (lot-for-lot): each row is the quantity the factory must produce that week after netting demand against projected on-hand + scheduled inbound receipts (scenario "{sc.name}"), ordered by need date. Bases (PB-) derived from lid demand. Does not deduct open POs not yet shipped — cross-check the Open POs tab. Heavy line = new week.
             </div>
           </div>
         );
