@@ -226,6 +226,7 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
         {subBtn("outbound", "Outbound to Wana")}
         {subBtn("pos", "Open POs")}
         {subBtn("targets", "Targets")}
+        {subBtn("factory", "Factory Priority")}
         <span style={{ marginLeft: "auto", fontSize: 9.5, color: T.T2 }}>forecast: scenario “{sc.name}”</span>
       </div>
 
@@ -506,6 +507,85 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
             </div>
             <div style={{ padding: "6px 12px", fontSize: 9, color: T.T2, borderTop: "1px solid " + T.BD }}>
               Demand rows show each market with item-level forecast (NJ, NY, CO, MA); base (PB-) demand derives from lid demand per market. Bold SKU row = projected on hand at end of each week; red = projected shortage.
+            </div>
+          </div>
+        );
+      })()}
+
+      {view === "factory" && (() => {
+        const startIdx = 21; // week 32 = Aug 3, 2026
+        const rows = [];
+        for (const key of Object.keys(inv.perSku)) {
+          const r = inv.perSku[key];
+          for (let w = startIdx; w < grid.length; w++) {
+            const q = Math.round(r.demand[w] || 0);
+            if (q > 0) rows.push({ key, name: r.name, cat: r.cat, isBase: r.isBase, qty: q, idx: w, label: grid[w].label, wk: w + 11, date: grid[w].key });
+          }
+        }
+        rows.sort((a, b) => a.idx - b.idx || (a.isBase ? 0 : 1) - (b.isBase ? 0 : 1) || b.qty - a.qty || a.name.localeCompare(b.name));
+        const totalUnits = rows.reduce((a, r) => a + r.qty, 0);
+
+        const exportFactory = async () => {
+          const mod = await import("exceljs");
+          const ExcelJS = mod.default || mod;
+          const wb = new ExcelJS.Workbook();
+          const ws = wb.addWorksheet("Factory Priority");
+          ws.columns = [{ width: 7 }, { width: 11 }, { width: 18 }, { width: 30 }, { width: 16 }, { width: 14 }];
+          const head = ["Week", "Date", "SKU", "Item", "Type", "Quantity"];
+          const t = ws.addRow(["Factory Priority — production needed from week 32 (Aug 3, 2026)"]);
+          t.getCell(1).font = { bold: true, size: 13 };
+          ws.addRow([`Scenario: ${sc.name}   ·   Generated ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}   ·   ${rows.length} line items, ${totalUnits.toLocaleString()} units`]).getCell(1).font = { size: 9, color: { argb: "FF6B7280" } };
+          ws.addRow([]);
+          const hr = ws.addRow(head);
+          hr.eachCell((c) => { c.font = { bold: true, size: 10, color: { argb: "FF6B7280" } }; c.border = { bottom: { style: "medium", color: { argb: "FFD0D4DD" } } }; });
+          ws.views = [{ state: "frozen", ySplit: hr.number }];
+          rows.forEach((r, i) => {
+            const row = ws.addRow([r.wk, r.label, r.isBase ? r.key : r.key, r.name, r.isBase ? "Base" : r.cat, r.qty]);
+            row.getCell(6).numFmt = "#,##0";
+          });
+          const buf = await wb.xlsx.writeBuffer();
+          const blob = new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+          const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `Wana-Factory-Priority-${todayISO()}.xlsx`; a.click(); URL.revokeObjectURL(a.href);
+        };
+
+        let lastWk = null;
+        return (
+          <div style={{ background: T.S1, border: "1px solid " + T.BD, borderRadius: 6 }}>
+            <div style={{ padding: "8px 12px", display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+              <span style={{ fontSize: 11, fontWeight: 700 }}>Factory Priority — production needed from week 32 (Aug 3)</span>
+              <button onClick={exportFactory} style={{ padding: "3px 11px", borderRadius: 4, border: "1px solid " + T.GR, background: T.GR + "10", color: T.GR, cursor: "pointer", fontSize: 10, fontWeight: 700 }}>⬇ Download Excel</button>
+              <span style={{ marginLeft: "auto", fontSize: 10, color: T.T2 }}>{rows.length} line items · {fm(totalUnits)} units · ordered by need date</span>
+            </div>
+            <div style={{ overflowX: "auto" }}>
+              <table style={{ ...tbl, fontSize: 11 }}>
+                <thead><tr>
+                  <th style={{ ...th, width: 44, textAlign: "right" }}>#</th>
+                  <th style={{ ...th, width: 96 }}>Week</th>
+                  <th style={{ ...th }}>SKU</th>
+                  <th style={{ ...th }}>Item</th>
+                  <th style={{ ...th, width: 130 }}>Type</th>
+                  <th style={{ ...th, textAlign: "right" }}>Quantity</th>
+                </tr></thead>
+                <tbody>
+                  {rows.length === 0 && <tr><td colSpan={6} style={{ ...td, color: T.T2, textAlign: "center", padding: 20 }}>No production demand from week 32 onward in this scenario.</td></tr>}
+                  {rows.map((r, i) => {
+                    const newWk = r.wk !== lastWk; lastWk = r.wk;
+                    return (
+                      <tr key={r.key + r.idx} style={{ borderTop: newWk ? "2px solid " + T.BD : undefined }}>
+                        <td style={{ ...td, textAlign: "right", color: T.T2, fontFamily: "'JetBrains Mono',monospace" }}>{i + 1}</td>
+                        <td style={{ ...td, fontFamily: "'JetBrains Mono',monospace", fontWeight: newWk ? 700 : 400, color: newWk ? T.TX : T.T2 }}>{r.label}<span style={{ fontSize: 9, color: T.T2 }}> · wk {r.wk}</span></td>
+                        <td style={{ ...td, fontFamily: "'JetBrains Mono',monospace", fontSize: 10 }}>{r.key.startsWith("~") ? "—" : r.key}</td>
+                        <td style={{ ...td, fontWeight: 500 }}>{r.name}</td>
+                        <td style={{ ...td }}><span style={{ fontSize: 9.5, color: r.isBase ? "#334155" : T.T2, background: T.S2, borderRadius: 3, padding: "1px 6px" }}>{r.isBase ? "Base" : r.cat}</span></td>
+                        <td style={{ ...td, textAlign: "right", fontWeight: 700, fontFamily: "'JetBrains Mono',monospace" }}>{fm(r.qty)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div style={{ padding: "6px 12px", fontSize: 9, color: T.T2, borderTop: "1px solid " + T.BD }}>
+              Each row is a SKU quantity needed by its week (active go-live-gated demand for the scenario "{sc.name}"), ordered by date so the factory builds the earliest-needed first. Bases (PB-) are derived from lid demand. Heavy line = new week.
             </div>
           </div>
         );
