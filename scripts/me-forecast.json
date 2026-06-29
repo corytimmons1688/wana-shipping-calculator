@@ -1,0 +1,3246 @@
+{
+ "Oklahoma": {
+  "skus": [
+   {
+    "cat": "Optimal",
+    "name": "Good Time Clementine",
+    "sku": "PL-WCB-105-00",
+    "startMo": 0,
+    "monthly": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ]
+   },
+   {
+    "cat": "Optimal",
+    "name": "Stay Asleep Dreamberry",
+    "sku": "PL-WCB-110-00",
+    "startMo": 0,
+    "monthly": [
+     656,
+     715,
+     789,
+     786,
+     651,
+     582,
+     659,
+     810,
+     632,
+     725,
+     543,
+     757
+    ]
+   },
+   {
+    "cat": "Optimal",
+    "name": "Swift Recovery Cherry Cola",
+    "sku": "PL-WCB-115-00",
+    "startMo": 0,
+    "monthly": [
+     204,
+     223,
+     246,
+     245,
+     203,
+     181,
+     205,
+     252,
+     197,
+     226,
+     169,
+     236
+    ]
+   },
+   {
+    "cat": "Optimal",
+    "name": "Fast Asleep Grape",
+    "sku": "PL-WCB-120-00",
+    "startMo": 0,
+    "monthly": [
+     609,
+     664,
+     733,
+     730,
+     605,
+     541,
+     612,
+     753,
+     588,
+     674,
+     505,
+     703
+    ]
+   },
+   {
+    "cat": "Optimal",
+    "name": "Keep Calm Blissberry",
+    "sku": "PL-WCB-125-00",
+    "startMo": 0,
+    "monthly": [
+     269,
+     294,
+     324,
+     323,
+     267,
+     239,
+     270,
+     333,
+     260,
+     298,
+     223,
+     311
+    ]
+   },
+   {
+    "cat": "Classic",
+    "name": "Go Go Mango",
+    "sku": "PL-WCB-405-00",
+    "startMo": 0,
+    "monthly": [
+     179,
+     195,
+     215,
+     214,
+     177,
+     159,
+     179,
+     221,
+     172,
+     198,
+     148,
+     206
+    ]
+   },
+   {
+    "cat": "Classic",
+    "name": "Serene Yuzu",
+    "sku": "PL-WCB-410-00",
+    "startMo": 0,
+    "monthly": [
+     284,
+     310,
+     342,
+     340,
+     282,
+     252,
+     285,
+     351,
+     274,
+     314,
+     235,
+     328
+    ]
+   },
+   {
+    "cat": "Classic",
+    "name": "Blissful Blueberry",
+    "sku": "PL-WCB-415-00",
+    "startMo": 0,
+    "monthly": [
+     223,
+     243,
+     269,
+     267,
+     222,
+     198,
+     224,
+     276,
+     215,
+     247,
+     185,
+     258
+    ]
+   },
+   {
+    "cat": "Classic",
+    "name": "Passion Pineapple",
+    "sku": "PL-WCB-420-00",
+    "startMo": 0,
+    "monthly": [
+     225,
+     245,
+     270,
+     269,
+     223,
+     199,
+     226,
+     277,
+     217,
+     248,
+     186,
+     259
+    ]
+   },
+   {
+    "cat": "Classic",
+    "name": "Mellow Melon",
+    "sku": "PL-WCB-430-00",
+    "startMo": 0,
+    "monthly": [
+     144,
+     157,
+     173,
+     172,
+     143,
+     128,
+     144,
+     177,
+     138,
+     159,
+     119,
+     166
+    ]
+   },
+   {
+    "cat": "HD",
+    "name": "Robust Raspberry",
+    "sku": "PL-WCB-445-00",
+    "startMo": 0,
+    "monthly": [
+     393,
+     428,
+     472,
+     470,
+     390,
+     349,
+     394,
+     485,
+     379,
+     434,
+     325,
+     453
+    ]
+   },
+   {
+    "cat": "HD",
+    "name": "Mighty Green Apple",
+    "sku": "PL-WCB-450-00",
+    "startMo": 0,
+    "monthly": [
+     224,
+     244,
+     269,
+     268,
+     222,
+     199,
+     225,
+     276,
+     216,
+     247,
+     185,
+     258
+    ]
+   },
+   {
+    "cat": "HD",
+    "name": "Bold Blood Orange",
+    "sku": "PL-WCB-455-00",
+    "startMo": 0,
+    "monthly": [
+     433,
+     472,
+     520,
+     518,
+     430,
+     384,
+     434,
+     534,
+     417,
+     479,
+     358,
+     499
+    ]
+   },
+   {
+    "cat": "Quick",
+    "name": "Bubbly Peach",
+    "sku": "PL-WCB-460-00",
+    "startMo": 0,
+    "monthly": [
+     175,
+     191,
+     210,
+     209,
+     174,
+     155,
+     176,
+     216,
+     169,
+     193,
+     145,
+     202
+    ]
+   },
+   {
+    "cat": "Quick",
+    "name": "Sunrise",
+    "sku": "PL-WCB-465-00",
+    "startMo": 0,
+    "monthly": [
+     190,
+     207,
+     228,
+     227,
+     188,
+     168,
+     190,
+     234,
+     183,
+     210,
+     157,
+     219
+    ]
+   },
+   {
+    "cat": "Quick",
+    "name": "Bright Berry Lime",
+    "sku": "PL-WCB-475-00",
+    "startMo": 0,
+    "monthly": [
+     200,
+     218,
+     240,
+     239,
+     198,
+     177,
+     201,
+     247,
+     193,
+     221,
+     166,
+     230
+    ]
+   }
+  ]
+ },
+ "Michigan": {
+  "skus": [
+   {
+    "cat": "Optimal",
+    "name": "Good Time Clementine",
+    "sku": "PL-WCB-105-00",
+    "startMo": 0,
+    "monthly": [
+     2102,
+     2088,
+     2194,
+     1837,
+     2021,
+     2035,
+     2309,
+     1872,
+     2042,
+     2057,
+     1983,
+     2069
+    ]
+   },
+   {
+    "cat": "Optimal",
+    "name": "Stay Asleep Dreamberry",
+    "sku": "PL-WCB-110-00",
+    "startMo": 0,
+    "monthly": [
+     8143,
+     8089,
+     8498,
+     7114,
+     7827,
+     7882,
+     8942,
+     7250,
+     7910,
+     7966,
+     7683,
+     8015
+    ]
+   },
+   {
+    "cat": "Optimal",
+    "name": "Swift Recovery Cherry Cola",
+    "sku": "PL-WCB-115-00",
+    "startMo": 0,
+    "monthly": [
+     2609,
+     2591,
+     2723,
+     2279,
+     2507,
+     2525,
+     2865,
+     2323,
+     2534,
+     2552,
+     2461,
+     2568
+    ]
+   },
+   {
+    "cat": "Optimal",
+    "name": "Fast Asleep Grape",
+    "sku": "PL-WCB-120-00",
+    "startMo": 0,
+    "monthly": [
+     6015,
+     5975,
+     6278,
+     5256,
+     5782,
+     5823,
+     6606,
+     5355,
+     5843,
+     5885,
+     5676,
+     5921
+    ]
+   },
+   {
+    "cat": "Optimal",
+    "name": "Keep Calm Blissberry",
+    "sku": "PL-WCB-125-00",
+    "startMo": 0,
+    "monthly": [
+     2849,
+     2830,
+     2974,
+     2489,
+     2739,
+     2758,
+     3129,
+     2537,
+     2768,
+     2788,
+     2688,
+     2805
+    ]
+   },
+   {
+    "cat": "Classic",
+    "name": "Go Go Mango",
+    "sku": "PL-WCB-405-00",
+    "startMo": 0,
+    "monthly": [
+     3837,
+     3812,
+     4005,
+     3353,
+     3688,
+     3714,
+     4214,
+     3416,
+     3727,
+     3754,
+     3620,
+     3777
+    ]
+   },
+   {
+    "cat": "Classic",
+    "name": "Serene Yuzu",
+    "sku": "PL-WCB-410-00",
+    "startMo": 0,
+    "monthly": [
+     2767,
+     2749,
+     2888,
+     2418,
+     2660,
+     2679,
+     3039,
+     2463,
+     2688,
+     2707,
+     2611,
+     2724
+    ]
+   },
+   {
+    "cat": "Classic",
+    "name": "Blissful Blueberry",
+    "sku": "PL-WCB-415-00",
+    "startMo": 0,
+    "monthly": [
+     5376,
+     5340,
+     5610,
+     4697,
+     5167,
+     5204,
+     5904,
+     4786,
+     5222,
+     5259,
+     5072,
+     5291
+    ]
+   },
+   {
+    "cat": "Classic",
+    "name": "Passion Pineapple",
+    "sku": "PL-WCB-420-00",
+    "startMo": 0,
+    "monthly": [
+     2381,
+     2365,
+     2485,
+     2080,
+     2288,
+     2305,
+     2615,
+     2120,
+     2313,
+     2329,
+     2246,
+     2343
+    ]
+   },
+   {
+    "cat": "Classic",
+    "name": "Chill Black Cherry",
+    "sku": "PL-WCB-425-00",
+    "startMo": 0,
+    "monthly": [
+     4223,
+     4195,
+     4408,
+     3690,
+     4059,
+     4088,
+     4638,
+     3760,
+     4102,
+     4132,
+     3985,
+     4157
+    ]
+   },
+   {
+    "cat": "Classic",
+    "name": "Mellow Melon",
+    "sku": "PL-WCB-430-00",
+    "startMo": 0,
+    "monthly": [
+     3369,
+     3346,
+     3516,
+     2943,
+     3238,
+     3261,
+     3699,
+     2999,
+     3272,
+     3295,
+     3178,
+     3316
+    ]
+   },
+   {
+    "cat": "Classic",
+    "name": "Balanced Berry Guava",
+    "sku": "PL-WCB-435-00",
+    "startMo": 0,
+    "monthly": [
+     2444,
+     2428,
+     2551,
+     2135,
+     2349,
+     2366,
+     2684,
+     2176,
+     2374,
+     2391,
+     2306,
+     2406
+    ]
+   },
+   {
+    "cat": "HD",
+    "name": "Robust Raspberry",
+    "sku": "PL-WCB-445-00",
+    "startMo": 0,
+    "monthly": [
+     1805,
+     1793,
+     1883,
+     1577,
+     1735,
+     1747,
+     1982,
+     1607,
+     1753,
+     1765,
+     1703,
+     1776
+    ]
+   },
+   {
+    "cat": "HD",
+    "name": "Mighty Green Apple",
+    "sku": "PL-WCB-450-00",
+    "startMo": 0,
+    "monthly": [
+     1862,
+     1849,
+     1943,
+     1626,
+     1789,
+     1802,
+     2044,
+     1657,
+     1808,
+     1821,
+     1756,
+     1832
+    ]
+   },
+   {
+    "cat": "Quick",
+    "name": "Bubbly Peach",
+    "sku": "PL-WCB-460-00",
+    "startMo": 0,
+    "monthly": [
+     2501,
+     2485,
+     2610,
+     2185,
+     2404,
+     2421,
+     2747,
+     2227,
+     2430,
+     2447,
+     2360,
+     2462
+    ]
+   },
+   {
+    "cat": "Quick",
+    "name": "Sunrise",
+    "sku": "PL-WCB-465-00",
+    "startMo": 0,
+    "monthly": [
+     4167,
+     4139,
+     4348,
+     3640,
+     4005,
+     4033,
+     4576,
+     3709,
+     4047,
+     4076,
+     3931,
+     4101
+    ]
+   },
+   {
+    "cat": "Quick",
+    "name": "Paradise POG",
+    "sku": "PL-WCB-470-00",
+    "startMo": 0,
+    "monthly": [
+     817,
+     811,
+     852,
+     714,
+     785,
+     791,
+     897,
+     727,
+     793,
+     799,
+     771,
+     804
+    ]
+   },
+   {
+    "cat": "Quick",
+    "name": "Bright Berry Lime",
+    "sku": "PL-WCB-475-00",
+    "startMo": 0,
+    "monthly": [
+     2773,
+     2755,
+     2894,
+     2423,
+     2666,
+     2685,
+     3046,
+     2469,
+     2694,
+     2713,
+     2617,
+     2730
+    ]
+   },
+   {
+    "cat": "Quick",
+    "name": "Relaxed Raspberry",
+    "sku": "PL-WCB-485-00",
+    "startMo": 0,
+    "monthly": [
+     3286,
+     3264,
+     3430,
+     2871,
+     3159,
+     3181,
+     3609,
+     2926,
+     3192,
+     3215,
+     3101,
+     3235
+    ]
+   }
+  ]
+ },
+ "Arkansas": {
+  "skus": [
+   {
+    "cat": "Optimal",
+    "name": "Stay Asleep Dreamberry",
+    "sku": "PL-WCB-110-00",
+    "startMo": 0,
+    "monthly": [
+     1127,
+     980,
+     1252,
+     1211,
+     1043,
+     1009,
+     1225,
+     1225,
+     1178,
+     1262,
+     1265,
+     1172
+    ]
+   },
+   {
+    "cat": "Optimal",
+    "name": "Fast Asleep Grape",
+    "sku": "PL-WCB-120-00",
+    "startMo": 0,
+    "monthly": [
+     1223,
+     1064,
+     1359,
+     1315,
+     1133,
+     1096,
+     1330,
+     1330,
+     1279,
+     1371,
+     1374,
+     1273
+    ]
+   },
+   {
+    "cat": "Classic",
+    "name": "Go Go Mango",
+    "sku": "PL-WCB-405-00",
+    "startMo": 0,
+    "monthly": [
+     2222,
+     1932,
+     2469,
+     2389,
+     2057,
+     1991,
+     2415,
+     2415,
+     2323,
+     2489,
+     2495,
+     2311
+    ]
+   },
+   {
+    "cat": "Classic",
+    "name": "Serene Yuzu",
+    "sku": "PL-WCB-410-00",
+    "startMo": 0,
+    "monthly": [
+     1438,
+     1250,
+     1597,
+     1546,
+     1331,
+     1288,
+     1563,
+     1563,
+     1503,
+     1611,
+     1614,
+     1496
+    ]
+   },
+   {
+    "cat": "Classic",
+    "name": "Blissful Blueberry",
+    "sku": "PL-WCB-415-00",
+    "startMo": 0,
+    "monthly": [
+     2725,
+     2370,
+     3028,
+     2930,
+     2523,
+     2442,
+     2962,
+     2962,
+     2849,
+     3053,
+     3060,
+     2835
+    ]
+   },
+   {
+    "cat": "Classic",
+    "name": "Mellow Melon",
+    "sku": "PL-WCB-430-00",
+    "startMo": 0,
+    "monthly": [
+     1344,
+     1169,
+     1493,
+     1445,
+     1244,
+     1204,
+     1460,
+     1460,
+     1405,
+     1505,
+     1509,
+     1398
+    ]
+   },
+   {
+    "cat": "Quick",
+    "name": "Bubbly Peach",
+    "sku": "PL-WCB-460-00",
+    "startMo": 0,
+    "monthly": [
+     784,
+     682,
+     871,
+     843,
+     726,
+     703,
+     852,
+     852,
+     820,
+     879,
+     881,
+     816
+    ]
+   },
+   {
+    "cat": "Quick",
+    "name": "Sunrise",
+    "sku": "PL-WCB-465-00",
+    "startMo": 0,
+    "monthly": [
+     785,
+     683,
+     873,
+     845,
+     727,
+     704,
+     854,
+     854,
+     821,
+     880,
+     882,
+     817
+    ]
+   },
+   {
+    "cat": "Quick",
+    "name": "Bright Berry Lime",
+    "sku": "PL-WCB-475-00",
+    "startMo": 0,
+    "monthly": [
+     65,
+     57,
+     73,
+     70,
+     61,
+     59,
+     71,
+     71,
+     68,
+     73,
+     73,
+     68
+    ]
+   },
+   {
+    "cat": "Quick",
+    "name": "Relaxed Raspberry",
+    "sku": "PL-WCB-485-00",
+    "startMo": 0,
+    "monthly": [
+     917,
+     798,
+     1019,
+     987,
+     850,
+     822,
+     997,
+     997,
+     959,
+     1028,
+     1030,
+     954
+    ]
+   }
+  ]
+ },
+ "Mississippi": {
+  "skus": [
+   {
+    "cat": "Optimal",
+    "name": "Good Time Clementine",
+    "sku": "PL-WCB-105-00",
+    "startMo": 0,
+    "monthly": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ]
+   },
+   {
+    "cat": "Optimal",
+    "name": "Stay Asleep Dreamberry",
+    "sku": "PL-WCB-110-00",
+    "startMo": 0,
+    "monthly": [
+     830,
+     458,
+     426,
+     465,
+     493,
+     553,
+     475,
+     313,
+     329,
+     465,
+     397,
+     486
+    ]
+   },
+   {
+    "cat": "Optimal",
+    "name": "Swift Recovery Cherry Cola",
+    "sku": "PL-WCB-115-00",
+    "startMo": 0,
+    "monthly": [
+     106,
+     59,
+     55,
+     59,
+     63,
+     71,
+     61,
+     40,
+     42,
+     59,
+     51,
+     62
+    ]
+   },
+   {
+    "cat": "Optimal",
+    "name": "Fast Asleep Grape",
+    "sku": "PL-WCB-120-00",
+    "startMo": 0,
+    "monthly": [
+     232,
+     128,
+     119,
+     130,
+     138,
+     155,
+     133,
+     87,
+     92,
+     130,
+     111,
+     136
+    ]
+   },
+   {
+    "cat": "Optimal",
+    "name": "Keep Calm Blissberry",
+    "sku": "PL-WCB-125-00",
+    "startMo": 0,
+    "monthly": [
+     174,
+     96,
+     89,
+     97,
+     103,
+     116,
+     100,
+     65,
+     69,
+     97,
+     83,
+     102
+    ]
+   },
+   {
+    "cat": "Classic",
+    "name": "Go Go Mango",
+    "sku": "PL-WCB-405-00",
+    "startMo": 0,
+    "monthly": [
+     183,
+     101,
+     94,
+     103,
+     109,
+     122,
+     105,
+     69,
+     73,
+     103,
+     88,
+     107
+    ]
+   },
+   {
+    "cat": "Classic",
+    "name": "Serene Yuzu",
+    "sku": "PL-WCB-410-00",
+    "startMo": 0,
+    "monthly": [
+     68,
+     37,
+     35,
+     38,
+     40,
+     45,
+     39,
+     25,
+     27,
+     38,
+     32,
+     40
+    ]
+   },
+   {
+    "cat": "Classic",
+    "name": "Blissful Blueberry",
+    "sku": "PL-WCB-415-00",
+    "startMo": 0,
+    "monthly": [
+     203,
+     112,
+     104,
+     113,
+     120,
+     135,
+     116,
+     76,
+     80,
+     113,
+     97,
+     119
+    ]
+   },
+   {
+    "cat": "Classic",
+    "name": "Chill Black Cherry",
+    "sku": "PL-WCB-425-00",
+    "startMo": 0,
+    "monthly": [
+     512,
+     282,
+     263,
+     286,
+     304,
+     341,
+     293,
+     193,
+     203,
+     286,
+     245,
+     300
+    ]
+   },
+   {
+    "cat": "Classic",
+    "name": "Mellow Melon",
+    "sku": "PL-WCB-430-00",
+    "startMo": 0,
+    "monthly": [
+     53,
+     29,
+     27,
+     30,
+     31,
+     35,
+     30,
+     20,
+     21,
+     30,
+     25,
+     31
+    ]
+   },
+   {
+    "cat": "Classic",
+    "name": "Balanced Berry Guava",
+    "sku": "PL-WCB-435-00",
+    "startMo": 0,
+    "monthly": [
+     43,
+     24,
+     22,
+     24,
+     26,
+     29,
+     25,
+     16,
+     17,
+     24,
+     21,
+     25
+    ]
+   },
+   {
+    "cat": "HD",
+    "name": "Robust Raspberry",
+    "sku": "PL-WCB-445-00",
+    "startMo": 0,
+    "monthly": [
+     318,
+     176,
+     163,
+     178,
+     189,
+     212,
+     182,
+     120,
+     126,
+     178,
+     152,
+     187
+    ]
+   },
+   {
+    "cat": "HD",
+    "name": "Mighty Green Apple",
+    "sku": "PL-WCB-450-00",
+    "startMo": 0,
+    "monthly": [
+     343,
+     189,
+     176,
+     192,
+     203,
+     228,
+     196,
+     129,
+     136,
+     192,
+     164,
+     201
+    ]
+   },
+   {
+    "cat": "Quick",
+    "name": "Bubbly Peach",
+    "sku": "PL-WCB-460-00",
+    "startMo": 0,
+    "monthly": [
+     487,
+     269,
+     250,
+     273,
+     289,
+     325,
+     279,
+     183,
+     193,
+     273,
+     233,
+     286
+    ]
+   },
+   {
+    "cat": "Quick",
+    "name": "Bright Berry Lime",
+    "sku": "PL-WCB-475-00",
+    "startMo": 0,
+    "monthly": [
+     285,
+     157,
+     146,
+     159,
+     169,
+     190,
+     163,
+     107,
+     113,
+     159,
+     136,
+     167
+    ]
+   }
+  ]
+ },
+ "Ohio": {
+  "skus": [
+   {
+    "cat": "Optimal",
+    "name": "Stay Asleep Dreamberry",
+    "sku": "PL-WCB-110-00",
+    "startMo": 5,
+    "monthly": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     2070,
+     1926,
+     2003,
+     1699,
+     1824,
+     2209,
+     2283
+    ]
+   },
+   {
+    "cat": "Classic",
+    "name": "Go Go Mango",
+    "sku": "PL-WCB-405-00",
+    "startMo": 0,
+    "monthly": [
+     4349,
+     3952,
+     5441,
+     4337,
+     4314,
+     4426,
+     4117,
+     4282,
+     3632,
+     3899,
+     4723,
+     4881
+    ]
+   },
+   {
+    "cat": "Classic",
+    "name": "Blissful Blueberry",
+    "sku": "PL-WCB-415-00",
+    "startMo": 0,
+    "monthly": [
+     4646,
+     4222,
+     5813,
+     4633,
+     4609,
+     4314,
+     4013,
+     4173,
+     3540,
+     3800,
+     4604,
+     4758
+    ]
+   },
+   {
+    "cat": "Classic",
+    "name": "Passion Pineapple",
+    "sku": "PL-WCB-420-00",
+    "startMo": 0,
+    "monthly": [
+     1172,
+     1065,
+     1466,
+     1168,
+     1162,
+     1192,
+     1109,
+     1153,
+     978,
+     1050,
+     1273,
+     1315
+    ]
+   },
+   {
+    "cat": "Classic",
+    "name": "Chill Black Cherry",
+    "sku": "PL-WCB-425-00",
+    "startMo": 0,
+    "monthly": [
+     4691,
+     4263,
+     5869,
+     4678,
+     4653,
+     3946,
+     3670,
+     3817,
+     3238,
+     3476,
+     4211,
+     4351
+    ]
+   },
+   {
+    "cat": "HD",
+    "name": "Robust Raspberry",
+    "sku": "PL-WCB-445-00",
+    "startMo": 0,
+    "monthly": [
+     4166,
+     3786,
+     5212,
+     4154,
+     4133,
+     4240,
+     3944,
+     4101,
+     3479,
+     3735,
+     4525,
+     4675
+    ]
+   },
+   {
+    "cat": "HD",
+    "name": "Bold Blood Orange",
+    "sku": "PL-WCB-455-00",
+    "startMo": 0,
+    "monthly": [
+     5085,
+     4621,
+     6363,
+     5071,
+     5045,
+     5175,
+     4814,
+     5006,
+     4247,
+     4559,
+     5523,
+     5707
+    ]
+   },
+   {
+    "cat": "HD",
+    "name": "Assorted (Med & Rec)",
+    "sku": "PL-WCB-490-00",
+    "startMo": 0,
+    "monthly": [
+     16571,
+     15057,
+     20732,
+     16524,
+     16438,
+     16036,
+     14916,
+     15511,
+     13159,
+     14125,
+     17113,
+     17684
+    ]
+   }
+  ]
+ },
+ "Illinois": {
+  "skus": [
+   {
+    "cat": "Optimal",
+    "name": "Good Time Clementine",
+    "sku": "PL-WCB-105-00",
+    "startMo": 0,
+    "monthly": [
+     4479,
+     4132,
+     6029,
+     5953,
+     4528,
+     4097,
+     6040,
+     5273,
+     5315,
+     4943,
+     4624,
+     4778
+    ]
+   },
+   {
+    "cat": "Optimal",
+    "name": "Stay Asleep Dreamberry",
+    "sku": "PL-WCB-110-00",
+    "startMo": 0,
+    "monthly": [
+     14497,
+     13375,
+     19513,
+     19268,
+     14657,
+     13260,
+     19549,
+     17066,
+     17204,
+     15999,
+     14967,
+     15466
+    ]
+   },
+   {
+    "cat": "Optimal",
+    "name": "Swift Recovery Cherry Cola",
+    "sku": "PL-WCB-115-00",
+    "startMo": 0,
+    "monthly": [
+     3130,
+     2888,
+     4213,
+     4160,
+     3165,
+     2863,
+     4221,
+     3685,
+     3714,
+     3454,
+     3232,
+     3339
+    ]
+   },
+   {
+    "cat": "Optimal",
+    "name": "Fast Asleep Grape",
+    "sku": "PL-WCB-120-00",
+    "startMo": 0,
+    "monthly": [
+     8927,
+     8236,
+     12015,
+     11865,
+     9026,
+     8165,
+     12038,
+     10509,
+     10593,
+     9852,
+     9216,
+     9524
+    ]
+   },
+   {
+    "cat": "Optimal",
+    "name": "Keep Calm Blissberry",
+    "sku": "PL-WCB-125-00",
+    "startMo": 0,
+    "monthly": [
+     4438,
+     4094,
+     5973,
+     5898,
+     4487,
+     4059,
+     5984,
+     5224,
+     5266,
+     4898,
+     4582,
+     4734
+    ]
+   },
+   {
+    "cat": "Classic",
+    "name": "Go Go Mango",
+    "sku": "PL-WCB-405-00",
+    "startMo": 0,
+    "monthly": [
+     9637,
+     8891,
+     12972,
+     12809,
+     9744,
+     8815,
+     12996,
+     11345,
+     11437,
+     10636,
+     9950,
+     10281
+    ]
+   },
+   {
+    "cat": "Classic",
+    "name": "Serene Yuzu",
+    "sku": "PL-WCB-410-00",
+    "startMo": 0,
+    "monthly": [
+     7506,
+     6925,
+     10103,
+     9976,
+     7589,
+     6866,
+     10122,
+     8836,
+     8907,
+     8284,
+     7749,
+     8008
+    ]
+   },
+   {
+    "cat": "Classic",
+    "name": "Blissful Blueberry",
+    "sku": "PL-WCB-415-00",
+    "startMo": 0,
+    "monthly": [
+     8978,
+     8283,
+     12085,
+     11933,
+     9078,
+     8212,
+     12107,
+     10569,
+     10655,
+     9909,
+     9269,
+     9578
+    ]
+   },
+   {
+    "cat": "Classic",
+    "name": "Chill Black Cherry",
+    "sku": "PL-WCB-425-00",
+    "startMo": 0,
+    "monthly": [
+     8443,
+     7789,
+     11364,
+     11221,
+     8536,
+     7723,
+     11385,
+     9939,
+     10019,
+     9318,
+     8717,
+     9007
+    ]
+   },
+   {
+    "cat": "Classic",
+    "name": "Balanced Berry Guava",
+    "sku": "PL-WCB-435-00",
+    "startMo": 0,
+    "monthly": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ]
+   },
+   {
+    "cat": "HD",
+    "name": "Robust Raspberry",
+    "sku": "PL-WCB-445-00",
+    "startMo": 0,
+    "monthly": [
+     7073,
+     6526,
+     9521,
+     9401,
+     7152,
+     6470,
+     9539,
+     8327,
+     8394,
+     7807,
+     7303,
+     7546
+    ]
+   },
+   {
+    "cat": "HD",
+    "name": "Bold Blood Orange",
+    "sku": "PL-WCB-455-00",
+    "startMo": 0,
+    "monthly": [
+     6981,
+     6440,
+     9396,
+     9278,
+     7058,
+     6385,
+     9414,
+     8218,
+     8284,
+     7704,
+     7207,
+     7447
+    ]
+   },
+   {
+    "cat": "Quick",
+    "name": "Bubbly Peach",
+    "sku": "PL-WCB-460-00",
+    "startMo": 0,
+    "monthly": [
+     4396,
+     4056,
+     5918,
+     5843,
+     4445,
+     4021,
+     5929,
+     5176,
+     5217,
+     4852,
+     4539,
+     4690
+    ]
+   },
+   {
+    "cat": "Quick",
+    "name": "Sunrise",
+    "sku": "PL-WCB-465-00",
+    "startMo": 0,
+    "monthly": [
+     6569,
+     6060,
+     8842,
+     8731,
+     6642,
+     6009,
+     8858,
+     7733,
+     7795,
+     7250,
+     6782,
+     7008
+    ]
+   },
+   {
+    "cat": "Quick",
+    "name": "Bright Berry Lime",
+    "sku": "PL-WCB-475-00",
+    "startMo": 0,
+    "monthly": [
+     4736,
+     4370,
+     6375,
+     6295,
+     4789,
+     4332,
+     6387,
+     5576,
+     5621,
+     5227,
+     4890,
+     5053
+    ]
+   },
+   {
+    "cat": "Quick",
+    "name": "Peaceful Pear",
+    "sku": "PL-WCB-480-00",
+    "startMo": 0,
+    "monthly": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ]
+   }
+  ]
+ },
+ "Missouri": {
+  "skus": [
+   {
+    "cat": "Optimal",
+    "name": "Good Time Clementine",
+    "sku": "PL-WCB-105-00",
+    "startMo": 0,
+    "monthly": [
+     606,
+     457,
+     808,
+     899,
+     1086,
+     771,
+     987,
+     987,
+     955,
+     987,
+     955,
+     987
+    ]
+   },
+   {
+    "cat": "Optimal",
+    "name": "Stay Asleep Dreamberry",
+    "sku": "PL-WCB-110-00",
+    "startMo": 0,
+    "monthly": [
+     2625,
+     1979,
+     3500,
+     3894,
+     4704,
+     3343,
+     4277,
+     4277,
+     4139,
+     4277,
+     4139,
+     4277
+    ]
+   },
+   {
+    "cat": "Optimal",
+    "name": "Swift Recovery Cherry Cola",
+    "sku": "PL-WCB-115-00",
+    "startMo": 0,
+    "monthly": [
+     202,
+     152,
+     269,
+     300,
+     362,
+     257,
+     329,
+     329,
+     318,
+     329,
+     318,
+     329
+    ]
+   },
+   {
+    "cat": "Optimal",
+    "name": "Fast Asleep Grape",
+    "sku": "PL-WCB-120-00",
+    "startMo": 0,
+    "monthly": [
+     1818,
+     1370,
+     2423,
+     2696,
+     3257,
+     2314,
+     2961,
+     2961,
+     2865,
+     2961,
+     2865,
+     2961
+    ]
+   },
+   {
+    "cat": "Optimal",
+    "name": "Keep Calm Blissberry",
+    "sku": "PL-WCB-125-00",
+    "startMo": 0,
+    "monthly": [
+     606,
+     457,
+     808,
+     899,
+     1086,
+     771,
+     987,
+     987,
+     955,
+     987,
+     955,
+     987
+    ]
+   },
+   {
+    "cat": "Classic",
+    "name": "Go Go Mango",
+    "sku": "PL-WCB-405-00",
+    "startMo": 0,
+    "monthly": [
+     1616,
+     1218,
+     2154,
+     2397,
+     2895,
+     2057,
+     2632,
+     2632,
+     2547,
+     2632,
+     2547,
+     2632
+    ]
+   },
+   {
+    "cat": "Classic",
+    "name": "Serene Yuzu",
+    "sku": "PL-WCB-410-00",
+    "startMo": 0,
+    "monthly": [
+     404,
+     304,
+     538,
+     599,
+     724,
+     514,
+     658,
+     658,
+     637,
+     658,
+     637,
+     658
+    ]
+   },
+   {
+    "cat": "Classic",
+    "name": "Blissful Blueberry",
+    "sku": "PL-WCB-415-00",
+    "startMo": 0,
+    "monthly": [
+     3029,
+     2283,
+     4038,
+     4494,
+     5428,
+     3857,
+     4935,
+     4935,
+     4776,
+     4935,
+     4776,
+     4935
+    ]
+   },
+   {
+    "cat": "Classic",
+    "name": "Passion Pineapple",
+    "sku": "PL-WCB-420-00",
+    "startMo": 0,
+    "monthly": [
+     808,
+     609,
+     1077,
+     1198,
+     1448,
+     1029,
+     1316,
+     1316,
+     1273,
+     1316,
+     1273,
+     1316
+    ]
+   },
+   {
+    "cat": "Classic",
+    "name": "Mellow Melon",
+    "sku": "PL-WCB-430-00",
+    "startMo": 0,
+    "monthly": [
+     1212,
+     913,
+     1615,
+     1797,
+     2171,
+     1543,
+     1974,
+     1974,
+     1910,
+     1974,
+     1910,
+     1974
+    ]
+   },
+   {
+    "cat": "HD",
+    "name": "Robust Raspberry",
+    "sku": "PL-WCB-445-00",
+    "startMo": 0,
+    "monthly": [
+     1212,
+     913,
+     1615,
+     1797,
+     2171,
+     1543,
+     1974,
+     1974,
+     1910,
+     1974,
+     1910,
+     1974
+    ]
+   },
+   {
+    "cat": "HD",
+    "name": "Bold Blood Orange",
+    "sku": "PL-WCB-455-00",
+    "startMo": 0,
+    "monthly": [
+     1818,
+     1370,
+     2423,
+     2696,
+     3257,
+     2314,
+     2961,
+     2961,
+     2865,
+     2961,
+     2865,
+     2961
+    ]
+   },
+   {
+    "cat": "Quick",
+    "name": "Bubbly Peach",
+    "sku": "PL-WCB-460-00",
+    "startMo": 0,
+    "monthly": [
+     2019,
+     1522,
+     2692,
+     2996,
+     3619,
+     2571,
+     3290,
+     3290,
+     3184,
+     3290,
+     3184,
+     3290
+    ]
+   },
+   {
+    "cat": "Quick",
+    "name": "Bright Berry Lime",
+    "sku": "PL-WCB-475-00",
+    "startMo": 0,
+    "monthly": [
+     808,
+     609,
+     1077,
+     1198,
+     1448,
+     1029,
+     1316,
+     1316,
+     1273,
+     1316,
+     1273,
+     1316
+    ]
+   },
+   {
+    "cat": "Quick",
+    "name": "Relaxed Raspberry",
+    "sku": "PL-WCB-485-00",
+    "startMo": 0,
+    "monthly": [
+     1414,
+     1066,
+     1884,
+     2097,
+     2533,
+     1800,
+     2303,
+     2303,
+     2229,
+     2303,
+     2229,
+     2303
+    ]
+   }
+  ]
+ },
+ "Connecticut": {
+  "skus": [
+   {
+    "cat": "Optimal",
+    "name": "Good Time Clementine",
+    "sku": "PL-WCB-105-00",
+    "startMo": 0,
+    "monthly": [
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ]
+   },
+   {
+    "cat": "Optimal",
+    "name": "Stay Asleep Dreamberry",
+    "sku": "PL-WCB-110-00",
+    "startMo": 0,
+    "monthly": [
+     1107,
+     1130,
+     1412,
+     1243,
+     1280,
+     1305,
+     1345,
+     1345,
+     1304,
+     1343,
+     1303,
+     1342
+    ]
+   },
+   {
+    "cat": "Optimal",
+    "name": "Fast Asleep Grape",
+    "sku": "PL-WCB-120-00",
+    "startMo": 0,
+    "monthly": [
+     913,
+     931,
+     1164,
+     1024,
+     1055,
+     1076,
+     1108,
+     1108,
+     1075,
+     1107,
+     1074,
+     1106
+    ]
+   },
+   {
+    "cat": "Classic",
+    "name": "Go Go Mango",
+    "sku": "PL-WCB-405-00",
+    "startMo": 0,
+    "monthly": [
+     360,
+     367,
+     458,
+     403,
+     416,
+     424,
+     437,
+     437,
+     424,
+     436,
+     423,
+     436
+    ]
+   },
+   {
+    "cat": "Classic",
+    "name": "Serene Yuzu",
+    "sku": "PL-WCB-410-00",
+    "startMo": 0,
+    "monthly": [
+     573,
+     585,
+     731,
+     643,
+     663,
+     676,
+     696,
+     696,
+     675,
+     696,
+     675,
+     695
+    ]
+   },
+   {
+    "cat": "Classic",
+    "name": "Blissful Blueberry",
+    "sku": "PL-WCB-415-00",
+    "startMo": 0,
+    "monthly": [
+     846,
+     862,
+     1078,
+     949,
+     977,
+     997,
+     1027,
+     1027,
+     996,
+     1026,
+     995,
+     1025
+    ]
+   },
+   {
+    "cat": "Classic",
+    "name": "Passion Pineapple",
+    "sku": "PL-WCB-420-00",
+    "startMo": 0,
+    "monthly": [
+     574,
+     586,
+     732,
+     644,
+     664,
+     677,
+     697,
+     697,
+     676,
+     697,
+     676,
+     696
+    ]
+   },
+   {
+    "cat": "Classic",
+    "name": "Chill Black Cherry",
+    "sku": "PL-WCB-425-00",
+    "startMo": 0,
+    "monthly": [
+     1263,
+     1289,
+     1611,
+     1418,
+     1460,
+     1489,
+     1534,
+     1534,
+     1488,
+     1533,
+     1487,
+     1531
+    ]
+   },
+   {
+    "cat": "Classic",
+    "name": "Mellow Melon",
+    "sku": "PL-WCB-430-00",
+    "startMo": 0,
+    "monthly": [
+     846,
+     862,
+     1078,
+     949,
+     977,
+     997,
+     1027,
+     1027,
+     996,
+     1026,
+     995,
+     1025
+    ]
+   },
+   {
+    "cat": "Quick",
+    "name": "Bubbly Peach",
+    "sku": "PL-WCB-460-00",
+    "startMo": 0,
+    "monthly": [
+     2429,
+     2478,
+     3097,
+     2726,
+     2807,
+     2864,
+     2949,
+     2949,
+     2861,
+     2947,
+     2858,
+     2944
+    ]
+   },
+   {
+    "cat": "Quick",
+    "name": "Sunrise",
+    "sku": "PL-WCB-465-00",
+    "startMo": 0,
+    "monthly": [
+     1540,
+     1571,
+     1964,
+     1728,
+     1780,
+     1816,
+     1870,
+     1870,
+     1814,
+     1869,
+     1813,
+     1867
+    ]
+   },
+   {
+    "cat": "Quick",
+    "name": "Bright Berry Lime",
+    "sku": "PL-WCB-475-00",
+    "startMo": 0,
+    "monthly": [
+     1135,
+     1157,
+     1447,
+     1273,
+     1311,
+     1338,
+     1378,
+     1378,
+     1336,
+     1376,
+     1335,
+     1375
+    ]
+   },
+   {
+    "cat": "Quick",
+    "name": "Peaceful Pear",
+    "sku": "PL-WCB-480-00",
+    "startMo": 0,
+    "monthly": [
+     1181,
+     1204,
+     1506,
+     1325,
+     1365,
+     1392,
+     1434,
+     1434,
+     1391,
+     1432,
+     1389,
+     1431
+    ]
+   },
+   {
+    "cat": "Quick",
+    "name": "Relaxed Raspberry",
+    "sku": "PL-WCB-485-00",
+    "startMo": 0,
+    "monthly": [
+     1808,
+     1844,
+     2305,
+     2028,
+     2089,
+     2131,
+     2195,
+     2195,
+     2129,
+     2193,
+     2127,
+     2191
+    ]
+   }
+  ]
+ },
+ "Arizona": {
+  "skus": [
+   {
+    "cat": "Optimal",
+    "name": "Good Time Clementine",
+    "sku": "PL-WCB-105-00",
+    "startMo": 0,
+    "monthly": [
+     2704,
+     2442,
+     2833,
+     3355,
+     2229,
+     2301,
+     1953,
+     1723,
+     1557,
+     2575,
+     2718,
+     2704
+    ]
+   },
+   {
+    "cat": "Optimal",
+    "name": "Stay Asleep Dreamberry",
+    "sku": "PL-WCB-110-00",
+    "startMo": 0,
+    "monthly": [
+     20874,
+     18854,
+     21868,
+     25898,
+     17204,
+     17759,
+     15078,
+     13304,
+     12017,
+     19880,
+     20977,
+     20874
+    ]
+   },
+   {
+    "cat": "Optimal",
+    "name": "Swift Recovery Cherry Cola",
+    "sku": "PL-WCB-115-00",
+    "startMo": 0,
+    "monthly": [
+     1326,
+     1198,
+     1389,
+     1645,
+     1093,
+     1128,
+     958,
+     845,
+     763,
+     1263,
+     1333,
+     1326
+    ]
+   },
+   {
+    "cat": "Optimal",
+    "name": "Fast Asleep Grape",
+    "sku": "PL-WCB-120-00",
+    "startMo": 0,
+    "monthly": [
+     12833,
+     11591,
+     13444,
+     15921,
+     10576,
+     10917,
+     9270,
+     8179,
+     7388,
+     12221,
+     12896,
+     12833
+    ]
+   },
+   {
+    "cat": "Optimal",
+    "name": "Keep Calm Blissberry",
+    "sku": "PL-WCB-125-00",
+    "startMo": 0,
+    "monthly": [
+     2088,
+     1886,
+     2188,
+     2591,
+     1721,
+     1777,
+     1508,
+     1331,
+     1202,
+     1989,
+     2099,
+     2088
+    ]
+   },
+   {
+    "cat": "Classic",
+    "name": "Go Go Mango",
+    "sku": "PL-WCB-405-00",
+    "startMo": 0,
+    "monthly": [
+     8131,
+     7344,
+     8518,
+     10088,
+     6701,
+     6917,
+     5873,
+     5182,
+     4681,
+     7744,
+     8171,
+     8131
+    ]
+   },
+   {
+    "cat": "Classic",
+    "name": "Serene Yuzu",
+    "sku": "PL-WCB-410-00",
+    "startMo": 0,
+    "monthly": [
+     3485,
+     3148,
+     3651,
+     4324,
+     2873,
+     2965,
+     2518,
+     2221,
+     2006,
+     3319,
+     3503,
+     3485
+    ]
+   },
+   {
+    "cat": "Classic",
+    "name": "Passion Pineapple",
+    "sku": "PL-WCB-420-00",
+    "startMo": 0,
+    "monthly": [
+     5222,
+     4717,
+     5471,
+     8051,
+     5348,
+     5521,
+     4687,
+     4136,
+     3736,
+     6180,
+     6521,
+     6489
+    ]
+   },
+   {
+    "cat": "Classic",
+    "name": "Mellow Melon",
+    "sku": "PL-WCB-430-00",
+    "startMo": 0,
+    "monthly": [
+     9279,
+     8381,
+     9721,
+     13084,
+     8692,
+     8972,
+     7618,
+     6722,
+     6071,
+     10044,
+     10598,
+     10546
+    ]
+   },
+   {
+    "cat": "Classic",
+    "name": "Balanced Berry Guava",
+    "sku": "PL-WCB-435-00",
+    "startMo": 0,
+    "monthly": [
+     4839,
+     4371,
+     5070,
+     7576,
+     5033,
+     5195,
+     4411,
+     3892,
+     3515,
+     5815,
+     6136,
+     6106
+    ]
+   },
+   {
+    "cat": "HD",
+    "name": "Robust Raspberry",
+    "sku": "PL-WCB-445-00",
+    "startMo": 0,
+    "monthly": [
+     590,
+     533,
+     618,
+     732,
+     486,
+     502,
+     426,
+     376,
+     340,
+     562,
+     593,
+     590
+    ]
+   },
+   {
+    "cat": "HD",
+    "name": "Mighty Green Apple",
+    "sku": "PL-WCB-450-00",
+    "startMo": 0,
+    "monthly": [
+     944,
+     853,
+     989,
+     1171,
+     778,
+     803,
+     682,
+     602,
+     543,
+     899,
+     949,
+     944
+    ]
+   },
+   {
+    "cat": "Quick",
+    "name": "Bubbly Peach",
+    "sku": "PL-WCB-460-00",
+    "startMo": 0,
+    "monthly": [
+     5454,
+     4926,
+     5714,
+     6767,
+     4495,
+     4640,
+     3940,
+     3476,
+     3140,
+     5195,
+     5481,
+     5454
+    ]
+   },
+   {
+    "cat": "Quick",
+    "name": "Sunrise",
+    "sku": "PL-WCB-465-00",
+    "startMo": 0,
+    "monthly": [
+     6166,
+     5570,
+     6460,
+     7651,
+     5082,
+     5246,
+     4454,
+     3930,
+     3550,
+     5873,
+     6197,
+     6166
+    ]
+   },
+   {
+    "cat": "Quick",
+    "name": "Bright Berry Lime",
+    "sku": "PL-WCB-475-00",
+    "startMo": 0,
+    "monthly": [
+     2609,
+     2357,
+     2734,
+     3238,
+     2151,
+     2220,
+     1885,
+     1663,
+     1502,
+     2485,
+     2622,
+     2609
+    ]
+   },
+   {
+    "cat": "Quick",
+    "name": "Peaceful Pear",
+    "sku": "PL-WCB-480-00",
+    "startMo": 0,
+    "monthly": [
+     4095,
+     3699,
+     4290,
+     5081,
+     3375,
+     3484,
+     2958,
+     2610,
+     2358,
+     3900,
+     4116,
+     4095
+    ]
+   },
+   {
+    "cat": "Quick",
+    "name": "Relaxed Raspberry",
+    "sku": "PL-WCB-485-00",
+    "startMo": 0,
+    "monthly": [
+     6377,
+     5760,
+     6681,
+     7912,
+     5256,
+     5425,
+     4607,
+     4065,
+     3671,
+     6074,
+     6409,
+     6377
+    ]
+   },
+   {
+    "cat": "HD",
+    "name": "Assorted (Med & Rec)",
+    "sku": "PL-WCB-490-00",
+    "startMo": 0,
+    "monthly": [
+     3924,
+     3543,
+     4064,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0,
+     0
+    ]
+   }
+  ]
+ },
+ "New Mexico": {
+  "skus": [
+   {
+    "cat": "Optimal",
+    "name": "Good Time Clementine",
+    "sku": "PL-WCB-105-00",
+    "startMo": 0,
+    "monthly": [
+     1544,
+     1394,
+     1651,
+     1557,
+     1292,
+     1250,
+     1292,
+     1292,
+     1250,
+     1292,
+     1250,
+     1292
+    ]
+   },
+   {
+    "cat": "Optimal",
+    "name": "Stay Asleep Dreamberry",
+    "sku": "PL-WCB-110-00",
+    "startMo": 0,
+    "monthly": [
+     6483,
+     5856,
+     8667,
+     8172,
+     6780,
+     6562,
+     6780,
+     6780,
+     6562,
+     6780,
+     6562,
+     6780
+    ]
+   },
+   {
+    "cat": "Optimal",
+    "name": "Swift Recovery Cherry Cola",
+    "sku": "PL-WCB-115-00",
+    "startMo": 0,
+    "monthly": [
+     1235,
+     1115,
+     1353,
+     1276,
+     1059,
+     1025,
+     1059,
+     1059,
+     1025,
+     1059,
+     1025,
+     1059
+    ]
+   },
+   {
+    "cat": "Optimal",
+    "name": "Fast Asleep Grape",
+    "sku": "PL-WCB-120-00",
+    "startMo": 0,
+    "monthly": [
+     5866,
+     5298,
+     7273,
+     6858,
+     5690,
+     5506,
+     5690,
+     5690,
+     5506,
+     5690,
+     5506,
+     5690
+    ]
+   },
+   {
+    "cat": "Classic",
+    "name": "Go Go Mango",
+    "sku": "PL-WCB-405-00",
+    "startMo": 0,
+    "monthly": [
+     1167,
+     1054,
+     1502,
+     1416,
+     1175,
+     1137,
+     1175,
+     1175,
+     1137,
+     1175,
+     1137,
+     1175
+    ]
+   },
+   {
+    "cat": "Classic",
+    "name": "Serene Yuzu",
+    "sku": "PL-WCB-410-00",
+    "startMo": 0,
+    "monthly": [
+     1167,
+     1054,
+     1485,
+     1400,
+     1161,
+     1124,
+     1161,
+     1161,
+     1124,
+     1161,
+     1124,
+     1161
+    ]
+   },
+   {
+    "cat": "Classic",
+    "name": "Blissful Blueberry",
+    "sku": "PL-WCB-415-00",
+    "startMo": 0,
+    "monthly": [
+     1945,
+     1757,
+     2412,
+     2274,
+     1887,
+     1826,
+     1887,
+     1887,
+     1826,
+     1887,
+     1826,
+     1887
+    ]
+   },
+   {
+    "cat": "Classic",
+    "name": "Passion Pineapple",
+    "sku": "PL-WCB-420-00",
+    "startMo": 0,
+    "monthly": [
+     1945,
+     1757,
+     2413,
+     2275,
+     1888,
+     1827,
+     1888,
+     1888,
+     1827,
+     1888,
+     1827,
+     1888
+    ]
+   },
+   {
+    "cat": "Classic",
+    "name": "Balanced Berry Guava",
+    "sku": "PL-WCB-435-00",
+    "startMo": 0,
+    "monthly": [
+     1167,
+     1054,
+     1583,
+     1493,
+     1238,
+     1198,
+     1238,
+     1238,
+     1198,
+     1238,
+     1198,
+     1238
+    ]
+   },
+   {
+    "cat": "HD",
+    "name": "Robust Raspberry",
+    "sku": "PL-WCB-445-00",
+    "startMo": 0,
+    "monthly": [
+     454,
+     410,
+     628,
+     592,
+     491,
+     475,
+     491,
+     491,
+     475,
+     491,
+     475,
+     491
+    ]
+   },
+   {
+    "cat": "HD",
+    "name": "Mighty Green Apple",
+    "sku": "PL-WCB-450-00",
+    "startMo": 0,
+    "monthly": [
+     1060,
+     957,
+     1480,
+     1396,
+     1158,
+     1121,
+     1158,
+     1158,
+     1121,
+     1158,
+     1121,
+     1158
+    ]
+   },
+   {
+    "cat": "HD",
+    "name": "Bold Blood Orange",
+    "sku": "PL-WCB-455-00",
+    "startMo": 0,
+    "monthly": [
+     454,
+     410,
+     722,
+     681,
+     565,
+     547,
+     565,
+     565,
+     547,
+     565,
+     547,
+     565
+    ]
+   },
+   {
+    "cat": "Quick",
+    "name": "Bubbly Peach",
+    "sku": "PL-WCB-460-00",
+    "startMo": 0,
+    "monthly": [
+     1523,
+     1376,
+     1945,
+     1834,
+     1521,
+     1472,
+     1521,
+     1521,
+     1472,
+     1521,
+     1472,
+     1521
+    ]
+   },
+   {
+    "cat": "Quick",
+    "name": "Bright Berry Lime",
+    "sku": "PL-WCB-475-00",
+    "startMo": 0,
+    "monthly": [
+     1219,
+     1101,
+     1381,
+     1302,
+     1081,
+     1046,
+     1081,
+     1081,
+     1046,
+     1081,
+     1046,
+     1081
+    ]
+   },
+   {
+    "cat": "Quick",
+    "name": "Peaceful Pear",
+    "sku": "PL-WCB-480-00",
+    "startMo": 0,
+    "monthly": [
+     1523,
+     1376,
+     1965,
+     1852,
+     1537,
+     1487,
+     1537,
+     1537,
+     1487,
+     1537,
+     1487,
+     1537
+    ]
+   },
+   {
+    "cat": "Quick",
+    "name": "Relaxed Raspberry",
+    "sku": "PL-WCB-485-00",
+    "startMo": 0,
+    "monthly": [
+     1523,
+     1376,
+     1904,
+     1795,
+     1489,
+     1441,
+     1489,
+     1489,
+     1441,
+     1489,
+     1441,
+     1489
+    ]
+   }
+  ]
+ },
+ "Montana": {
+  "skus": [
+   {
+    "cat": "Optimal",
+    "name": "Stay Asleep Dreamberry",
+    "sku": "PL-WCB-110-00",
+    "startMo": 0,
+    "monthly": [
+     2091,
+     1831,
+     2175,
+     3148,
+     2561,
+     2581,
+     2881,
+     2774,
+     2747,
+     2734,
+     2685,
+     2731
+    ]
+   },
+   {
+    "cat": "Optimal",
+    "name": "Fast Asleep Grape",
+    "sku": "PL-WCB-120-00",
+    "startMo": 0,
+    "monthly": [
+     2719,
+     2380,
+     2827,
+     4092,
+     3329,
+     3356,
+     3745,
+     3606,
+     3570,
+     3555,
+     3490,
+     3551
+    ]
+   },
+   {
+    "cat": "Optimal",
+    "name": "Keep Calm Blissberry",
+    "sku": "PL-WCB-125-00",
+    "startMo": 0,
+    "monthly": [
+     1673,
+     1465,
+     1740,
+     2518,
+     2049,
+     2065,
+     2305,
+     2219,
+     2197,
+     2188,
+     2148,
+     2185
+    ]
+   },
+   {
+    "cat": "Classic",
+    "name": "Go Go Mango",
+    "sku": "PL-WCB-405-00",
+    "startMo": 0,
+    "monthly": [
+     1455,
+     1274,
+     1513,
+     2190,
+     1782,
+     1796,
+     2004,
+     1930,
+     1911,
+     1903,
+     1868,
+     1900
+    ]
+   },
+   {
+    "cat": "Classic",
+    "name": "Blissful Blueberry",
+    "sku": "PL-WCB-415-00",
+    "startMo": 0,
+    "monthly": [
+     728,
+     637,
+     757,
+     1095,
+     891,
+     898,
+     1002,
+     965,
+     955,
+     951,
+     934,
+     950
+    ]
+   },
+   {
+    "cat": "Classic",
+    "name": "Passion Pineapple",
+    "sku": "PL-WCB-420-00",
+    "startMo": 0,
+    "monthly": [
+     1698,
+     1486,
+     1766,
+     2555,
+     2079,
+     2095,
+     2338,
+     2252,
+     2230,
+     2220,
+     2179,
+     2217
+    ]
+   },
+   {
+    "cat": "Classic",
+    "name": "Mellow Melon",
+    "sku": "PL-WCB-430-00",
+    "startMo": 0,
+    "monthly": [
+     728,
+     637,
+     757,
+     1095,
+     891,
+     898,
+     1002,
+     965,
+     955,
+     951,
+     934,
+     950
+    ]
+   },
+   {
+    "cat": "Classic",
+    "name": "Balanced Berry Guava",
+    "sku": "PL-WCB-435-00",
+    "startMo": 0,
+    "monthly": [
+     1698,
+     1486,
+     1766,
+     2555,
+     2079,
+     2095,
+     2338,
+     2252,
+     2230,
+     2220,
+     2179,
+     2217
+    ]
+   },
+   {
+    "cat": "Quick",
+    "name": "Bubbly Peach",
+    "sku": "PL-WCB-460-00",
+    "startMo": 0,
+    "monthly": [
+     1498,
+     1311,
+     1558,
+     2255,
+     1834,
+     1849,
+     2063,
+     1987,
+     1967,
+     1959,
+     1923,
+     1956
+    ]
+   },
+   {
+    "cat": "Quick",
+    "name": "Sunrise",
+    "sku": "PL-WCB-465-00",
+    "startMo": 0,
+    "monthly": [
+     1498,
+     1311,
+     1558,
+     2255,
+     1834,
+     1849,
+     2063,
+     1987,
+     1967,
+     1959,
+     1923,
+     1956
+    ]
+   },
+   {
+    "cat": "Quick",
+    "name": "Paradise POG",
+    "sku": "PL-WCB-470-00",
+    "startMo": 0,
+    "monthly": [
+     1070,
+     937,
+     1113,
+     1611,
+     1310,
+     1321,
+     1474,
+     1419,
+     1405,
+     1399,
+     1373,
+     1397
+    ]
+   },
+   {
+    "cat": "Quick",
+    "name": "Bright Berry Lime",
+    "sku": "PL-WCB-475-00",
+    "startMo": 0,
+    "monthly": [
+     1070,
+     937,
+     1113,
+     1611,
+     1310,
+     1321,
+     1474,
+     1419,
+     1405,
+     1399,
+     1373,
+     1397
+    ]
+   },
+   {
+    "cat": "Quick",
+    "name": "Relaxed Raspberry",
+    "sku": "PL-WCB-485-00",
+    "startMo": 0,
+    "monthly": [
+     1498,
+     1311,
+     1558,
+     2255,
+     1834,
+     1849,
+     2063,
+     1987,
+     1967,
+     1959,
+     1923,
+     1956
+    ]
+   }
+  ]
+ }
+}
