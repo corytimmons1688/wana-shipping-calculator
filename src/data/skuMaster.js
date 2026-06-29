@@ -31,6 +31,10 @@ export const MASTER_SKUS = [
   { sku:"PL-WCB-440-00", name:"Breezy Pineapple",           cat:"Classic", base:"White" },
   // LTO — White base
   { sku:"PL-WCB-LTO-01", name:"Razzcherry Rocket LTO",     cat:"LTO",     base:"White" },
+  // High Dose flavors (rebrand of Raspberry Limeade / Blueberry Lemonade / Blood Orange)
+  { sku:"PL-WCB-445-00", name:"Robust Raspberry",           cat:"HD",      base:"White" },
+  { sku:"PL-WCB-450-00", name:"Mighty Green Apple",         cat:"HD",      base:"White" },
+  { sku:"PL-WCB-455-00", name:"Bold Blood Orange",          cat:"HD",      base:"White" },
   // HD (CO Wave 3 assorted — no individual SKU codes yet)
   { sku:"PL-WCB-HD-01",  name:"High Dose Assorted",         cat:"HD",      base:"White" },
   // All assorted variants (Med + non-Med) consolidate to one SKU
