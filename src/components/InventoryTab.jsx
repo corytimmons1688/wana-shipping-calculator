@@ -56,14 +56,16 @@ function MohChip({ v }) {
 function StatusChipIn({ sh, today, onReceive }) {
   if (sh.received) return <Chip txt="Received" bg="#dcfce7" bd={T.GR} tx="#166534" />;
   const eta = shipmentEta(sh);
-  if (!eta) return <Chip txt="No dates" bg={T.S2} bd={T.BD} tx={T.T2} title="Excluded from projections until dated or marked received" />;
-  if (eta <= today) return (
+  const chip = !eta ? <Chip txt="No dates" bg={T.S2} bd={T.BD} tx={T.T2} title="Excluded from projections until dated or received" />
+    : eta <= today ? <Chip txt="Arrived?" bg="#fef3c7" bd={T.AM} tx="#92400e" title="ETA has passed" />
+    : <Chip txt="In transit" bg="#dbeafe" bd={T.AC} tx="#1d4ed8" />;
+  // Any not-yet-received shipment can be marked received when it physically arrives.
+  return (
     <span style={{ whiteSpace: "nowrap" }}>
-      <Chip txt="Arrived?" bg="#fef3c7" bd={T.AM} tx="#92400e" title="ETA has passed — counted as received" />
-      <button onClick={onReceive} style={{ marginLeft: 4, padding: "1px 6px", borderRadius: 4, border: "1px solid " + T.GR, background: T.GR + "10", color: T.GR, cursor: "pointer", fontSize: 9 }}>mark received</button>
+      {chip}
+      <button onClick={onReceive} title="Mark this shipment received at Calyx (moves units to On hand)" style={{ marginLeft: 4, padding: "1px 7px", borderRadius: 4, border: "1px solid " + T.GR, background: T.GR + "10", color: T.GR, cursor: "pointer", fontSize: 9, fontWeight: 600 }}>Receive</button>
     </span>
   );
-  return <Chip txt="In transit" bg="#dbeafe" bd={T.AC} tx="#1d4ed8" />;
 }
 
 export default function InventoryTab({ sc, actuals, updActuals }) {
