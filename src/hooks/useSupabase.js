@@ -18,21 +18,33 @@ export function useSupabase(scenarios, setScenarios) {
   const [error, setError]     = useState(null);
   const saveTimer             = useRef(null);
   const lastSaved             = useRef(null);
+  const lastUpdatedAt         = useRef(null);   // optimistic-concurrency token
   const initialLoadDone       = useRef(false);
 
-  // ── WRITE ─────────────────────────────────────────────────────────────────
+  // ── WRITE (optimistic concurrency) ────────────────────────────────────────
+  // The PATCH is filtered on the updated_at we last saw. If another tab/script
+  // wrote in the meantime, the filter matches 0 rows: nothing is overwritten
+  // and status becomes "conflict" — the user must refresh to load the latest.
   const saveToDB = useCallback(async (data) => {
     const json = JSON.stringify(data);
     if (json === lastSaved.current) return;
     setStatus("saving");
     try {
-      const res = await fetch(ROW_URL, {
+      const guard = lastUpdatedAt.current ? `&updated_at=eq.${encodeURIComponent(lastUpdatedAt.current)}` : "";
+      const res = await fetch(ROW_URL + guard, {
         method: "PATCH",
-        headers: { ...HEADERS, "Prefer": "return=minimal" },
+        headers: { ...HEADERS, "Prefer": "return=representation" },
         body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
       });
       if (!res.ok) throw new Error(`Supabase ${res.status}: ${await res.text()}`);
+      const rows = await res.json();
+      if (guard && rows.length === 0) {
+        setStatus("conflict");
+        setError("This data was updated from another tab or session. Refresh the page to load the latest — your last change was NOT saved.");
+        return;
+      }
       lastSaved.current = json;
+      if (rows.length > 0) lastUpdatedAt.current = rows[0].updated_at;
       setStatus("saved");
       setError(null);
     } catch (e) {
@@ -95,6 +107,11 @@ export function useSupabase(scenarios, setScenarios) {
           }
         }
         setScenarios(loaded);
+        // Record what we loaded: the concurrency token, and the loaded JSON as
+        // "already saved" so a page load never rewrites the row by itself
+        // (in-place migrations persist on the next real user edit instead).
+        lastUpdatedAt.current = rows[0].updated_at || null;
+        lastSaved.current = JSON.stringify(loaded);
         setStatus("saved");
       } else {
         // DB is empty — write the current default (Base Plan) up to Supabase now

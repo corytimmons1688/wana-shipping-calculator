@@ -40,21 +40,32 @@ export function useActuals(actuals, setActuals) {
   const [error, setError]   = useState(null);
   const saveTimer           = useRef(null);
   const lastSaved           = useRef(null);
+  const lastUpdatedAt       = useRef(null);   // optimistic-concurrency token
   const initialLoadDone     = useRef(false);
 
-  // ── WRITE ─────────────────────────────────────────────────────────────────
+  // ── WRITE (optimistic concurrency) ────────────────────────────────────────
+  // PATCH is filtered on the updated_at we last saw; if another tab/script
+  // wrote in the meantime nothing is overwritten and status = "conflict".
   const saveToDB = useCallback(async (data) => {
     const json = JSON.stringify(data);
     if (json === lastSaved.current) return;
     setStatus("saving");
     try {
-      const res = await fetch(ROW_URL, {
+      const guard = lastUpdatedAt.current ? `&updated_at=eq.${encodeURIComponent(lastUpdatedAt.current)}` : "";
+      const res = await fetch(ROW_URL + guard, {
         method: "PATCH",
-        headers: { ...HEADERS, "Prefer": "return=minimal" },
+        headers: { ...HEADERS, "Prefer": "return=representation" },
         body: JSON.stringify({ data, updated_at: new Date().toISOString() }),
       });
       if (!res.ok) throw new Error(`Supabase ${res.status}: ${await res.text()}`);
+      const rows = await res.json();
+      if (guard && rows.length === 0) {
+        setStatus("conflict");
+        setError("Shipments/targets were updated from another tab or session. Refresh the page to load the latest — your last change was NOT saved.");
+        return;
+      }
       lastSaved.current = json;
+      if (rows.length > 0) lastUpdatedAt.current = rows[0].updated_at;
       setStatus("saved");
       setError(null);
     } catch (e) {
@@ -74,6 +85,7 @@ export function useActuals(actuals, setActuals) {
       if (rows.length > 0) {
         const loaded = migrate(rows[0].data);
         lastSaved.current = JSON.stringify(loaded);
+        lastUpdatedAt.current = rows[0].updated_at || null;
         setActuals(loaded);
         setStatus("saved");
       } else {

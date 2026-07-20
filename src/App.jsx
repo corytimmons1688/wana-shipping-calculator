@@ -177,12 +177,18 @@ const mainTabs = [{ k:"demand", l:"Market Demand", i:"📊" },{ k:"forecast", l:
         <div><div style={{ fontSize:16, fontWeight:800, letterSpacing:"-0.5px" }}><span style={{ color:T.GR }}>Wana</span> Production & Shipping</div><div style={{ color:T.T2, fontSize:9, marginTop:1 }}>2026 Launch {"—"} Shipping Optimizer</div></div>
         <div style={{ display:"flex", gap:8, alignItems:"center" }}>
           <div style={{ background:T.S2, borderRadius:5, padding:"3px 9px", border:"1px solid "+T.BD }}><span style={{ color:T.T2, fontSize:9 }}>Freight </span><span style={{ color:T.AM, fontWeight:700, fontFamily:"'JetBrains Mono',monospace", fontSize:12 }}>{f$(frt.tot)}</span></div>
-          <div title={syncError || ""} style={{ background:T.S2, borderRadius:5, padding:"3px 9px", border:"1px solid "+(syncStatus==="error"?"#dc2626":syncStatus==="saving"?T.AM:syncStatus==="saved"?T.GR:T.BD), display:"flex", alignItems:"center", gap:4 }}>
-            <span style={{ fontSize:9, color: syncStatus==="error"?"#dc2626":syncStatus==="saving"?T.AM:syncStatus==="saved"?T.GR:T.T2 }}>
-              {syncStatus==="loading"?"⟳ Loading…":syncStatus==="saving"?"⟳ Saving…":syncStatus==="saved"?"✓ Saved":syncStatus==="error"?"✕ Sync error":"○ Connecting…"}
-            </span>
-          </div>
-          {(actStatus === "saving" || actStatus === "error") && (
+          {(syncStatus === "conflict" || actStatus === "conflict") ? (
+            <button onClick={() => window.location.reload()} title={(syncStatus==="conflict"?syncError:actError) || ""} style={{ background:"#fee2e2", borderRadius:5, padding:"4px 12px", border:"1px solid #dc2626", color:"#991b1b", fontWeight:700, fontSize:10, cursor:"pointer", fontFamily:"inherit" }}>
+              ⚠ Updated elsewhere — click to refresh (last change not saved)
+            </button>
+          ) : (
+            <div title={syncError || ""} style={{ background:T.S2, borderRadius:5, padding:"3px 9px", border:"1px solid "+(syncStatus==="error"?"#dc2626":syncStatus==="saving"?T.AM:syncStatus==="saved"?T.GR:T.BD), display:"flex", alignItems:"center", gap:4 }}>
+              <span style={{ fontSize:9, color: syncStatus==="error"?"#dc2626":syncStatus==="saving"?T.AM:syncStatus==="saved"?T.GR:T.T2 }}>
+                {syncStatus==="loading"?"⟳ Loading…":syncStatus==="saving"?"⟳ Saving…":syncStatus==="saved"?"✓ Saved":syncStatus==="error"?"✕ Sync error":"○ Connecting…"}
+              </span>
+            </div>
+          )}
+          {(actStatus === "saving" || actStatus === "error") && actStatus !== "conflict" && syncStatus !== "conflict" && (
             <div title={actError || ""} style={{ background:T.S2, borderRadius:5, padding:"3px 9px", border:"1px solid "+(actStatus==="error"?"#dc2626":T.AM), display:"flex", alignItems:"center", gap:4 }}>
               <span style={{ fontSize:9, color: actStatus==="error"?"#dc2626":T.AM }}>{actStatus==="error"?"✕ Inventory sync":"⟳ Inventory…"}</span>
             </div>

@@ -139,7 +139,7 @@ export default function DemandTab({ sc, gld, annD, upd }) {
   // ── MONTHLY VIEW (unchanged behavior) ─────────────────────────────────────
   function renderMonthly() {
     return (
-      <div style={{ overflowX: "auto" }}>
+      <div style={{ overflow: "auto", maxHeight: "calc(100vh - 270px)" }}>
         <table style={tbl}><thead><tr>
           <th style={{ ...th, minWidth: 140 }}>Market</th>
           <th style={{ ...th, width: 72, textAlign: "center" }}>Go-Live</th>
@@ -350,7 +350,7 @@ export default function DemandTab({ sc, gld, annD, upd }) {
     });
 
     return (
-      <div style={{ overflowX: "auto", background: T.S1, border: "1px solid " + T.BD, borderRadius: 6 }}>
+      <div style={{ overflow: "auto", maxHeight: "calc(100vh - 270px)", background: T.S1, border: "1px solid " + T.BD, borderRadius: 6 }}>
         <table style={{ ...tbl, fontSize: 11 }}>
           <thead>
             <tr>
