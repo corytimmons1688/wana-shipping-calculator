@@ -443,7 +443,7 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
               <button onClick={exportMrp} style={{ padding: "3px 11px", borderRadius: 4, border: "1px solid " + T.GR, background: T.GR + "10", color: T.GR, cursor: "pointer", fontSize: 10, fontWeight: 700 }}>⬇ Download Excel</button>
               <span style={{ fontSize: 9.5, color: T.T2 }}>On hand row = prior week balance + receipts − demand, starting from current on hand. Click a SKU to toggle its market breakdown.</span>
             </div>
-            <div style={{ overflowX: "auto" }}>
+            <div style={{ overflow: "auto", maxHeight: "calc(100vh - 380px)" }}>
               <table style={{ ...tbl, fontSize: 10.5 }}>
                 <thead>
                   <tr>

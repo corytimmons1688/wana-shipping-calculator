@@ -110,7 +110,7 @@ export default function ItemForecastTab({ sc, upd }) {
           No item-level forecast for this selection yet. Markets with detail: {fc.marketsWithDetail.join(", ") || "none"}.
         </div>
       ) : (
-        <div style={{ overflowX: "auto", background: T.S1, border: "1px solid " + T.BD, borderRadius: 6 }}>
+        <div style={{ overflow: "auto", maxHeight: "calc(100vh - 300px)", background: T.S1, border: "1px solid " + T.BD, borderRadius: 6 }}>
           <table style={{ ...tbl, fontSize: 11 }}>
             <thead>
               <tr>
