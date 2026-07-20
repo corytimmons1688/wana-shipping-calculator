@@ -13,8 +13,14 @@ import InventoryTab from "./components/InventoryTab";
 import SettingsTab from "./components/SettingsTab";
 import AiAssistant from "./components/AiAssistant";
 
+const MAIN_TABS = ["demand", "forecast", "shipping", "inventory", "settings"];
+
 export default function App() {
-  const [tab, setTab] = useState("demand");
+  // Persist the active tab so a page refresh stays on the same page.
+  const [tab, setTabRaw] = useState(() => {
+    try { const t = localStorage.getItem("wana.tab"); return MAIN_TABS.includes(t) ? t : "demand"; } catch { return "demand"; }
+  });
+  const setTab = useCallback((t) => { setTabRaw(t); try { localStorage.setItem("wana.tab", t); } catch { /* ignore */ } }, []);
   const [scenarios, setScenarios] = useState(() => [mkScenario("Base Plan", initScenario()), mkScenario("Colorado Option 2", initScenarioCOOpt2())]);
   const [active, setActive] = useState(0);
   const [cmp, setCmp] = useState(false);

@@ -68,8 +68,14 @@ function StatusChipIn({ sh, today, onReceive }) {
   );
 }
 
+const INV_VIEWS = ["overview", "mrp", "inbound", "outbound", "pos", "targets", "factory"];
+
 export default function InventoryTab({ sc, actuals, updActuals }) {
-  const [view, setView] = useState("overview");
+  // Persist the active sub-view so a page refresh returns to the same place.
+  const [view, setViewRaw] = useState(() => {
+    try { const v = localStorage.getItem("wana.invView"); return INV_VIEWS.includes(v) ? v : "overview"; } catch { return "overview"; }
+  });
+  const setView = (v) => { setViewRaw(v); try { localStorage.setItem("wana.invView", v); } catch { /* ignore */ } };
   const [expKey, setExpKey] = useState(null);
   const [expShip, setExpShip] = useState(null);
   const [outMkt, setOutMkt] = useState("All");
@@ -496,7 +502,12 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
                             </tr>,
                             <tr key={r.key + "rcv"}>
                               <td style={{ ...td, ...stickyName, padding: "2px 8px 2px 22px", fontSize: 9.5, color: T.GR }}>Receipts (in transit)</td>
-                              {mrpCols.map((g) => { const v = r.arrivals[g.idx]; return <td key={g.idx} style={{ ...numCell, color: v > 0 ? T.GR : T.BD, fontWeight: v > 0 ? 700 : 400 }}>{v > 0 ? "+" + fm(Math.round(v)) : "—"}</td>; })}
+                              {mrpCols.map((g) => {
+                                const v = r.arrivals[g.idx];
+                                const refs = (r.arrivalRefs && r.arrivalRefs[g.idx]) || [];
+                                const tip = refs.map((a) => `${a.ref}: ${fm(a.qty)}`).join("\n");
+                                return <td key={g.idx} title={v > 0 ? tip : undefined} style={{ ...numCell, color: v > 0 ? T.GR : T.BD, fontWeight: v > 0 ? 700 : 400, cursor: v > 0 ? "help" : "default" }}>{v > 0 ? "+" + fm(Math.round(v)) : "—"}</td>;
+                              })}
                             </tr>
                           );
                         }
