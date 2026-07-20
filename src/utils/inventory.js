@@ -204,6 +204,7 @@ export function calcSkuInventory(actuals, fc, today = new Date()) {
     const demand = fc.bySku[key] || baseDemand[key] || new Array(NUM_WEEKS).fill(0);
     let received = 0, inTransit = 0, shippedOut = 0, adjPast = 0, poRecvDerived = 0;
     const arrivals = new Array(NUM_WEEKS).fill(0);
+    const arrivalRefs = {}; // { [weekIdx]: [{ref, qty}] } — which shipments land that week
     const futureAdj = new Array(NUM_WEEKS).fill(0);
     let nextEta = null;
 
@@ -218,7 +219,10 @@ export function calcSkuInventory(actuals, fc, today = new Date()) {
       inTransit += qty;
       if (!nextEta || eta < nextEta) nextEta = eta;
       const idx = weekIdxOf(eta, "ceil");
-      if (idx >= 0 && idx < NUM_WEEKS) arrivals[idx] += qty;
+      if (idx >= 0 && idx < NUM_WEEKS) {
+        arrivals[idx] += qty;
+        (arrivalRefs[idx] = arrivalRefs[idx] || []).push({ ref: sh.ref || "(no ref)", qty });
+      }
     }
     if (nextEta && (!nextArrivalAll || nextEta < nextArrivalAll)) nextArrivalAll = nextEta;
 
@@ -278,7 +282,7 @@ export function calcSkuInventory(actuals, fc, today = new Date()) {
     const info = skuInfo(key);
     perSku[key] = {
       key, name: nameFromFc[key] || info.name, cat: info.cat, base: info.base, isBase: info.isBase,
-      received, shippedOut, inTransit, nextEta, onHand, arrivals, proj, demand,
+      received, shippedOut, inTransit, nextEta, onHand, arrivals, arrivalRefs, proj, demand,
       stockoutIdx, stockoutDate: stockoutIdx != null ? buildWeekGrid()[stockoutIdx].date : null,
       fwd4wk, avgMoFwd, moh, mohCapped: isFinite(moh) && moh > horizonMo, horizonMo,
       poQty, poAdj, poRecvDerived, poRemaining, poOver, hasPo: !!po,
