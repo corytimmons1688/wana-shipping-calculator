@@ -1,13 +1,21 @@
 // inventory.js — pure calc utilities for Item Forecast + Inventory tabs.
-// Reuses the app-wide Mar-9-2026 Monday week grid (43 weeks) and mirrors
+// Reuses the app-wide Mar-9-2026 Monday week grid and mirrors
 // calcWeeklyDemand's goLive gating + monthly→weekly distribution rules exactly
 // so the new views tie out with the Shipping Calculator's weekly demand series.
+//
+// PLANNING HORIZON: the grid runs 95 weeks (Mar 9 2026 → Dec 27 2027), a full
+// two years, so Market Demand and the MRP can plan through end of 2027. Weekly
+// demand and MRP projection are indexed purely by week idx, so they carry
+// across the year boundary correctly. NOTE: the monthly/annual rollups in
+// calc.js (marketMonthlyDemand/calcGLD) remain year-blind 12-bucket functions
+// that feed the 2026 shipping/freight/mold model — do not widen their contract;
+// the Demand tab's Monthly view buckets by year locally instead.
 
 import { MASTER_SKUS, BASE_TYPES } from "../data/skuMaster";
 import { parseLocalDate, marketActiveFrom } from "./calc";
 
 export const WEEK0 = new Date(2026, 2, 9);
-export const NUM_WEEKS = 43;
+export const NUM_WEEKS = 95; // Mar 9 2026 → Dec 27 2027 (idx 94)
 export const ASSORTED_SKU = "PL-WCB-490-00";
 const WK_MS = 7 * 86400000;
 
@@ -84,13 +92,16 @@ export function calcSkuWeeklyForecast(mkts, opts = {}) {
           const idx = weekIdxOf(d, "round");
           if (idx < 0 || idx >= NUM_WEEKS) continue;
           weekly[idx] += v;
-          if (af ? d < af : (goLive == null || d.getMonth() + 1 < goLive)) gated[idx] = true;
+          // Go-live gate is a 2026 launch month; weeks in a later year are always
+          // active (a month-of-year test alone would wrongly re-hide early 2027).
+          if (af ? d < af : (goLive == null || (d.getFullYear() <= 2026 && d.getMonth() + 1 < goLive))) gated[idx] = true;
         }
       } else if (sku.monthly) {
+        // Monthly-format SKUs represent the 2026 base year only — distribute within 2026.
         for (let mo = 0; mo < 12; mo++) {
           const v = sku.monthly[mo] || 0;
           if (v <= 0) continue;
-          const mWeeks = grid.filter((g) => g.mo === mo);
+          const mWeeks = grid.filter((g) => g.mo === mo && g.date.getFullYear() === 2026);
           if (!mWeeks.length) continue;
           const g8 = goLive == null || mo + 1 < goLive;
           mWeeks.forEach((g) => { weekly[g.idx] += v / mWeeks.length; if (af ? g.date < af : g8) gated[g.idx] = true; });
