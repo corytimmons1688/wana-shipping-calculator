@@ -350,7 +350,7 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
           sub.getCell(1).font = { size: 9, color: { argb: C.muted } };
           ws.addRow([]);
 
-          const moRow = ws.addRow(["", ...mrpCols.map((g) => g.date.toLocaleDateString("en-US", { month: "long" }))]);
+          const moRow = ws.addRow(["", ...mrpCols.map((g) => g.date.toLocaleDateString("en-US", { month: "long", year: "numeric" }))]);
           let start = 2;
           for (let i = 2; i <= mrpCols.length + 1; i++) {
             const isLast = i === mrpCols.length + 1;
@@ -428,9 +428,10 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
         };
         const moGroups = [];
         for (const g of mrpCols) {
+          const yr = g.date.getFullYear();
           const last = moGroups[moGroups.length - 1];
-          if (last && last.mo === g.mo) last.span++;
-          else moGroups.push({ mo: g.mo, span: 1, label: g.date.toLocaleDateString("en-US", { month: "long" }) });
+          if (last && last.mo === g.mo && last.yr === yr) last.span++;
+          else moGroups.push({ mo: g.mo, yr, span: 1, label: g.date.toLocaleDateString("en-US", { month: "long", year: "numeric" }) });
         }
         const stickyName = { position: "sticky", left: 0, background: T.S1, zIndex: 1, minWidth: 196, maxWidth: 220, borderRight: "1px solid " + T.BD };
         const numCell = { ...td, textAlign: "right", fontFamily: "'JetBrains Mono',monospace", fontSize: 10.5, minWidth: 52, padding: "3px 6px" };

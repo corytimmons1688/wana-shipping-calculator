@@ -19,7 +19,9 @@ function buildDemandModel(markets, grid, firstWkByMonth) {
   markets.forEach((mk, mi) => {
     const goLive = mk.goLive;
     const af = marketActiveFrom(mk);
-    const gatedAt = (gi) => (af ? grid[gi].date < af : (goLive == null || grid[gi].mo + 1 < goLive));
+    // Go-live gate is a 2026 launch month; weeks in a later year are always
+    // active (a month-of-year test alone would wrongly re-hide early 2027).
+    const gatedAt = (gi) => (af ? grid[gi].date < af : (goLive == null || (grid[gi].date.getFullYear() <= 2026 && grid[gi].mo + 1 < goLive)));
     const md = marketMonthlyDemand(mk);
     const annual = md.reduce((a, b) => a + b, 0);
     const det = mk.skuDetail;
@@ -84,12 +86,70 @@ function buildDemandModel(markets, grid, firstWkByMonth) {
     rows.push({ mi, name: mk.name, goLive, priority: mk.priority, kind, weekly: parentWeekly, gated: parentGated, annual, skuRows, editAt });
   });
 
-  // Window to ACTIVE (post-go-live) demand only — pre-go-live cells are hidden,
-  // so they no longer drag the window back to the start of the grid.
-  let lo = Infinity, hi = -Infinity;
-  for (const row of rows) row.weekly.forEach((v, i) => { if (v > 0 && !row.gated[i]) { if (i < lo) lo = i; if (i > hi) hi = i; } });
-  if (lo === Infinity) { lo = 0; hi = Math.min(NUM_WEEKS - 1, 12); }
+  // Window START = first ACTIVE (post-go-live) week, so pre-go-live cells stay
+  // hidden. Window END = the full planning horizon (end of 2027), NOT the last
+  // week carrying data — so every future week through the horizon is visible
+  // and editable for forward planning even before any demand is entered there.
+  let lo = Infinity;
+  for (const row of rows) row.weekly.forEach((v, i) => { if (v > 0 && !row.gated[i] && i < lo) lo = i; });
+  if (lo === Infinity) lo = 0;
+  const hi = NUM_WEEKS - 1;
   return { rows, weeklyGLD, lo, hi };
+}
+
+// Per-SKU monthly demand for ONE calendar year (12 buckets). Weekly-format SKUs
+// bucket their weekly entries by the week's actual year+month (activeFrom-gated);
+// legacy monthly-format SKUs represent the 2026 base year only. Used by the
+// Monthly view so 2026 and 2027 stay separate — unlike the shared, year-blind
+// marketMonthlyDemand() which the 2026 shipping/freight model depends on.
+function skuMonthlyForYear(sku, det, af, year) {
+  const out = new Array(12).fill(0);
+  if (sku.weekly && det && det.weeks) {
+    const n = Math.min(sku.weekly.length, det.weeks.length);
+    for (let wi = 0; wi < n; wi++) {
+      const v = sku.weekly[wi] || 0;
+      if (v <= 0) continue;
+      const wd = parseLocalDate(det.weeks[wi]);
+      if (af && wd < af) continue;
+      if (wd.getFullYear() === year) out[wd.getMonth()] += v;
+    }
+  } else if (sku.monthly && year === 2026) {
+    for (let m = 0; m < 12; m++) out[m] += sku.monthly[m] || 0;
+  }
+  return out;
+}
+
+// Market monthly demand for one year = sum of its SKU rows (detail markets) or
+// its aggregate demand template (aggregate markets, 2026 only).
+function marketMonthlyForYear(mk, year) {
+  const det = mk.skuDetail;
+  const af = marketActiveFrom(mk);
+  const out = new Array(12).fill(0);
+  if (det && det.skus && det.skus.length) {
+    for (const sku of det.skus) {
+      const sm = skuMonthlyForYear(sku, det, af, year);
+      for (let m = 0; m < 12; m++) out[m] += sm[m];
+    }
+  } else if (year === 2026) {
+    const d = mk.demand || [];
+    for (let m = 0; m < 12; m++) out[m] += d[m] || 0;
+  }
+  return out.map((v) => Math.round(v));
+}
+
+// Per-year Go-Live Demand: sums active markets' per-year monthly, mirroring
+// calcGLD's activeFrom / goLive gating.
+function gldForYear(markets, year) {
+  const r = new Array(12).fill(0);
+  for (const mk of markets) {
+    const md = marketMonthlyForYear(mk, year);
+    const af = marketActiveFrom(mk);
+    for (let m = 0; m < 12; m++) {
+      const active = af ? true : (mk.goLive != null && mk.goLive <= m + 1);
+      if (active) r[m] += md[m];
+    }
+  }
+  return r;
 }
 
 export default function DemandTab({ sc, gld, annD, upd }) {
@@ -97,6 +157,8 @@ export default function DemandTab({ sc, gld, annD, upd }) {
   var expanded = expandState[0], setExpanded = expandState[1];
   var viewState = useState("weekly");
   var view = viewState[0], setView = viewState[1];
+  var yearState = useState(2026);
+  var mYear = yearState[0], setMYear = yearState[1];
 
   function toggleExpand(mi) {
     setExpanded(function(prev) {
@@ -136,19 +198,30 @@ export default function DemandTab({ sc, gld, annD, upd }) {
     );
   }
 
-  // ── MONTHLY VIEW (unchanged behavior) ─────────────────────────────────────
+  // ── MONTHLY VIEW (per calendar year — 2026 or 2027) ───────────────────────
   function renderMonthly() {
+    var yearGLD = gldForYear(sc.markets, mYear);
+    var gldAnn = 0; for (var gi = 0; gi < 12; gi++) gldAnn += yearGLD[gi];
+    var editable2026 = mYear === 2026; // aggregate demand template is 2026-only
     return (
       <div style={{ overflow: "auto", maxHeight: "calc(100vh - 270px)" }}>
-        <table style={tbl}><thead><tr>
-          <th style={{ ...th, minWidth: 140 }}>Market</th>
-          <th style={{ ...th, width: 72, textAlign: "center" }}>Go-Live</th>
-          {MO.map(function(m, i) { return <th key={i} style={{ ...th, textAlign: "right", minWidth: 65 }}>{m}</th>; })}
-          <th style={{ ...th, textAlign: "right", minWidth: 78 }}>Annual</th>
-        </tr></thead><tbody>
+        <table style={tbl}><thead>
+          <tr>
+            <th style={{ ...th, minWidth: 140 }}></th>
+            <th style={{ ...th, width: 72 }}></th>
+            <th colSpan={13} style={{ ...th, textAlign: "center", color: T.TX, borderLeft: "1px solid " + T.BD }}>{mYear}</th>
+          </tr>
+          <tr>
+            <th style={{ ...th, minWidth: 140 }}>Market</th>
+            <th style={{ ...th, width: 72, textAlign: "center" }}>Go-Live</th>
+            {MO.map(function(m, i) { return <th key={i} style={{ ...th, textAlign: "right", minWidth: 65, borderLeft: i === 0 ? "1px solid " + T.BD : undefined }}>{m}</th>; })}
+            <th style={{ ...th, textAlign: "right", minWidth: 78 }}>Annual</th>
+          </tr>
+        </thead><tbody>
           {sc.markets.map(function(mk, mi) {
             var hasSku = mk.skuDetail && mk.skuDetail.skus && mk.skuDetail.skus.length > 0;
-            var md = marketMonthlyDemand(mk);
+            var af = marketActiveFrom(mk);
+            var md = marketMonthlyForYear(mk, mYear);
             var ann = 0; for (var di = 0; di < md.length; di++) ann += md[di];
             var isExp = expanded[mi];
 
@@ -163,12 +236,13 @@ export default function DemandTab({ sc, gld, annD, upd }) {
                 </td>
                 <td style={{ ...td, textAlign: "center" }}>{goLiveSelect(mi, mk.goLive)}</td>
                 {md.map(function(d, di) {
-                  var isGL = mk.goLive === di + 1;
-                  var isAct = mk.goLive != null && di + 1 >= mk.goLive;
-                  if (hasSku) {
-                    return <td key={di} title="Rolled up from SKU-level forecast — edit items in the weekly view or the Item Forecast tab" style={{ ...td, textAlign: "right", background: isGL ? "#bbf7d0" : undefined }}><span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12, color: isGL ? T.GR : isAct ? T.TX : T.T2 }}>{fm(d)}</span></td>;
+                  var isGL = editable2026 && mk.goLive === di + 1;
+                  var isAct = mYear > 2026 ? (mk.goLive != null || af != null) : (mk.goLive != null && di + 1 >= mk.goLive);
+                  var borderL = di === 0 ? "1px solid " + T.BD : undefined;
+                  if (hasSku || !editable2026) {
+                    return <td key={di} title={hasSku ? "Rolled up from SKU-level forecast — edit items in the weekly view or the Item Forecast tab" : "Aggregate markets carry a single 2026 demand template — switch to 2026 to edit, or add SKU-level detail to plan " + mYear} style={{ ...td, textAlign: "right", background: isGL ? "#bbf7d0" : undefined, borderLeft: borderL }}><span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12, color: isGL ? T.GR : isAct ? T.TX : T.T2 }}>{d > 0 ? fm(d) : (hasSku || !editable2026) ? "—" : fm(d)}</span></td>;
                   }
-                  return <td key={di} style={{ ...td, textAlign: "right", background: isGL ? "#bbf7d0" : undefined }}><Ed value={d} onChange={function(v) { upd(function(s) { s.markets[mi].demand[di] = v; }); }} style={{ color: isGL ? T.GR : isAct ? T.TX : T.T2 }} /></td>;
+                  return <td key={di} style={{ ...td, textAlign: "right", background: isGL ? "#bbf7d0" : undefined, borderLeft: borderL }}><Ed value={d} onChange={function(v) { upd(function(s) { s.markets[mi].demand[di] = v; }); }} style={{ color: isGL ? T.GR : isAct ? T.TX : T.T2 }} /></td>;
                 })}
                 <td style={{ ...td, textAlign: "right", fontWeight: 700 }}>{fm(ann)}</td>
               </tr>
@@ -179,26 +253,12 @@ export default function DemandTab({ sc, gld, annD, upd }) {
               var detail = mk.skuDetail;
               for (var si = 0; si < detail.skus.length; si++) {
                 var sku = detail.skus[si];
-                var skuMonthly;
-                if (sku.monthly) {
-                  skuMonthly = sku.monthly;
-                } else {
-                  skuMonthly = [0,0,0,0,0,0,0,0,0,0,0,0];
-                  for (var wi = 0; wi < sku.weekly.length && wi < detail.weeks.length; wi++) {
-                    var wkDate = new Date(detail.weeks[wi]);
-                    var mo = wkDate.getMonth();
-                    skuMonthly[mo] += sku.weekly[wi];
-                  }
-                }
+                var skuMonthly = skuMonthlyForYear(sku, detail, af, mYear);
                 var skuAnn = 0;
                 for (var smi = 0; smi < 12; smi++) skuAnn += skuMonthly[smi];
 
                 var startMo = -1;
-                if (sku.startMo != null) {
-                  startMo = sku.startMo;
-                } else if (sku.startWk != null && detail.weeks && sku.startWk < detail.weeks.length) {
-                  startMo = new Date(detail.weeks[sku.startWk]).getMonth();
-                }
+                if (skuAnn > 0) for (var fm2 = 0; fm2 < 12; fm2++) { if (skuMonthly[fm2] > 0) { startMo = fm2; break; } }
 
                 skuRows.push(
                   <tr key={"sku-"+mi+"-"+si} style={{ background: si % 2 === 0 ? T.S2+"40" : T.S2+"80" }}>
@@ -210,7 +270,7 @@ export default function DemandTab({ sc, gld, annD, upd }) {
                     <td style={{ ...td, textAlign: "center", fontSize: 9, color: T.T2, borderLeft: "3px solid "+T.AC+"40" }}>{sku.cat}</td>
                     {skuMonthly.map(function(v, smi2) {
                       var isStart = smi2 === startMo;
-                      return <td key={smi2} style={{ ...td, textAlign: "right", fontSize: 10, color: v > 0 ? T.T2 : T.T2+"30", fontStyle: "italic", background: isStart ? "#bbf7d0" : undefined }}>{v > 0 ? fm(Math.round(v)) : ""}</td>;
+                      return <td key={smi2} style={{ ...td, textAlign: "right", fontSize: 10, color: v > 0 ? T.T2 : T.T2+"30", fontStyle: "italic", background: isStart ? "#bbf7d0" : undefined, borderLeft: smi2 === 0 ? "1px solid " + T.BD : undefined }}>{v > 0 ? fm(Math.round(v)) : ""}</td>;
                     })}
                     <td style={{ ...td, textAlign: "right", fontSize: 10, fontStyle: "italic", color: T.T2 }}>{fm(Math.round(skuAnn))}</td>
                   </tr>
@@ -223,8 +283,8 @@ export default function DemandTab({ sc, gld, annD, upd }) {
           <tr style={{ background: "#bbf7d040" }}>
             <td style={{ ...td, fontWeight: 700, color: T.GR, borderTop: "2px solid " + T.GR }}>GO-LIVE DEMAND</td>
             <td style={{ ...td, textAlign: "center", color: T.T2, fontSize: 8, borderTop: "2px solid " + T.GR }}>auto</td>
-            {gld.map(function(d, i) { return <td key={i} style={{ ...td, textAlign: "right", fontWeight: 700, color: T.GR, borderTop: "2px solid " + T.GR }}>{fm(d)}</td>; })}
-            <td style={{ ...td, textAlign: "right", fontWeight: 700, color: T.GR, borderTop: "2px solid " + T.GR }}>{fm(annD)}</td>
+            {yearGLD.map(function(d, i) { return <td key={i} style={{ ...td, textAlign: "right", fontWeight: 700, color: T.GR, borderTop: "2px solid " + T.GR, borderLeft: i === 0 ? "1px solid " + T.BD : undefined }}>{d > 0 ? fm(d) : "—"}</td>; })}
+            <td style={{ ...td, textAlign: "right", fontWeight: 700, color: T.GR, borderTop: "2px solid " + T.GR }}>{fm(gldAnn)}</td>
           </tr>
         </tbody></table>
       </div>
@@ -236,9 +296,10 @@ export default function DemandTab({ sc, gld, annD, upd }) {
     const cols = grid.slice(model.lo, model.hi + 1);
     const moGroups = [];
     for (const g of cols) {
+      const yr = g.date.getFullYear();
       const last = moGroups[moGroups.length - 1];
-      if (last && last.mo === g.mo) last.span++;
-      else moGroups.push({ mo: g.mo, span: 1, label: g.date.toLocaleDateString("en-US", { month: "long" }) });
+      if (last && last.mo === g.mo && last.yr === yr) last.span++;
+      else moGroups.push({ mo: g.mo, yr, span: 1, label: g.date.toLocaleDateString("en-US", { month: "long", year: "numeric" }) });
     }
     const gldAnnual = model.weeklyGLD.reduce((a, b) => a + b, 0);
 
@@ -363,7 +424,7 @@ export default function DemandTab({ sc, gld, annD, upd }) {
               <th style={{ ...th, ...stickyCol, top: 29, zIndex: 3 }}>Market</th>
               <th style={{ ...th, top: 29, width: 72, textAlign: "center" }}>Go-Live</th>
               {cols.map(weekHeader)}
-              <th style={{ ...th, top: 29, textAlign: "right", borderLeft: "2px solid " + T.BD }}>Annual</th>
+              <th style={{ ...th, top: 29, textAlign: "right", borderLeft: "2px solid " + T.BD }} title="Row total across the full planning horizon (Mar 2026 – Dec 2027)">Total</th>
             </tr>
           </thead>
           <tbody>
@@ -390,7 +451,13 @@ export default function DemandTab({ sc, gld, annD, upd }) {
           {chip("Weekly", view === "weekly", function() { setView("weekly"); })}
           {chip("Monthly", view === "monthly", function() { setView("monthly"); })}
         </div>
-        {[{ l: "Annual (All)", v: fm(allT), c: T.TX },{ l: "Go-Live Demand", v: fm(annD), c: T.GR },{ l: "Active Markets", v: sc.markets.filter(function(m){ return m.goLive != null; }).length + "/" + sc.markets.length, c: T.AC }].map(function(c2, i) {
+        {view === "monthly" && (
+          <div style={{ display: "inline-flex", gap: 4, background: T.S2, borderRadius: 999, padding: 3, border: "1px solid " + T.BD }}>
+            {chip("2026", mYear === 2026, function() { setMYear(2026); })}
+            {chip("2027", mYear === 2027, function() { setMYear(2027); })}
+          </div>
+        )}
+        {[{ l: "Total (All)", v: fm(allT), c: T.TX },{ l: "Go-Live Demand", v: fm(annD), c: T.GR },{ l: "Active Markets", v: sc.markets.filter(function(m){ return m.goLive != null; }).length + "/" + sc.markets.length, c: T.AC }].map(function(c2, i) {
           return (
             <div key={i} style={{ background: T.S2, borderRadius: 7, padding: "8px 14px", border: "1px solid " + T.BD, minWidth: 120 }}>
               <div style={{ color: T.T2, fontSize: 9, textTransform: "uppercase", marginBottom: 2 }}>{c2.l}</div>
