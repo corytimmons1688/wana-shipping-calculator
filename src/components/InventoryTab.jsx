@@ -637,8 +637,8 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
                 const units = (sh.lines || []).reduce((a, l) => a + (Number(l.qty) || 0), 0);
                 return [
                   <tr key={sh.id} style={{ background: exp ? T.AC + "0A" : undefined }}>
-                    <td style={{ ...td, fontWeight: 700, cursor: "pointer" }} onClick={() => setExpShip(exp ? null : sh.id)}>
-                      <span style={{ color: T.T2, fontSize: 9, marginRight: 4 }}>{exp ? "▼" : "▶"}</span>
+                    <td style={{ ...td, fontWeight: 700 }}>
+                      <span onClick={() => setExpShip(exp ? null : sh.id)} title={exp ? "Collapse" : "Expand line items"} style={{ color: T.T2, fontSize: 9, marginRight: 4, cursor: "pointer" }}>{exp ? "▼" : "▶"}</span>
                       <Ed value={sh.ref || ""} type="text" onChange={(v) => updIn(sh.id, (s) => { s.ref = v; })} />
                     </td>
                     <td style={{ ...td }}><Ed value={sh.factoryRef || ""} type="text" onChange={(v) => updIn(sh.id, (s) => { s.factoryRef = v; })} /></td>
