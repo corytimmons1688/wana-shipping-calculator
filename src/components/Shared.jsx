@@ -20,8 +20,8 @@ export function Ed({ value, onChange, type = "number", style: sx = {} }) {
     <input autoFocus value={tmp} onChange={(e) => setTmp(e.target.value)} onBlur={() => { setEd(false); const v = type === "number" ? Number(tmp) : tmp; if (!isNaN(v) || type !== "number") onChange(v); }} onKeyDown={(e) => { if (e.key === "Enter") e.target.blur(); if (e.key === "Escape") { setEd(false); setTmp(String(value)); } }} style={{ background: T.S1, border: "1px solid " + T.AC, color: "#1e40af", fontFamily: "JetBrains Mono, monospace", fontSize: 12, padding: "2px 6px", borderRadius: 3, width: "100%", textAlign: "right", outline: "none", ...sx }} />
   );
   return (
-    <span onClick={() => { setTmp(String(value)); setEd(true); }} style={{ cursor: "pointer", color: "#1e40af", fontFamily: "JetBrains Mono, monospace", fontSize: 12, borderBottom: "1px dashed " + T.BD, ...sx }}>
-      {type === "number" ? fm(value) : value}
+    <span onClick={() => { setTmp(String(value)); setEd(true); }} style={{ cursor: "pointer", color: "#1e40af", fontFamily: "JetBrains Mono, monospace", fontSize: 12, borderBottom: "1px dashed " + T.BD, padding: "0 2px", minWidth: 14, display: "inline-block", ...sx }}>
+      {type === "number" ? fm(value) : (String(value ?? "").length ? value : "—")}
     </span>
   );
 }
