@@ -28,6 +28,10 @@ function migrate(d) {
   if (d.applySchedule.capacity == null) d.applySchedule.capacity = 12474;
   if (!Array.isArray(d.applySchedule.log)) d.applySchedule.log = [];
   if (!d.applySchedule.overrides || typeof d.applySchedule.overrides !== "object") d.applySchedule.overrides = {};
+  // bases already labelled for a market+flavor — ship without using capacity
+  if (!d.applySchedule.preApplied || typeof d.applySchedule.preApplied !== "object") d.applySchedule.preApplied = {};
+  // components each market currently holds: { market: { lidSku: {lid, base} } }
+  if (!d.marketStock || typeof d.marketStock !== "object") d.marketStock = {};
   for (const sh of d.inbound) {
     if (sh.id == null) sh.id = Date.now() + Math.random();
     if (sh.received == null) sh.received = false;
