@@ -6,6 +6,7 @@
 
 import { useState, useMemo } from "react";
 import { calcSkuWeeklyForecast, calcSkuInventory, calcSkuMarketWeekly, shipmentEta, buildWeekGrid, skuInfo } from "../utils/inventory";
+import { buildApplySchedule, slotKey, SET, LID_BOX, BASE_BOX, CAP_MIN, CAP_MAX } from "../utils/applySchedule";
 import { parseLocalDate } from "../utils/calc";
 import { MASTER_SKUS, BASE_TYPES } from "../data/skuMaster";
 import { Ed } from "./Shared";
@@ -235,6 +236,7 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
         {subBtn("pos", "Open POs")}
         {subBtn("targets", "Targets")}
         {subBtn("factory", "Factory Priority")}
+        {subBtn("apply", "Apply Schedule")}
         <span style={{ marginLeft: "auto", fontSize: 9.5, color: T.T2 }}>forecast: scenario “{sc.name}”</span>
       </div>
 
@@ -612,6 +614,157 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
             </div>
             <div style={{ padding: "6px 12px", fontSize: 9, color: T.T2, borderTop: "1px solid " + T.BD }}>
               Net requirements (lot-for-lot): each row is the quantity the factory must produce that week after netting demand against projected on-hand + scheduled inbound receipts (scenario "{sc.name}"), ordered by need date. Bases (PB-) derived from lid demand. Does not deduct open POs not yet shipped — cross-check the Open POs tab. Heavy line = new week.
+            </div>
+          </div>
+        );
+      })()}
+
+      {view === "apply" && (() => {
+        const aps = actuals.applySchedule || { capacity: 12474, log: [], overrides: {} };
+        const sched = buildApplySchedule({
+          mw, actuals, today: new Date(),
+          capacity: aps.capacity, log: aps.log, overrides: aps.overrides, numDays: 40,
+        });
+        const updSched = (fn) => updActuals((a) => {
+          if (!a.applySchedule) a.applySchedule = { capacity: 12474, log: [], overrides: {} };
+          if (!Array.isArray(a.applySchedule.log)) a.applySchedule.log = [];
+          if (!a.applySchedule.overrides) a.applySchedule.overrides = {};
+          fn(a.applySchedule);
+        });
+        const setDone = (line, date, on) => updSched((s) => {
+          const k = slotKey(date, line.market, line.sku);
+          if (on) {
+            s.log.push({ date, market: line.market, sku: line.sku, units: line.units });
+            delete s.overrides[k];
+          } else {
+            const i = s.log.findIndex((e) => e.date === date && e.market === line.market && e.sku === line.sku);
+            if (i >= 0) s.log.splice(i, 1);
+          }
+        });
+        const setQty = (line, date, v) => updSched((s) => {
+          const k = slotKey(date, line.market, line.sku);
+          const n = Math.max(0, Math.round(Number(v) || 0));
+          const snapped = Math.round(n / SET) * SET;         // keep whole sets
+          if (snapped === line.units) delete s.overrides[k]; else s.overrides[k] = snapped;
+        });
+
+        const dF2 = (s) => { const d = parseLocalDate(s); return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }); };
+        const exportApply = async () => {
+          const mod = await import("exceljs"); const ExcelJS = mod.default || mod;
+          const wb = new ExcelJS.Workbook(); const ws = wb.addWorksheet("Apply Schedule");
+          ws.columns = [{ width: 16 }, { width: 16 }, { width: 26 }, { width: 15 }, { width: 9 }, { width: 12 }, { width: 11 }, { width: 12 }, { width: 10 }];
+          const t = ws.addRow(["Apply & ship schedule — Calyx"]); t.getCell(1).font = { bold: true, size: 13 };
+          ws.addRow([`Capacity ${aps.capacity.toLocaleString()} u/day · 1 set = ${LID_BOX} (1 lid box + 3 base boxes) · generated ${todayISO()}`]).getCell(1).font = { size: 9, color: { argb: "FF6B7280" } };
+          ws.addRow([]);
+          const h = ws.addRow(["Date", "Market", "Flavor", "SKU", "Base", "Base qty", "Base boxes", "Lid qty", "Lid boxes"]);
+          h.eachCell((c) => { c.font = { bold: true, size: 9 }; });
+          for (const d of sched.days) for (const l of d.lines)
+            ws.addRow([dF2(d.date), l.market, l.name, l.sku, l.baseColor, l.units, l.units / BASE_BOX, l.units, l.sets]);
+          const buf = await wb.xlsx.writeBuffer();
+          const a = document.createElement("a");
+          a.href = URL.createObjectURL(new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
+          a.download = `Wana-Apply-Schedule-${todayISO()}.xlsx`; a.click(); URL.revokeObjectURL(a.href);
+        };
+
+        const cellN = { ...td, textAlign: "right", fontFamily: "'JetBrains Mono',monospace", fontSize: 10.5 };
+        return (
+          <div style={{ background: T.S1, border: "1px solid " + T.BD, borderRadius: 6 }}>
+            <div style={{ padding: "8px 12px", display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+              <span style={{ fontSize: 11, fontWeight: 700 }}>Apply &amp; ship schedule — all markets</span>
+              <label style={{ fontSize: 10, color: T.T2, display: "flex", alignItems: "center", gap: 4 }}>
+                Capacity/day
+                <input type="number" min={CAP_MIN} max={CAP_MAX} step={SET} value={aps.capacity}
+                  onChange={(e) => { const v = Math.min(CAP_MAX, Math.max(CAP_MIN, Number(e.target.value) || CAP_MIN)); updSched((s) => { s.capacity = v; }); }}
+                  style={{ width: 78, background: T.S2, border: "1px solid " + T.BD, color: T.AC, borderRadius: 3, padding: "2px 5px", fontSize: 11, fontFamily: "'JetBrains Mono',monospace" }} />
+                <span style={{ color: T.T2 }}>= {sched.totals.capSets} sets</span>
+              </label>
+              <button onClick={exportApply} style={{ padding: "3px 11px", borderRadius: 4, border: "1px solid " + T.GR, background: T.GR + "10", color: T.GR, cursor: "pointer", fontSize: 10, fontWeight: 700 }}>⬇ Download Excel</button>
+              {aps.log.length > 0 && (
+                <button onClick={() => { if (window.confirm(`Clear all ${aps.log.length} completed lines?`)) updSched((s) => { s.log = []; }); }}
+                  style={{ padding: "3px 9px", borderRadius: 4, border: "1px solid " + T.BD, background: "transparent", color: T.T2, cursor: "pointer", fontSize: 10 }}>Reset completed</button>
+              )}
+              <span style={{ fontSize: 9.5, color: T.T2 }}>
+                1 set = {fm(SET)} ({LID_BOX} lid box + 3 × {BASE_BOX} base boxes). Tick a line when it's run — later days re-flow automatically.
+              </span>
+            </div>
+
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", padding: "0 12px 8px" }}>
+              {[["Remaining to apply", fm(Math.round(sched.totals.planned + sched.totals.unscheduled)), T.AC],
+                ["Completed", fm(Math.round(sched.totals.done)), T.GR],
+                ["Scheduled next " + sched.days.length + " days", fm(Math.round(sched.totals.planned)), T.TX],
+                ["Awaiting material", fm(Math.round(sched.totals.unscheduled)), sched.totals.unscheduled > 0 ? T.AM : T.T2]].map(([l, v, c], i) => (
+                <div key={i} style={{ background: T.S2, borderRadius: 6, padding: "5px 11px", border: "1px solid " + T.BD }}>
+                  <div style={{ color: T.T2, fontSize: 8.5, textTransform: "uppercase" }}>{l}</div>
+                  <div style={{ color: c, fontSize: 14, fontWeight: 700, fontFamily: "'JetBrains Mono',monospace" }}>{v}</div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ overflow: "auto", maxHeight: "calc(100vh - 430px)" }}>
+              <table style={{ ...tbl, fontSize: 10.5 }}>
+                <thead><tr>
+                  <th style={{ ...th, minWidth: 108 }}>Day</th>
+                  <th style={{ ...th, minWidth: 96 }}>Market</th>
+                  <th style={{ ...th, minWidth: 150 }}>Flavor</th>
+                  <th style={{ ...th, minWidth: 60, textAlign: "center" }}>Base</th>
+                  <th style={{ ...th, textAlign: "right" }}>Base qty</th>
+                  <th style={{ ...th, textAlign: "right" }}>Base bx</th>
+                  <th style={{ ...th, textAlign: "right" }}>Lid qty</th>
+                  <th style={{ ...th, textAlign: "right" }}>Lid bx</th>
+                  <th style={{ ...th, textAlign: "right", minWidth: 84 }}>Final qty</th>
+                  <th style={{ ...th, textAlign: "center", minWidth: 40 }}>Done</th>
+                </tr></thead>
+                <tbody>
+                  {sched.days.length === 0 && <tr><td colSpan={10} style={{ ...td, textAlign: "center", color: T.T2, padding: 20 }}>Nothing to schedule — every market's requirement is covered by what has already shipped.</td></tr>}
+                  {sched.days.map((d) => {
+                    const over = d.capUsed > aps.capacity;
+                    return [
+                      <tr key={"h" + d.date}>
+                        <td colSpan={10} style={{ ...td, background: T.S2, fontWeight: 700, fontSize: 10, position: "sticky", left: 0 }}>
+                          {dF2(d.date)}
+                          <span style={{ marginLeft: 8, fontWeight: 400, color: over ? "#991b1b" : T.T2, fontFamily: "'JetBrains Mono',monospace" }}>
+                            {fm(d.capUsed)} / {fm(aps.capacity)} applied ({Math.round((d.capUsed / aps.capacity) * 100)}%)
+                          </span>
+                        </td>
+                      </tr>,
+                      ...d.lines.map((l) => (
+                        <tr key={l.key} style={{ background: l.done ? T.S2 + "AA" : undefined, opacity: l.done ? 0.5 : 1 }}>
+                          <td style={{ ...td, color: T.T2, fontSize: 9.5 }}></td>
+                          <td style={{ ...td, fontWeight: 600, textDecoration: l.done ? "line-through" : undefined }}>{l.market}</td>
+                          <td style={{ ...td, textDecoration: l.done ? "line-through" : undefined }}>
+                            {l.name}
+                            <span style={{ marginLeft: 5, fontSize: 8.5, color: T.T2, fontFamily: "'JetBrains Mono',monospace" }}>{l.sku}</span>
+                          </td>
+                          <td style={{ ...td, textAlign: "center" }}>
+                            <span style={{ fontSize: 8.5, fontWeight: 700, padding: "1px 6px", borderRadius: 3, border: "1px solid " + T.BD, background: l.baseColor === "Black" ? "#1a1a2e" : "#f1f5f9", color: l.baseColor === "Black" ? "#fff" : "#334155" }}>{l.baseColor}</span>
+                          </td>
+                          <td style={cellN}>{fm(l.units)}</td>
+                          <td style={{ ...cellN, color: T.T2 }}>{fm(l.units / BASE_BOX)}</td>
+                          <td style={cellN}>{fm(l.units)}</td>
+                          <td style={{ ...cellN, color: T.T2 }}>{fm(l.sets)}</td>
+                          <td style={cellN}>
+                            {l.done ? fm(l.units) : <Ed value={l.units} onChange={(v) => setQty(l, d.date, v)} style={{ color: l.edited ? T.AM : "#1e40af" }} />}
+                          </td>
+                          <td style={{ ...td, textAlign: "center" }}>
+                            <input type="checkbox" checked={l.done} onChange={(e) => setDone(l, d.date, e.target.checked)} style={{ cursor: "pointer" }} />
+                          </td>
+                        </tr>
+                      )),
+                    ];
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {sched.queueLeft.length > 0 && (
+              <div style={{ padding: "7px 12px", borderTop: "1px solid " + T.BD, fontSize: 9.5, color: "#92400e", background: "#fef3c7" }}>
+                ⚠ {fm(Math.round(sched.totals.unscheduled))} units can't be scheduled in the next {sched.days.length} working days — material hasn't landed yet:{" "}
+                {sched.queueLeft.slice(0, 6).map((q) => `${q.market} ${q.name} ${fm(Math.round(q.need))}`).join(" · ")}
+                {sched.queueLeft.length > 6 ? ` · +${sched.queueLeft.length - 6} more` : ""}
+              </div>
+            )}
+            <div style={{ padding: "6px 12px", fontSize: 9, color: T.T2, borderTop: "1px solid " + T.BD }}>
+              Requirement = each market's gated demand − what has already shipped to it (Outbound tab) − completed lines. Sequenced earliest-need-first, capped by daily capacity and by material actually on hand or landed by that day (inbound ETAs included). Everything is whole sets so a lid never ships without its base.
             </div>
           </div>
         );

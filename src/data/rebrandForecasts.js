@@ -35,4 +35,5 @@ export const DEFAULT_ACTUALS = {
   adjustments: [],
   targets: { ropMonths: 5.5, maxMonths: 8.5, rows: [] },
   milestones: [],
+  applySchedule: { capacity: 12474, log: [], overrides: {} },
 };

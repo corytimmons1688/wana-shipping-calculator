@@ -22,6 +22,12 @@ function migrate(d) {
   if (d.targets.ropMonths == null) d.targets.ropMonths = 5.5;
   if (d.targets.maxMonths == null) d.targets.maxMonths = 8.5;
   if (!Array.isArray(d.targets.rows)) d.targets.rows = [];
+  // Apply-schedule state (added Jul 2026): only capacity + completed log +
+  // edited quantities persist; the day-by-day plan itself is derived.
+  if (!d.applySchedule || typeof d.applySchedule !== "object") d.applySchedule = {};
+  if (d.applySchedule.capacity == null) d.applySchedule.capacity = 12474;
+  if (!Array.isArray(d.applySchedule.log)) d.applySchedule.log = [];
+  if (!d.applySchedule.overrides || typeof d.applySchedule.overrides !== "object") d.applySchedule.overrides = {};
   for (const sh of d.inbound) {
     if (sh.id == null) sh.id = Date.now() + Math.random();
     if (sh.received == null) sh.received = false;
