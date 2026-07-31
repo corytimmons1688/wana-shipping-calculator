@@ -70,13 +70,31 @@ export default async function handler(req, res) {
   // common cause of a false mismatch — and tolerate a caller omitting "Bearer ".
   // Constant-time compare so the endpoint can't be used as an oracle.
   const expected = String(env.CRON_SECRET || "").trim();
+  const NS_KEYS = ["NS_ACCOUNT", "NS_CONSUMER_KEY", "NS_CONSUMER_SECRET", "NS_TOKEN_ID", "NS_TOKEN_SECRET"];
+
+  // ?diag=1 — setup check. Reports which variables the function can SEE and how
+  // long the supplied bearer is. Never returns a secret value. Safe to remove
+  // once the sync is confirmed working.
+  if ((req.query && req.query.diag === "1") || /[?&]diag=1/.test(req.url || "")) {
+    const got = String(req.headers.authorization || "").trim().replace(/^Bearer\s+/i, "").trim();
+    return res.status(200).json({
+      cron_secret_configured: !!expected,
+      cron_secret_length: expected.length,
+      bearer_received_length: got.length,
+      bearer_matches: !!expected && got === expected,
+      netsuite_present: NS_KEYS.filter((k) => !!env[k]),
+      netsuite_missing: NS_KEYS.filter((k) => !env[k]),
+      ns_account_length: String(env.NS_ACCOUNT || "").length,
+    });
+  }
+
   if (expected) {
     const got = String(req.headers.authorization || "").trim().replace(/^Bearer\s+/i, "").trim();
     const a = Buffer.from(got), b = Buffer.from(expected);
     const ok = a.length === b.length && crypto.timingSafeEqual(a, b);
     if (!ok) return res.status(401).json({ error: "unauthorized", hint: "Authorization header did not match CRON_SECRET" });
   }
-  const missing = ["NS_ACCOUNT", "NS_CONSUMER_KEY", "NS_CONSUMER_SECRET", "NS_TOKEN_ID", "NS_TOKEN_SECRET"].filter((k) => !env[k]);
+  const missing = NS_KEYS.filter((k) => !env[k]);
   if (missing.length) return res.status(503).json({ error: "NetSuite credentials not configured", missing });
 
   try {
