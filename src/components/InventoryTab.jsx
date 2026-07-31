@@ -82,6 +82,7 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
   const [outMkt, setOutMkt] = useState("All");
   const [adjVal, setAdjVal] = useState("");
   const [mrpCollapsed, setMrpCollapsed] = useState(() => new Set());
+  const [applyMkt, setApplyMkt] = useState("All");
   // Inventory model "as of" date — anchored to the last week of May (May 25,
   // 2026, a Monday on the week grid) since NJ's demand begins that week.
   // Nothing has shipped/been consumed before this, so the projection starts here.
@@ -625,7 +626,7 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
           mw, grid, actuals, today: new Date(), startDate: aps.startDate || undefined,
           capacity: aps.capacity, log: aps.log, overrides: aps.overrides,
           preApplied: aps.preApplied || {}, marketStock: actuals.marketStock || {},
-          pinned: aps.pinned || [], numDays: 40,
+          pinned: aps.pinned || [], numDays: 40, market: applyMkt,
         });
         const firstDay = sched.days.length ? sched.days[0].date : "";
         const updSched = (fn) => updActuals((a) => {
@@ -650,137 +651,142 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
         const setQty = (line, date, v) => updSched((s) => {
           const k = slotKey(date, line.market, line.sku, line.kind);
           const box = line.kind === "BASE" ? BASE_BOX : LID_BOX;
-          const snapped = Math.max(0, Math.round((Number(v) || 0) / box) * box);  // whole boxes
+          const snapped = Math.max(0, Math.round((Number(v) || 0) / box) * box);
           if (snapped === line.units) delete s.overrides[k]; else s.overrides[k] = snapped;
         });
-
         const dF2 = (s) => { const d = parseLocalDate(s); return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" }); };
+
         const exportApply = async () => {
           const mod = await import("exceljs"); const ExcelJS = mod.default || mod;
-          const wb = new ExcelJS.Workbook(); const ws = wb.addWorksheet("Apply Schedule");
-          ws.columns = [{ width: 16 }, { width: 16 }, { width: 26 }, { width: 15 }, { width: 9 }, { width: 12 }, { width: 11 }, { width: 12 }, { width: 10 }];
-          const t = ws.addRow(["Apply & ship schedule — Calyx"]); t.getCell(1).font = { bold: true, size: 13 };
-          ws.addRow([`Capacity ${aps.capacity.toLocaleString()} u/day · 1 set = ${LID_BOX} (1 lid box + 3 base boxes) · generated ${todayISO()}`]).getCell(1).font = { size: 9, color: { argb: "FF6B7280" } };
-          ws.addRow([]);
-          const h = ws.addRow(["Date", "Market", "Item", "SKU", "Base colour", "Qty", "Boxes", "Needed by", "Note"]);
-          h.eachCell((c) => { c.font = { bold: true, size: 9 }; });
-          for (const d of sched.days) for (const l of d.lines)
-            ws.addRow([dF2(d.date), l.market, `${l.name} – ${l.kind}`, l.sku, l.kind === "BASE" ? l.baseColor : "", l.units, l.boxes, l.due || "", l.preApplied ? "pre-applied" : ""]);
+          const wb = new ExcelJS.Workbook();
+          const mk = (name, rows) => {
+            const ws = wb.addWorksheet(name);
+            ws.columns = [{ width: 16 }, { width: 16 }, { width: 30 }, { width: 11 }, { width: 11 }, { width: 9 }, { width: 12 }];
+            const h = ws.addRow(["Date", "Market", "Item", "Base", "Qty", "Boxes", "Needed by"]);
+            h.eachCell((c) => { c.font = { bold: true, size: 9 }; });
+            rows.forEach((r) => ws.addRow(r));
+          };
+          mk("Application", sched.days.flatMap((d) => d.apply.map((l) => [dF2(d.date), l.market, `${l.name} – BASE`, l.baseColor, l.units, l.boxes, l.due || ""])));
+          mk("Shipping", sched.days.flatMap((d) => d.ship.map((l) => [dF2(d.date), l.market, `${l.name} – ${l.kind}`, l.kind === "BASE" ? l.baseColor : "", l.units, l.boxes, l.due || ""])));
           const buf = await wb.xlsx.writeBuffer();
           const a = document.createElement("a");
           a.href = URL.createObjectURL(new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
-          a.download = `Wana-Apply-Schedule-${todayISO()}.xlsx`; a.click(); URL.revokeObjectURL(a.href);
+          a.download = `Wana-Apply-Ship-${todayISO()}.xlsx`; a.click(); URL.revokeObjectURL(a.href);
         };
 
-        const cellN = { ...td, textAlign: "right", fontFamily: "'JetBrains Mono',monospace", fontSize: 10.5 };
-        return (
-          <div style={{ background: T.S1, border: "1px solid " + T.BD, borderRadius: 6 }}>
-            <div style={{ padding: "8px 12px", display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-              <span style={{ fontSize: 11, fontWeight: 700 }}>Apply &amp; ship schedule — all markets</span>
-              <label style={{ fontSize: 10, color: T.T2, display: "flex", alignItems: "center", gap: 4 }}>
-                Capacity/day
-                <input type="number" min={CAP_MIN} max={CAP_MAX} step={BASE_BOX} value={aps.capacity}
-                  onChange={(e) => { const v = Math.min(CAP_MAX, Math.max(CAP_MIN, Number(e.target.value) || CAP_MIN)); updSched((s) => { s.capacity = v; }); }}
-                  style={{ width: 78, background: T.S2, border: "1px solid " + T.BD, color: T.AC, borderRadius: 3, padding: "2px 5px", fontSize: 11, fontFamily: "'JetBrains Mono',monospace" }} />
-                <span style={{ color: T.T2 }}>= {Math.floor(aps.capacity / BASE_BOX)} base boxes</span>
-              </label>
-              <label style={{ fontSize: 10, color: T.T2, display: "flex", alignItems: "center", gap: 4 }}>
-                Starts
-                <DateEd value={aps.startDate || firstDay} onChange={(v) => updSched((s) => { s.startDate = v || ""; })} />
-              </label>
-              <button onClick={exportApply} style={{ padding: "3px 11px", borderRadius: 4, border: "1px solid " + T.GR, background: T.GR + "10", color: T.GR, cursor: "pointer", fontSize: 10, fontWeight: 700 }}>⬇ Download Excel</button>
-              {aps.log.length > 0 && (
-                <button onClick={() => { if (window.confirm(`Clear all ${aps.log.length} completed lines?`)) updSched((s) => { s.log = []; }); }}
-                  style={{ padding: "3px 9px", borderRadius: 4, border: "1px solid " + T.BD, background: "transparent", color: T.T2, cursor: "pointer", fontSize: 10 }}>Reset completed</button>
-              )}
-              <span style={{ fontSize: 9.5, color: T.T2 }}>
-                Lid boxes {fm(LID_BOX)} · base boxes {fm(BASE_BOX)}. Capacity counts label application (bases) only — lids are pick-and-ship. Tick a line when it's run; later days re-flow.
-              </span>
-            </div>
+        const cellN = { ...td, textAlign: "right", fontFamily: "'JetBrains Mono',monospace", fontSize: 10 };
+        const badge = (l) => (
+          <>
+            {l.pinned && <span title="Agreed by the team — kept exactly as entered" style={{ marginLeft: 4, fontSize: 7.5, color: T.AC, border: "1px solid " + T.AC + "66", borderRadius: 3, padding: "0 3px" }}>pinned</span>}
+            {l.preApplied && <span title="Already applied — no capacity used" style={{ marginLeft: 4, fontSize: 7.5, color: T.GR, border: "1px solid " + T.GR + "66", borderRadius: 3, padding: "0 3px" }}>pre</span>}
+          </>
+        );
+        const lineRow = (l, date, showBase) => (
+          <tr key={l.key} style={{ background: l.done ? T.S2 + "AA" : undefined, opacity: l.done ? 0.5 : 1 }}>
+            <td style={{ ...td, fontSize: 9.5, fontWeight: 600, textDecoration: l.done ? "line-through" : undefined }}>{l.market}</td>
+            <td style={{ ...td, fontSize: 9.5, textDecoration: l.done ? "line-through" : undefined }}>
+              {l.name} <span style={{ fontWeight: 700 }}>– {l.kind}</span>{badge(l)}
+              {l.reason && <div style={{ fontSize: 8, color: T.T2 }}>{l.reason}</div>}
+            </td>
+            {showBase && <td style={{ ...td, textAlign: "center" }}>
+              <span style={{ fontSize: 8, fontWeight: 700, padding: "1px 5px", borderRadius: 3, border: "1px solid " + T.BD, background: l.baseColor === "Black" ? "#1a1a2e" : "#f1f5f9", color: l.baseColor === "Black" ? "#fff" : "#334155" }}>{l.baseColor}</span>
+            </td>}
+            <td style={cellN}>{l.done ? fm(l.units) : <Ed value={l.units} onChange={(v) => setQty(l, date, v)} style={{ color: l.edited ? T.AM : "#1e40af", fontSize: 10 }} />}</td>
+            <td style={{ ...cellN, color: T.T2 }}>{fm(l.boxes)}</td>
+            <td style={{ ...td, textAlign: "center" }}>
+              <input type="checkbox" checked={!!l.done} onChange={(e) => setDone(l, date, e.target.checked)} style={{ cursor: "pointer" }} />
+            </td>
+          </tr>
+        );
 
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", padding: "0 12px 8px" }}>
-              {[["Due in window", fm(Math.round(sched.totals.requirement)), T.AC],
-                ["Completed", fm(Math.round(sched.totals.done)), T.GR],
-                ["Scheduled", fm(Math.round(sched.totals.planned)), T.TX],
-                ["Labels to apply", fm(Math.round(sched.totals.applied)), T.PU],
-                ["Awaiting material", fm(Math.round(sched.totals.unscheduled)), sched.totals.unscheduled > 0 ? T.AM : T.T2]].map(([l, v, c], i) => (
-                <div key={i} style={{ background: T.S2, borderRadius: 6, padding: "5px 11px", border: "1px solid " + T.BD }}>
-                  <div style={{ color: T.T2, fontSize: 8.5, textTransform: "uppercase" }}>{l}</div>
-                  <div style={{ color: c, fontSize: 14, fontWeight: 700, fontFamily: "'JetBrains Mono',monospace" }}>{v}</div>
-                </div>
-              ))}
+        const pane = (title, sub, colour, pick, showBase) => (
+          <div style={{ flex: 1, minWidth: 380, background: T.S1, border: "1px solid " + T.BD, borderRadius: 6, overflow: "hidden" }}>
+            <div style={{ padding: "6px 10px", background: colour + "12", borderBottom: "1px solid " + T.BD }}>
+              <span style={{ fontSize: 11, fontWeight: 700, color: colour }}>{title}</span>
+              <span style={{ marginLeft: 8, fontSize: 9, color: T.T2 }}>{sub}</span>
             </div>
-
-            <div style={{ overflow: "auto", maxHeight: "calc(100vh - 430px)" }}>
-              <table style={{ ...tbl, fontSize: 10.5 }}>
+            <div style={{ overflow: "auto", maxHeight: "calc(100vh - 420px)" }}>
+              <table style={{ ...tbl, fontSize: 10 }}>
                 <thead><tr>
-                  <th style={{ ...th, minWidth: 26 }}></th>
-                  <th style={{ ...th, minWidth: 96 }}>Market</th>
-                  <th style={{ ...th, minWidth: 190 }}>Item</th>
-                  <th style={{ ...th, minWidth: 56, textAlign: "center" }}>Base</th>
-                  <th style={{ ...th, textAlign: "right", minWidth: 74 }}>Qty</th>
-                  <th style={{ ...th, textAlign: "right", minWidth: 54 }}>Boxes</th>
-                  <th style={{ ...th, textAlign: "center", minWidth: 74 }}>Needed by</th>
-                  <th style={{ ...th, textAlign: "right", minWidth: 84 }}>Final qty</th>
-                  <th style={{ ...th, textAlign: "center", minWidth: 40 }}>Done</th>
+                  <th style={{ ...th, minWidth: 84 }}>Market</th>
+                  <th style={{ ...th, minWidth: 160 }}>Item</th>
+                  {showBase && <th style={{ ...th, textAlign: "center", minWidth: 48 }}>Base</th>}
+                  <th style={{ ...th, textAlign: "right", minWidth: 68 }}>Qty</th>
+                  <th style={{ ...th, textAlign: "right", minWidth: 46 }}>Bx</th>
+                  <th style={{ ...th, textAlign: "center", minWidth: 34 }}>✓</th>
                 </tr></thead>
                 <tbody>
-                  {sched.days.length === 0 && <tr><td colSpan={9} style={{ ...td, textAlign: "center", color: T.T2, padding: 20 }}>Nothing to schedule — every market's requirement is covered by stock it already holds.</td></tr>}
+                  {sched.days.every((d) => pick(d).length === 0) &&
+                    <tr><td colSpan={showBase ? 6 : 5} style={{ ...td, textAlign: "center", color: T.T2, padding: 16 }}>Nothing scheduled.</td></tr>}
                   {sched.days.map((d) => {
-                    const over = d.applied > aps.capacity;
+                    const rows = pick(d);
+                    if (!rows.length) return null;
+                    const applied = d.apply.reduce((a, l) => a + (l.preApplied ? 0 : l.units), 0);
+                    const over = applied > aps.capacity;
                     return [
                       <tr key={"h" + d.date}>
-                        <td colSpan={9} style={{ ...td, background: T.S2, fontWeight: 700, fontSize: 10.5, position: "sticky", left: 0 }}>
-                          Ship {dF2(d.date)}
-                          <span style={{ marginLeft: 10, fontWeight: 400, color: over ? "#991b1b" : T.T2, fontFamily: "'JetBrains Mono',monospace" }}>
-                            apply {fm(d.applied)} / {fm(aps.capacity)} ({Math.round((d.applied / aps.capacity) * 100)}%) · ship {fm(d.shipped)}
+                        <td colSpan={showBase ? 6 : 5} style={{ ...td, background: T.S2, fontWeight: 700, fontSize: 10, position: "sticky", left: 0 }}>
+                          {showBase ? "Apply " : "Ship "}{dF2(d.date)}
+                          <span style={{ marginLeft: 8, fontWeight: 400, fontFamily: "'JetBrains Mono',monospace", color: showBase ? (over ? "#991b1b" : T.T2) : T.T2 }}>
+                            {showBase ? `${fm(applied)} / ${fm(aps.capacity)} (${Math.round((applied / aps.capacity) * 100)}%)`
+                              : `${fm(rows.reduce((a, l) => a + l.units, 0))} units`}
                           </span>
                         </td>
                       </tr>,
-                      ...d.lines.map((l) => {
-                        const isBase = l.kind === "BASE";
-                        return (
-                          <tr key={l.key} style={{ background: l.done ? T.S2 + "AA" : undefined, opacity: l.done ? 0.5 : 1 }}>
-                            <td style={{ ...td }}></td>
-                            <td style={{ ...td, fontWeight: 600, textDecoration: l.done ? "line-through" : undefined }}>{l.market}</td>
-                            <td style={{ ...td, textDecoration: l.done ? "line-through" : undefined }}>
-                              {l.name} <span style={{ fontWeight: 700 }}>– {l.kind}</span>
-                              <span style={{ marginLeft: 5, fontSize: 8.5, color: T.T2, fontFamily: "'JetBrains Mono',monospace" }}>{l.sku}</span>
-                              {l.pinned && <span title="Agreed by the team — kept exactly as entered" style={{ marginLeft: 5, fontSize: 8, color: T.AC, border: "1px solid " + T.AC + "66", borderRadius: 3, padding: "0 3px" }}>pinned</span>}
-                              {l.preApplied && <span title="Already applied — ships without using application capacity" style={{ marginLeft: 5, fontSize: 8, color: T.GR, border: "1px solid " + T.GR + "66", borderRadius: 3, padding: "0 3px" }}>pre-applied</span>}
-                            </td>
-                            <td style={{ ...td, textAlign: "center" }}>
-                              {isBase && <span style={{ fontSize: 8.5, fontWeight: 700, padding: "1px 6px", borderRadius: 3, border: "1px solid " + T.BD, background: l.baseColor === "Black" ? "#1a1a2e" : "#f1f5f9", color: l.baseColor === "Black" ? "#fff" : "#334155" }}>{l.baseColor}</span>}
-                            </td>
-                            <td style={cellN}>{fm(l.units)}</td>
-                            <td style={{ ...cellN, color: T.T2 }}>{fm(l.boxes)}</td>
-                            <td style={{ ...td, textAlign: "center", fontSize: 9, color: l.late ? "#991b1b" : T.T2, fontWeight: l.late ? 700 : 400 }}>
-                              {l.due ? dF2(l.due).replace(/^\w+, /, "") : "—"}{l.late ? " ⚠" : ""}
-                            </td>
-                            <td style={cellN}>
-                              {l.done ? fm(l.units) : <Ed value={l.units} onChange={(v) => setQty(l, d.date, v)} style={{ color: l.edited ? T.AM : "#1e40af" }} />}
-                            </td>
-                            <td style={{ ...td, textAlign: "center" }}>
-                              <input type="checkbox" checked={l.done} onChange={(e) => setDone(l, d.date, e.target.checked)} style={{ cursor: "pointer" }} />
-                            </td>
-                          </tr>
-                        );
-                      }),
+                      ...rows.map((l) => lineRow(l, d.date, showBase)),
                     ];
                   })}
                 </tbody>
               </table>
             </div>
+          </div>
+        );
 
-            {sched.queueLeft.length > 0 && (
-              <div style={{ padding: "7px 12px", borderTop: "1px solid " + T.BD, fontSize: 9.5, color: "#92400e", background: "#fef3c7" }}>
-                ⚠ {fm(Math.round(sched.totals.unscheduled))} units can't be scheduled in the next {sched.days.length} working days — material hasn't landed yet:{" "}
-                {sched.queueLeft.slice(0, 6).map((q) => `${q.market} ${q.name} ${fm(Math.round(q.need))}`).join(" · ")}
-                {sched.queueLeft.length > 6 ? ` · +${sched.queueLeft.length - 6} more` : ""}
-              </div>
-            )}
-            <div style={{ padding: "6px 12px", fontSize: 9, color: T.T2, borderTop: "1px solid " + T.BD }}>
-              Requirement = each market's gated demand − what has already shipped to it (Outbound tab) − completed lines. Sequenced earliest-need-first, capped by daily capacity and by material actually on hand or landed by that day (inbound ETAs included). Everything is whole sets so a lid never ships without its base.
+        return (
+          <div>
+            <div style={{ background: T.S1, border: "1px solid " + T.BD, borderRadius: 6, padding: "8px 12px", marginBottom: 10, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+              <span style={{ fontSize: 11, fontWeight: 700 }}>Apply &amp; ship schedule</span>
+              <label style={{ fontSize: 10, color: T.T2, display: "flex", alignItems: "center", gap: 4 }}>
+                Market
+                <select value={applyMkt} onChange={(e) => setApplyMkt(e.target.value)}
+                  style={{ background: T.S2, border: "1px solid " + T.BD, color: T.AC, borderRadius: 3, padding: "2px 5px", fontSize: 11, fontFamily: "inherit" }}>
+                  <option value="All">All markets</option>
+                  {sched.markets.map((m) => <option key={m} value={m}>{m}</option>)}
+                </select>
+              </label>
+              <label style={{ fontSize: 10, color: T.T2, display: "flex", alignItems: "center", gap: 4 }}>
+                Capacity/day
+                <input type="number" min={CAP_MIN} max={CAP_MAX} step={BASE_BOX} value={aps.capacity}
+                  onChange={(e) => { const v = Math.min(CAP_MAX, Math.max(CAP_MIN, Number(e.target.value) || CAP_MIN)); updSched((s) => { s.capacity = v; }); }}
+                  style={{ width: 74, background: T.S2, border: "1px solid " + T.BD, color: T.AC, borderRadius: 3, padding: "2px 5px", fontSize: 11, fontFamily: "'JetBrains Mono',monospace" }} />
+              </label>
+              <label style={{ fontSize: 10, color: T.T2, display: "flex", alignItems: "center", gap: 4 }}>
+                Starts <DateEd value={aps.startDate || firstDay} onChange={(v) => updSched((s) => { s.startDate = v || ""; })} />
+              </label>
+              <button onClick={exportApply} style={{ padding: "3px 11px", borderRadius: 4, border: "1px solid " + T.GR, background: T.GR + "10", color: T.GR, cursor: "pointer", fontSize: 10, fontWeight: 700 }}>⬇ Excel</button>
+              {aps.log.length > 0 && (
+                <button onClick={() => { if (window.confirm(`Clear all ${aps.log.length} completed lines?`)) updSched((s) => { s.log = []; }); }}
+                  style={{ padding: "3px 9px", borderRadius: 4, border: "1px solid " + T.BD, background: "transparent", color: T.T2, cursor: "pointer", fontSize: 10 }}>Reset completed</button>
+              )}
+              {[["To apply", fm(Math.round(sched.totals.toApply)), T.PU],
+                ["To ship", fm(Math.round(sched.totals.toShip)), T.AC],
+                ["Completed", fm(Math.round(sched.totals.done)), T.GR],
+                ["Not yet applied", fm(Math.round(sched.totals.unapplied)), sched.totals.unapplied > 0 ? T.AM : T.T2]].map(([l, v, c], i) => (
+                <div key={i} style={{ background: T.S2, borderRadius: 5, padding: "3px 9px", border: "1px solid " + T.BD }}>
+                  <div style={{ color: T.T2, fontSize: 8, textTransform: "uppercase" }}>{l}</div>
+                  <div style={{ color: c, fontSize: 12.5, fontWeight: 700, fontFamily: "'JetBrains Mono',monospace" }}>{v}</div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-start" }}>
+              {pane("① APPLICATION — Calyx floor", "labels onto bases · the bottleneck", T.PU, (d) => d.apply, true)}
+              {pane("② SHIPPING — to market", "leaves the day after its lids land", T.AC, (d) => d.ship, false)}
+            </div>
+
+            <div style={{ marginTop: 8, fontSize: 9, color: T.T2 }}>
+              Application runs as early as base stock allows — ahead of lid arrival — so a market ships the day after its lids reach Calyx. Bases pairing with lids the market already holds ship the next business day. Lid boxes {fm(LID_BOX)} · base boxes {fm(BASE_BOX)}.
+              {sched.queueLeft.length > 0 && <> <span style={{ color: "#92400e" }}>⚠ {fm(Math.round(sched.totals.unapplied))} units can&rsquo;t be applied in this window — base stock hasn&rsquo;t landed.</span></>}
             </div>
           </div>
         );

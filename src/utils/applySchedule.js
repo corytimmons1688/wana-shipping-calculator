@@ -1,18 +1,15 @@
-// applySchedule.js — day-by-day label-application + ship plan for the Calyx floor.
+// applySchedule.js — two linked plans for the Calyx floor:
 //
-// Model (matches how the team actually works):
-//  · BASE and LID are separate lines. A market that already holds the lid only
-//    needs the labelled base, so BASE-only days are normal.
-//  · Only BASE lines consume application capacity — labels go on bases. Lids
-//    are pick-and-ship, so a day can look heavy in units yet be light on labour
-//    (e.g. bases that were applied ahead of time).
-//  · TIME-PHASED by due date: each market's weekly demand becomes a dated
-//    bucket, netted against the components that market already holds. Only work
-//    due inside the planning window is scheduled, so a market needing stock in
-//    two weeks is never pushed behind another market's December volume.
+//   APPLICATION  when labels go on bases. This is the bottleneck, so it runs as
+//                early as base stock allows — ahead of lid arrival — and is the
+//                only thing that consumes daily capacity.
+//   SHIPPING     when matched components leave for a market. Bases that pair
+//                with lids the market already holds ship the day after they're
+//                applied; everything else waits for its lids and ships the day
+//                after they land at Calyx.
 //
-// Persisted state is only capacity, the completed log, edited quantities and
-// pre-applied base stock; the plan itself is derived.
+// Persisted state: capacity, start date, completed log, edited quantities,
+// pre-applied base stock and pinned days. The plan itself is derived.
 
 import { BASE_TYPES } from "../data/skuMaster";
 import { skuInfo } from "./inventory";
@@ -21,37 +18,29 @@ export const LID_BOX = 1134;
 export const BASE_BOX = 378;
 export const CAP_MIN = 10000, CAP_MAX = 15000;
 export const DEFAULT_CAPACITY = 12474;
-export const DUE_WINDOW_DAYS = 45;        // only plan work due inside this window
+export const DUE_WINDOW_DAYS = 45;
 
 export const baseSkuFor = (lidSku) => (BASE_TYPES[skuInfo(lidSku).base] || BASE_TYPES["White"]).sku;
 const iso = (d) => { const p = (n) => String(n).padStart(2, "0"); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; };
+const parse = (s) => { const p = String(s).split("-").map(Number); return new Date(p[0], p[1] - 1, p[2]); };
 export const slotKey = (date, market, sku, kind) => `${date}|${market}|${sku}|${kind}`;
 const upBox = (n, box) => (n <= 0 ? 0 : Math.ceil(n / box) * box);
+const dnBox = (n, box) => (n <= 0 ? 0 : Math.floor(n / box) * box);
 
 function businessDays(from, n) {
-  const out = [];
-  const d = new Date(from.getFullYear(), from.getMonth(), from.getDate());
-  while (out.length < n) {
-    const dow = d.getDay();
-    if (dow !== 0 && dow !== 6) out.push(iso(d));
-    d.setDate(d.getDate() + 1);
-  }
+  const out = [], d = new Date(from.getFullYear(), from.getMonth(), from.getDate());
+  while (out.length < n) { const w = d.getDay(); if (w !== 0 && w !== 6) out.push(iso(d)); d.setDate(d.getDate() + 1); }
   return out;
 }
-
-// Work is picked and labelled the day before it ships, so the plan opens on the
-// next business day — nothing is ever scheduled for today.
 export function nextBusinessDay(from) {
   const d = new Date(from.getFullYear(), from.getMonth(), from.getDate() + 1);
   while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1);
   return iso(d);
 }
+const nextBizStr = (s) => nextBusinessDay(parse(s));
 
-// TRUE stock at Calyx: received inbound − everything shipped out ± adjustments,
-// plus not-yet-received inbound keyed by ETA. (calcSkuInventory can't be used —
-// it is anchored to the MRP as-of date and treats demand, not outbound, as the
-// outflow, so it reports stock that has physically gone to a market.)
-function availabilityFn(actuals) {
+// True stock at Calyx (received − shipped ± adjustments) plus dated arrivals.
+function availability(actuals) {
   const onHand = {}, arrivals = [];
   for (const sh of actuals.inbound || [])
     for (const l of sh.lines || []) {
@@ -60,222 +49,189 @@ function availabilityFn(actuals) {
       else if (sh.eta) arrivals.push({ sku: l.sku, date: sh.eta, qty: q });
     }
   for (const sh of actuals.outbound || [])
-    for (const l of sh.lines || []) {
-      const q = Number(l.qty) || 0; if (l.sku && q) onHand[l.sku] = (onHand[l.sku] || 0) - q;
-    }
-  for (const a of actuals.adjustments || []) {
-    const d = Number(a.delta) || 0; if (a.sku && d) onHand[a.sku] = (onHand[a.sku] || 0) + d;
-  }
-  const cache = {};
-  return (sku, dateStr) => {
-    const k = sku + "|" + dateStr;
-    if (cache[k] != null) return cache[k];
+    for (const l of sh.lines || []) { const q = Number(l.qty) || 0; if (l.sku && q) onHand[l.sku] = (onHand[l.sku] || 0) - q; }
+  for (const a of actuals.adjustments || []) { const d = Number(a.delta) || 0; if (a.sku && d) onHand[a.sku] = (onHand[a.sku] || 0) + d; }
+  arrivals.sort((a, b) => a.date.localeCompare(b.date));
+  const at = (sku, dateStr) => {
     let v = onHand[sku] || 0;
-    for (const a of arrivals) if (a.sku === sku && a.date <= dateStr) v += a.qty;
-    cache[k] = v; return v;
+    for (const a of arrivals) { if (a.sku !== sku) continue; if (a.date <= dateStr) v += a.qty; else break; }
+    return v;
   };
+  // first date at least `qty` of a sku is on hand at Calyx
+  const readyBy = (sku, qty, fromDate) => {
+    if ((onHand[sku] || 0) >= qty) return fromDate;
+    let run = onHand[sku] || 0;
+    for (const a of arrivals) {
+      if (a.sku !== sku) continue;
+      run += a.qty;
+      if (run >= qty) return a.date > fromDate ? a.date : fromDate;
+    }
+    return null;                                   // never enough in the horizon
+  };
+  return { at, readyBy, onHand };
 }
 
 export function buildApplySchedule({ mw, grid, actuals, today, startDate,
   capacity = DEFAULT_CAPACITY, log = [], overrides = {}, preApplied = {},
-  marketStock = {}, pinned = [], numDays = 30, dueWindowDays = DUE_WINDOW_DAYS }) {
+  marketStock = {}, pinned = [], numDays = 30, dueWindowDays = DUE_WINDOW_DAYS,
+  market = "All" }) {
 
   const todayStr = iso(today);
   const start = startDate || nextBusinessDay(today);
-  const startD = (() => { const p = start.split("-").map(Number); return new Date(p[0], p[1] - 1, p[2]); })();
-  const windowEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate() + dueWindowDays);
-  const windowEndStr = iso(windowEnd);
+  const windowEndStr = iso(new Date(today.getFullYear(), today.getMonth(), today.getDate() + dueWindowDays));
+  const av = availability(actuals);
 
-  // components already shipped by us since the market-stock snapshot
   const shippedSince = {};
-  for (const e of log) {
-    const k = e.market + "|" + e.sku + "|" + e.kind;
-    shippedSince[k] = (shippedSince[k] || 0) + (Number(e.units) || 0);
-  }
-  const held = (market, sku, kind) => {
-    const ms = (marketStock[market] || {})[sku] || {};
-    return (Number(kind === "LID" ? ms.lid : ms.base) || 0) + (shippedSince[market + "|" + sku + "|" + kind] || 0);
+  for (const e of log) shippedSince[e.market + "|" + e.sku + "|" + e.kind] = (shippedSince[e.market + "|" + e.sku + "|" + e.kind] || 0) + (Number(e.units) || 0);
+  const held = (mk, sku, kind) => {
+    const ms = (marketStock[mk] || {})[sku] || {};
+    return (Number(kind === "LID" ? ms.lid : ms.base) || 0) + (shippedSince[mk + "|" + sku + "|" + kind] || 0);
   };
 
-  // ── time-phased requirement ───────────────────────────────────────────────
-  const items = [];
+  // ── time-phased requirement per market + flavour ──────────────────────────
+  const groups = [];
   for (const sku of Object.keys(mw.byKey || {})) {
-    if (sku.startsWith("PB-")) continue;                 // bases follow their lid
-    for (const [market, weekly] of Object.entries(mw.byKey[sku] || {})) {
-      let lidPool = held(market, sku, "LID"), basePool = held(market, sku, "BASE");
-      let lidNeed = 0, baseNeed = 0, lidDue = null, baseDue = null;
+    if (sku.startsWith("PB-")) continue;
+    for (const [mk, weekly] of Object.entries(mw.byKey[sku] || {})) {
+      if (market !== "All" && mk !== market) continue;
+      let lidPool = held(mk, sku, "LID"), basePool = held(mk, sku, "BASE");
+      const heldLid = lidPool, heldBase = basePool;
+      let lidNeed = 0, baseNeed = 0, due = null;
       for (let w = 0; w < weekly.length; w++) {
-        const q = Number(weekly[w]) || 0;
-        if (q <= 0) continue;
-        const due = (grid[w] && grid[w].key) || todayStr;
-        if (due > windowEndStr) break;                   // beyond the planning window
-        const useLid = Math.min(lidPool, q); lidPool -= useLid;
-        const shortLid = q - useLid;
-        if (shortLid > 0) { lidNeed += shortLid; if (!lidDue) lidDue = due; }
-        const useBase = Math.min(basePool, q); basePool -= useBase;
-        const shortBase = q - useBase;
-        if (shortBase > 0) { baseNeed += shortBase; if (!baseDue) baseDue = due; }
+        const q = Number(weekly[w]) || 0; if (q <= 0) continue;
+        const d = (grid[w] && grid[w].key) || todayStr;
+        if (d > windowEndStr) break;
+        const uL = Math.min(lidPool, q); lidPool -= uL; if (q - uL > 0) { lidNeed += q - uL; if (!due) due = d; }
+        const uB = Math.min(basePool, q); basePool -= uB; if (q - uB > 0) { baseNeed += q - uB; if (!due) due = d; }
       }
+      if (baseNeed <= 0 && lidNeed <= 0) continue;
       const info = skuInfo(sku);
-      const common = { market, sku, name: info.name, baseSku: baseSkuFor(sku),
-        baseColor: info.base === "Black Sparkle" ? "Black" : "White" };
-      if (baseNeed > 0) items.push({ ...common, kind: "BASE", need: upBox(baseNeed, BASE_BOX), due: baseDue || todayStr });
-      if (lidNeed > 0) items.push({ ...common, kind: "LID", need: upBox(lidNeed, LID_BOX), due: lidDue || todayStr });
+      groups.push({ pk: mk + "|" + sku, market: mk, sku, name: info.name,
+        baseSku: baseSkuFor(sku), baseColor: info.base === "Black Sparkle" ? "Black" : "White",
+        baseNeed: upBox(baseNeed, BASE_BOX), lidNeed: upBox(lidNeed, LID_BOX),
+        bareLid: Math.max(0, heldLid - heldBase), due: due || todayStr });
     }
   }
-  // earliest due first; within a day put BASE ahead of its LID
-  items.sort((a, b) => a.due.localeCompare(b.due) || a.market.localeCompare(b.market)
-    || a.name.localeCompare(b.name) || (a.kind === "BASE" ? -1 : 1));
+  groups.sort((a, b) => a.due.localeCompare(b.due) || a.market.localeCompare(b.market) || a.name.localeCompare(b.name));
 
-  const availAt = availabilityFn(actuals);
-  const used = {};
-  const dates = businessDays(startD, numDays);
-  const logByDate = {};
-  for (const e of log) (logByDate[e.date] = logByDate[e.date] || []).push(e);
+  const dates = businessDays(parse(start), numDays);
+  const usedBase = {}, usedLid = {};
+  const preLeft = { ...preApplied };
+  const byDate = {};
+  const D = (d) => (byDate[d] = byDate[d] || { date: d, applied: 0, capacity, apply: [], ship: [] });
 
-  const days = [];
-  const work = items.map((i) => ({ ...i }));
-  const preLeft = { ...preApplied };                  // pre-applied stock is finite
-
-  // Base and lid for one flavour are planned together so the market's two halves
-  // stay in step: we only send bases that pair with lids it already holds (or
-  // that go out the same day), and only lids that pair with its bases. Excess of
-  // either side is held back until its counterpart is available.
-  const groups = {};
-  for (const it of work) {
-    const pk = it.market + "|" + it.sku;
-    const g = groups[pk] || (groups[pk] = { pk, market: it.market, sku: it.sku, name: it.name,
-      baseSku: it.baseSku, baseColor: it.baseColor, due: it.due });
-    g[it.kind === "BASE" ? "base" : "lid"] = it;
-    if (it.due < g.due) g.due = it.due;
+  // completed + pinned first — they consume capacity and material
+  const pinKeys = new Set();
+  for (const e of log) {
+    const info = skuInfo(e.sku);
+    if (market !== "All" && e.market !== market) continue;
+    const units = Number(e.units) || 0, isBase = e.kind === "BASE";
+    const row = { key: slotKey(e.date, e.market, e.sku, e.kind), market: e.market, sku: e.sku, name: info.name,
+      kind: e.kind, baseColor: info.base === "Black Sparkle" ? "Black" : "White", units,
+      boxes: units / (isBase ? BASE_BOX : LID_BOX), done: true, preApplied: !!e.preApplied, due: e.due || "" };
+    D(e.date).ship.push(row);
+    if (isBase && !e.preApplied) { D(e.date).apply.push({ ...row }); D(e.date).applied += units; }
+    (isBase ? usedBase : usedLid)[isBase ? baseSkuFor(e.sku) : e.sku] = ((isBase ? usedBase : usedLid)[isBase ? baseSkuFor(e.sku) : e.sku] || 0) + units;
   }
-  const order = Object.values(groups).sort((a, b) =>
-    a.due.localeCompare(b.due) || a.market.localeCompare(b.market) || a.name.localeCompare(b.name));
-  const mktLid = {}, mktBase = {};
-  for (const g of order) { mktLid[g.pk] = held(g.market, g.sku, "LID"); mktBase[g.pk] = held(g.market, g.sku, "BASE"); }
-
-  // Pinned lines are days the team has already agreed. They render exactly as
-  // entered and are consumed out of the requirement up front, so the derived
-  // plan works around them instead of re-proposing the same work.
-  const pinByDate = {};
   for (const p of pinned) {
-    const g = groups[p.market + "|" + p.sku];
-    const it = g && g[p.kind === "BASE" ? "base" : "lid"];
-    const units = Number(p.units) || 0;
-    if (it) it.need = Math.max(0, it.need - units);
-    if (g) { if (p.kind === "BASE") mktBase[g.pk] += units; else mktLid[g.pk] += units; }
-    (pinByDate[p.date] = pinByDate[p.date] || []).push(p);
+    if (market !== "All" && p.market !== market) continue;
+    const k = slotKey(p.date, p.market, p.sku, p.kind);
+    if (log.some((e) => slotKey(e.date, e.market, e.sku, e.kind) === k)) continue;
+    pinKeys.add(p.market + "|" + p.sku + "|" + p.kind);
+    const info = skuInfo(p.sku), isBase = p.kind === "BASE";
+    const ov = overrides[k];
+    const box = isBase ? BASE_BOX : LID_BOX;
+    const units = ov != null ? Math.max(0, Math.round(Number(ov) / box) * box) : Number(p.units) || 0;
+    const row = { key: k, market: p.market, sku: p.sku, name: info.name, kind: p.kind,
+      baseColor: info.base === "Black Sparkle" ? "Black" : "White", units, boxes: units / box,
+      done: false, edited: ov != null, preApplied: !!p.preApplied, pinned: true, due: p.due || "" };
+    D(p.date).ship.push(row);
+    if (isBase && !p.preApplied) { D(p.date).apply.push({ ...row }); D(p.date).applied += units; }
+    (isBase ? usedBase : usedLid)[isBase ? baseSkuFor(p.sku) : p.sku] = ((isBase ? usedBase : usedLid)[isBase ? baseSkuFor(p.sku) : p.sku] || 0) + units;
+    const g = groups.find((x) => x.pk === p.market + "|" + p.sku);
+    if (g) { if (isBase) g.baseNeed = Math.max(0, g.baseNeed - units); else g.lidNeed = Math.max(0, g.lidNeed - units); if (isBase) g.bareLid = Math.max(0, g.bareLid - units); }
   }
-  let planned = 0, doneU = 0, appliedPlanned = 0;
 
+  // ── APPLICATION pass — capacity-bound, pulled as early as base stock allows
+  const applyDone = {};                              // pk → { units, date }
+  const work = groups.filter((g) => g.baseNeed > 0 && !pinKeys.has(g.market + "|" + g.sku + "|BASE"));
   for (const date of dates) {
-    const lines = [];
-    let capLeft = capacity;
-
-    for (const e of logByDate[date] || []) {
-      const info = skuInfo(e.sku);
-      const units = Number(e.units) || 0;
-      lines.push({ key: slotKey(date, e.market, e.sku, e.kind), market: e.market, sku: e.sku,
-        name: info.name, kind: e.kind, baseColor: info.base === "Black Sparkle" ? "Black" : "White",
-        units, boxes: units / (e.kind === "BASE" ? BASE_BOX : LID_BOX), done: true, edited: false, preApplied: false, due: e.due || "" });
-      if (e.kind === "BASE" && !e.preApplied) capLeft -= units;
-      const s = e.kind === "BASE" ? baseSkuFor(e.sku) : e.sku;
-      used[s] = (used[s] || 0) + units;
-      doneU += units;
-    }
-    for (const p of pinByDate[date] || []) {
-      if ((log || []).some((e) => e.date === date && e.market === p.market && e.sku === p.sku && e.kind === p.kind)) continue;
-      const info = skuInfo(p.sku);
-      const units = Number(p.units) || 0;
-      const box = p.kind === "BASE" ? BASE_BOX : LID_BOX;
-      const ov = overrides[slotKey(date, p.market, p.sku, p.kind)];
-      const qty = ov != null ? Math.max(0, Math.round(Number(ov) / box) * box) : units;
-      lines.push({ key: slotKey(date, p.market, p.sku, p.kind), market: p.market, sku: p.sku,
-        name: info.name, kind: p.kind, baseColor: info.base === "Black Sparkle" ? "Black" : "White",
-        units: qty, boxes: qty / box, done: false, edited: ov != null,
-        preApplied: !!p.preApplied, pinned: true, due: p.due || "" });
-      if (p.kind === "BASE" && !p.preApplied) { capLeft -= qty; appliedPlanned += qty; }
-      const ms = p.kind === "BASE" ? baseSkuFor(p.sku) : p.sku;
-      used[ms] = (used[ms] || 0) + qty;
-      planned += qty;
-    }
-    if (capLeft < 0) capLeft = 0;
-
-    // Within a day, flavours that can go out complete (every half they still
-    // need is in stock) run first — a finished pair lets the market produce,
-    // a lone base just sits there. Base-only fills follow.
-    const readyNow = (g) => {
-      const bn = g.base && g.base.need > 0 ? g.base.need : 0;
-      const ln = g.lid && g.lid.need > 0 ? g.lid.need : 0;
-      if (!bn && !ln) return false;
-      if (ln > 0 && availAt(g.sku, date) - (used[g.sku] || 0) < LID_BOX) return false;
-      if (bn > 0 && availAt(g.baseSku, date) - (used[g.baseSku] || 0) < BASE_BOX) return false;
-      return true;
-    };
-    const ready = [], rest = [];
-    for (const g of order) (readyNow(g) ? ready : rest).push(g);
-
-    // A pinned day is the agreed plan — render it exactly, don't top it up.
-    for (const g of (pinByDate[date] ? [] : [...ready, ...rest])) {
-      const bi = g.base, li = g.lid;
-      const baseNeed = bi && bi.need > 0 ? bi.need : 0;
-      const lidNeed = li && li.need > 0 ? li.need : 0;
-      if (!baseNeed && !lidNeed) continue;
-
-      const lidFree = Math.max(0, availAt(g.sku, date) - (used[g.sku] || 0));
-      const baseFree = Math.max(0, availAt(g.baseSku, date) - (used[g.baseSku] || 0));
-      const lidCan = Math.min(lidNeed, Math.floor(lidFree / LID_BOX) * LID_BOX);
-
-      // ── BASE: only as many as the market has lids for (held lids that are
-      //    still bare, plus whatever lids ship alongside today) ──────────────
-      if (baseNeed > 0) {
-        const bare = Math.max(0, mktLid[g.pk] - mktBase[g.pk]);
-        const allow = upBox(bare + lidCan, BASE_BOX);
-        const pre = Math.max(0, Number(preLeft[g.pk]) || 0);
-        const preUse = Math.floor(pre / BASE_BOX) * BASE_BOX;
-        const capUse = Math.floor(Math.max(0, capLeft) / BASE_BOX) * BASE_BOX;
-        let qty = Math.min(baseNeed, Math.floor(baseFree / BASE_BOX) * BASE_BOX, allow, preUse + capUse);
-        const ov = overrides[slotKey(date, g.market, g.sku, "BASE")];
-        if (ov != null) qty = Math.min(Math.max(0, Math.round(Number(ov) / BASE_BOX) * BASE_BOX), qty);
-        if (qty >= BASE_BOX) {
-          const fromPre = Math.min(qty, pre);
-          lines.push({ key: slotKey(date, g.market, g.sku, "BASE"), market: g.market, sku: g.sku,
-            name: g.name, kind: "BASE", baseColor: g.baseColor, units: qty, boxes: qty / BASE_BOX,
-            done: false, edited: ov != null, preApplied: fromPre > 0, due: bi.due, late: bi.due < date });
-          preLeft[g.pk] = pre - fromPre;
-          capLeft -= (qty - fromPre);
-          appliedPlanned += (qty - fromPre);
-          used[g.baseSku] = (used[g.baseSku] || 0) + qty;
-          bi.need -= qty; mktBase[g.pk] += qty; planned += qty;
-        }
-      }
-
-      // ── LID: only as many as the market has bare bases for (including the
-      //    ones just sent), so lids never run ahead either ───────────────────
-      if (lidNeed > 0) {
-        const bare = Math.max(0, mktBase[g.pk] - mktLid[g.pk]);
-        let qty = Math.min(lidCan, Math.floor(bare / LID_BOX) * LID_BOX);
-        const ov = overrides[slotKey(date, g.market, g.sku, "LID")];
-        if (ov != null) qty = Math.min(Math.max(0, Math.round(Number(ov) / LID_BOX) * LID_BOX), qty);
-        if (qty >= LID_BOX) {
-          lines.push({ key: slotKey(date, g.market, g.sku, "LID"), market: g.market, sku: g.sku,
-            name: g.name, kind: "LID", baseColor: g.baseColor, units: qty, boxes: qty / LID_BOX,
-            done: false, edited: ov != null, preApplied: false, due: li.due, late: li.due < date });
-          used[g.sku] = (used[g.sku] || 0) + qty;
-          li.need -= qty; mktLid[g.pk] += qty; planned += qty;
-        }
-      }
-    }
-
-    if (lines.length) {
-      const applied = lines.filter((l) => l.kind === "BASE" && !l.preApplied).reduce((a, l) => a + l.units, 0);
-      days.push({ date, capacity, applied, shipped: lines.reduce((a, l) => a + l.units, 0), lines });
+    let capLeft = capacity - (byDate[date] ? byDate[date].applied : 0);
+    if (capLeft <= 0) continue;
+    for (const g of work) {
+      if (g.baseNeed <= 0 || capLeft < BASE_BOX) continue;
+      const free = Math.max(0, av.at(g.baseSku, date) - (usedBase[g.baseSku] || 0));
+      const pre = Math.max(0, Number(preLeft[g.pk]) || 0);
+      let qty = Math.min(g.baseNeed, dnBox(free, BASE_BOX), dnBox(pre, BASE_BOX) + dnBox(capLeft, BASE_BOX));
+      const ov = overrides[slotKey(date, g.market, g.sku, "BASE")];
+      if (ov != null) qty = Math.min(qty, Math.max(0, Math.round(Number(ov) / BASE_BOX) * BASE_BOX));
+      if (qty < BASE_BOX) continue;
+      const fromPre = Math.min(qty, pre);
+      preLeft[g.pk] = pre - fromPre;
+      capLeft -= (qty - fromPre);
+      usedBase[g.baseSku] = (usedBase[g.baseSku] || 0) + qty;
+      g.baseNeed -= qty;
+      const d = D(date);
+      d.apply.push({ key: slotKey(date, g.market, g.sku, "BASE"), market: g.market, sku: g.sku,
+        name: g.name, kind: "BASE", baseColor: g.baseColor, units: qty, boxes: qty / BASE_BOX,
+        done: false, edited: ov != null, preApplied: fromPre > 0, due: g.due, late: g.due < date });
+      d.applied += (qty - fromPre);
+      const a = applyDone[g.pk] || (applyDone[g.pk] = { units: 0, date });
+      a.units += qty; a.date = date;
     }
   }
 
-  const left = work.filter((w) => w.need > 0);
-  return { days, queueLeft: left,
-    totals: { planned, done: doneU, applied: appliedPlanned,
-      unscheduled: left.reduce((a, w) => a + w.need, 0),
-      requirement: items.reduce((a, i) => a + i.need, 0), capacity } };
+  // ── SHIPPING pass ────────────────────────────────────────────────────────
+  // Bases that pair with lids already at the market go the next business day
+  // after they're applied. Everything else waits for its lids to land, then
+  // ships the following business day.
+  const shipQueue = [];
+  for (const g of groups) {
+    const a = applyDone[g.pk];
+    if (a && a.units > 0) {
+      const early = Math.min(a.units, dnBox(g.bareLid, BASE_BOX));
+      if (early > 0) shipQueue.push({ g, kind: "BASE", units: early, date: nextBizStr(a.date), reason: "lids already at market" });
+      const rest = a.units - early;
+      if (rest > 0) {
+        const lidReady = av.readyBy(g.sku, rest + (usedLid[g.sku] || 0), a.date);
+        const d = lidReady ? nextBizStr(lidReady > a.date ? lidReady : a.date) : null;
+        if (d) shipQueue.push({ g, kind: "BASE", units: rest, date: d, reason: "waits for lids" });
+      }
+    }
+    if (g.lidNeed > 0 && !pinKeys.has(g.market + "|" + g.sku + "|LID")) {
+      const need = g.lidNeed;
+      const lidReady = av.readyBy(g.sku, need + (usedLid[g.sku] || 0), start);
+      if (lidReady) {
+        const applyD = applyDone[g.pk] ? applyDone[g.pk].date : start;
+        const base = lidReady > applyD ? lidReady : applyD;
+        usedLid[g.sku] = (usedLid[g.sku] || 0) + need;
+        shipQueue.push({ g, kind: "LID", units: need, date: nextBizStr(base), reason: lidReady > applyD ? "day after lids land" : "with its bases" });
+      }
+    }
+  }
+  const lastDate = dates[dates.length - 1];
+  for (const s of shipQueue) {
+    if (s.date > lastDate || s.units <= 0) continue;
+    const box = s.kind === "BASE" ? BASE_BOX : LID_BOX;
+    const k = slotKey(s.date, s.g.market, s.g.sku, s.kind);
+    if (log.some((e) => slotKey(e.date, e.market, e.sku, e.kind) === k)) continue;
+    const ov = overrides[k];
+    const units = ov != null ? Math.max(0, Math.round(Number(ov) / box) * box) : s.units;
+    if (units <= 0) continue;
+    D(s.date).ship.push({ key: k, market: s.g.market, sku: s.g.sku, name: s.g.name, kind: s.kind,
+      baseColor: s.g.baseColor, units, boxes: units / box, done: false, edited: ov != null,
+      preApplied: false, due: s.g.due, late: s.g.due < s.date, reason: s.reason });
+  }
+
+  const days = dates.map((d) => byDate[d]).filter((d) => d && (d.apply.length || d.ship.length));
+  const totals = {
+    capacity,
+    toApply: days.reduce((a, d) => a + d.apply.reduce((x, l) => x + (l.preApplied ? 0 : l.units), 0), 0),
+    toShip: days.reduce((a, d) => a + d.ship.reduce((x, l) => x + l.units, 0), 0),
+    done: log.reduce((a, e) => a + (Number(e.units) || 0), 0),
+    unapplied: groups.reduce((a, g) => a + Math.max(0, g.baseNeed), 0),
+    requirement: groups.reduce((a, g) => a + g.baseNeed + g.lidNeed, 0),
+  };
+  const markets = [...new Set(Object.values(mw.byKey || {}).flatMap((m) => Object.keys(m)))].sort();
+  return { days, totals, markets, queueLeft: groups.filter((g) => g.baseNeed > 0) };
 }
