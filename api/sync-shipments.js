@@ -1,5 +1,5 @@
-// sync-shipments.js — Vercel serverless function, run by cron at 06:00 / 12:00
-// / 18:00 America/Denver. Pulls Wana Cube Item Fulfillments for every market
+// sync-shipments.js — Vercel serverless function, run by cron at 06:00 and 12:00
+// America/Denver. Pulls Wana Cube Item Fulfillments for every market
 // from NetSuite, transforms them with the shared report logic, and upserts the
 // result into Supabase `shipment_log` (id = 1) for the Shipments tab to read.
 //
