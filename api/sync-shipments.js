@@ -130,12 +130,13 @@ export default async function handler(req, res) {
     const soIds = [...new Set(lines.map((r) => r.createdfrom).filter(Boolean))].slice(0, 900);
     const poQty = {};
     if (soIds.length) {
-      const so = await suiteql(`SELECT tl.item, ABS(tl.quantity) AS ordered_qty FROM transactionline tl
+      const so = await suiteql(`SELECT tl.transaction, tl.item, ABS(tl.quantity) AS ordered_qty FROM transactionline tl
         WHERE tl.transaction IN (${soIds.join(",")}) AND tl.item IS NOT NULL AND tl.mainline = 'F'`, env).catch(() => []);
-      for (const r of so) poQty[r.item] = (poQty[r.item] || 0) + (Number(r.ordered_qty) || 0);
+      // key by SO + item so progress is measured against the right order
+      for (const r of so) { const k = `${r.transaction}|${r.item}`; poQty[k] = (poQty[k] || 0) + (Number(r.ordered_qty) || 0); }
     }
 
-    const history = lines.map((r) => ({ item_id: r.item_id, trandate: r.trandate, qty: Number(r.qty) || 0 }));
+    const history = lines.map((r) => ({ item_id: r.item_id, createdfrom: r.createdfrom, trandate: r.trandate, qty: Number(r.qty) || 0 }));
     const report = buildShipmentReport(lines, { tracking, carrier, poQty, history });
 
     const r = await fetch(`${SUPABASE_URL}/rest/v1/shipment_log?id=eq.1`, {

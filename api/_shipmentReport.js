@@ -30,6 +30,15 @@ export function normFlavor(s) {
 export function flavorFromLabel(displayname) { const p = String(displayname || "").split(" - "); return normFlavor(p[p.length - 1]); }
 export function flavorFromLid(displayname) { return normFlavor(String(displayname || "").split(":")[0]); }
 
+// NetSuite returns dates as M/D/YYYY, which does NOT sort chronologically as a
+// string ("7/6/2026" > "7/31/2026"). Normalise before any date comparison.
+export function toISO(d) {
+  const s = String(d || "").trim();
+  const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (m) return `${m[3]}-${String(m[1]).padStart(2, "0")}-${String(m[2]).padStart(2, "0")}`;
+  return s;
+}
+
 /**
  * @param rows  fulfillment lines: {fid, tranid, trandate, item_id, itemid, displayname, qty, createdfrom, customer_id, customer_name}
  * @param meta  { tracking: {fid: number}, carrier: {fid: method}, poQty: {item_id: qty}, history: [{item_id, trandate, qty}] }
@@ -67,9 +76,21 @@ export function buildShipmentReport(rows, meta = {}) {
   }
 
   // cumulative per item across all history, up to and including a ship date (§5.6)
-  const hist = (meta.history || []).slice().sort((a, b) => String(a.trandate).localeCompare(String(b.trandate)));
-  const cumulative = (itemId, uptoDate) => hist.reduce((a, h) =>
-    (String(h.item_id) === String(itemId) && String(h.trandate) <= String(uptoDate) ? a + (Number(h.qty) || 0) : a), 0);
+  // Built from the DEDUPLICATED lines, never the caller's raw rows — NetSuite
+  // repeats each line 2–3× per fulfillment (§5.1) and using raw history here
+  // doubles or triples every cumulative total.
+  const hist = lines.map((r) => ({ item_id: r.item_id, createdfrom: r.createdfrom,
+    trandate: r.trandate, qty: Number(r.qty) || 0 }))
+    .sort((a, b) => toISO(a.trandate).localeCompare(toISO(b.trandate)));
+  // Scoped to the line's own sales order — an item ships to many customers on
+  // many SOs, and summing across all of them inflates progress past 100%.
+  const cumulative = (itemId, soId, uptoDate) => hist.reduce((a, h) =>
+    (String(h.item_id) === String(itemId) && String(h.createdfrom) === String(soId)
+      && toISO(h.trandate) <= toISO(uptoDate) ? a + (Number(h.qty) || 0) : a), 0);
+  const orderedQty = (itemId, soId) => {
+    const k = `${soId}|${itemId}`;
+    return poQty[k] != null ? poQty[k] : (poQty[itemId] != null ? poQty[itemId] : null);
+  };
 
   const out = [];
   for (const g of Object.values(groups)) {
@@ -87,8 +108,8 @@ export function buildShipmentReport(rows, meta = {}) {
       const q = Number(r.qty) || 0;
       out.push({ shipment: g, sku: r.itemid, flavor: `${flavorFromLid(r.displayname)} - LID`,
         component_type: "LID", quantity_shipped: q,
-        total_shipped_on_po: cumulative(r.item_id, g.ship_date) || q,
-        po_quantity: poQty[r.item_id] != null ? poQty[r.item_id] : null,
+        total_shipped_on_po: cumulative(r.item_id, r.createdfrom, g.ship_date) || q,
+        po_quantity: orderedQty(r.item_id, r.createdfrom),
         source_sku: r.itemid, source_item_id: r.item_id });
     }
     // §5.5 BASE rows are derived from the LABEL lines (bases carry no flavour);
@@ -106,8 +127,8 @@ export function buildShipmentReport(rows, meta = {}) {
       }
       out.push({ shipment: g, sku: APPL_COLOR(fee.displayname),
         flavor: `${flavorFromLabel(r.displayname)} - BASE`, component_type: "BASE", quantity_shipped: q,
-        total_shipped_on_po: cumulative(r.item_id, g.ship_date) || q,
-        po_quantity: poQty[r.item_id] != null ? poQty[r.item_id] : null,
+        total_shipped_on_po: cumulative(r.item_id, r.createdfrom, g.ship_date) || q,
+        po_quantity: orderedQty(r.item_id, r.createdfrom),
         source_sku: r.itemid, source_item_id: r.item_id });
     }
     // §6 base reconciliation: Σ appl fees per colour == Σ PB- shipped per colour
@@ -130,7 +151,7 @@ export function buildShipmentReport(rows, meta = {}) {
     fulfillment_tranids: g.fulfillment_tranids, reconciliation: g.reconciliation || [],
     lines: out.filter((l) => l.shipment === g).map(({ shipment, ...l }) => ({ ...l,
       po_percent_complete: l.po_quantity ? Number((l.total_shipped_on_po / l.po_quantity).toFixed(4)) : null })),
-  })).filter((s) => s.lines.length).sort((a, b) => String(b.ship_date).localeCompare(String(a.ship_date)));
+  })).filter((s) => s.lines.length).sort((a, b) => toISO(b.ship_date).localeCompare(toISO(a.ship_date)));
 
   const markets = [...new Set(shipments.map((s) => s.market).filter(Boolean))].sort();
   return { generated_at: new Date().toISOString(), source: "netsuite.suiteql", markets, shipments, warnings };

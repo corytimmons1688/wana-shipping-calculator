@@ -4,11 +4,11 @@ const lines = JSON.parse(readFileSync("/tmp/ship-lines.json","utf8"));
 const trk = JSON.parse(readFileSync("/tmp/ship-track.json","utf8"));
 const tracking={}, carrier={};
 for(const r of trk){ carrier[r.fid]=r.shippingmethod; if(r.trackingnumber) tracking[r.fid]=r.trackingnumber; }
-const history = lines.map(r=>({item_id:r.item_id, trandate:r.trandate, qty:Number(r.qty)||0}));
+const history = lines.map(r=>({item_id:r.item_id, createdfrom:r.createdfrom, trandate:r.trandate, qty:Number(r.qty)||0}));
 const rows = lines.map(r=>({ fid:r.fid, tranid:r.tranid, trandate:r.trandate, item_id:r.item_id,
   itemid:r.itemid, displayname:r.displayname, qty:Number(r.qty)||0, createdfrom:r.createdfrom,
   customer_id:r.companyname, customer_name:r.companyname }));
-const rep = buildShipmentReport(rows, { tracking, carrier, poQty:{}, history });
+const rep = buildShipmentReport(rows, { tracking, carrier, poQty: JSON.parse(readFileSync("/tmp/po-qty.json","utf8")), history });
 console.log("markets:", rep.markets.join(", "));
 console.log("shipments:", rep.shipments.length, "| warnings:", rep.warnings.length);
 for(const s of rep.shipments.slice(0,3))
