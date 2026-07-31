@@ -622,10 +622,12 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
       {view === "apply" && (() => {
         const aps = actuals.applySchedule || { capacity: 12474, log: [], overrides: {} };
         const sched = buildApplySchedule({
-          mw, grid, actuals, today: new Date(),
+          mw, grid, actuals, today: new Date(), startDate: aps.startDate || undefined,
           capacity: aps.capacity, log: aps.log, overrides: aps.overrides,
-          preApplied: aps.preApplied || {}, marketStock: actuals.marketStock || {}, numDays: 40,
+          preApplied: aps.preApplied || {}, marketStock: actuals.marketStock || {},
+          pinned: aps.pinned || [], numDays: 40,
         });
+        const firstDay = sched.days.length ? sched.days[0].date : "";
         const updSched = (fn) => updActuals((a) => {
           if (!a.applySchedule) a.applySchedule = { capacity: 12474, log: [], overrides: {} };
           if (!Array.isArray(a.applySchedule.log)) a.applySchedule.log = [];
@@ -638,6 +640,8 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
             s.log.push({ date, market: line.market, sku: line.sku, kind: line.kind,
               units: line.units, due: line.due, preApplied: !!line.preApplied });
             delete s.overrides[k];
+            if (Array.isArray(s.pinned))
+              s.pinned = s.pinned.filter((p) => !(p.date === date && p.market === line.market && p.sku === line.sku && p.kind === line.kind));
           } else {
             const i = s.log.findIndex((e) => e.date === date && e.market === line.market && e.sku === line.sku && e.kind === line.kind);
             if (i >= 0) s.log.splice(i, 1);
@@ -679,6 +683,10 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
                   onChange={(e) => { const v = Math.min(CAP_MAX, Math.max(CAP_MIN, Number(e.target.value) || CAP_MIN)); updSched((s) => { s.capacity = v; }); }}
                   style={{ width: 78, background: T.S2, border: "1px solid " + T.BD, color: T.AC, borderRadius: 3, padding: "2px 5px", fontSize: 11, fontFamily: "'JetBrains Mono',monospace" }} />
                 <span style={{ color: T.T2 }}>= {Math.floor(aps.capacity / BASE_BOX)} base boxes</span>
+              </label>
+              <label style={{ fontSize: 10, color: T.T2, display: "flex", alignItems: "center", gap: 4 }}>
+                Starts
+                <DateEd value={aps.startDate || firstDay} onChange={(v) => updSched((s) => { s.startDate = v || ""; })} />
               </label>
               <button onClick={exportApply} style={{ padding: "3px 11px", borderRadius: 4, border: "1px solid " + T.GR, background: T.GR + "10", color: T.GR, cursor: "pointer", fontSize: 10, fontWeight: 700 }}>⬇ Download Excel</button>
               {aps.log.length > 0 && (
@@ -738,6 +746,7 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
                             <td style={{ ...td, textDecoration: l.done ? "line-through" : undefined }}>
                               {l.name} <span style={{ fontWeight: 700 }}>– {l.kind}</span>
                               <span style={{ marginLeft: 5, fontSize: 8.5, color: T.T2, fontFamily: "'JetBrains Mono',monospace" }}>{l.sku}</span>
+                              {l.pinned && <span title="Agreed by the team — kept exactly as entered" style={{ marginLeft: 5, fontSize: 8, color: T.AC, border: "1px solid " + T.AC + "66", borderRadius: 3, padding: "0 3px" }}>pinned</span>}
                               {l.preApplied && <span title="Already applied — ships without using application capacity" style={{ marginLeft: 5, fontSize: 8, color: T.GR, border: "1px solid " + T.GR + "66", borderRadius: 3, padding: "0 3px" }}>pre-applied</span>}
                             </td>
                             <td style={{ ...td, textAlign: "center" }}>

@@ -39,6 +39,14 @@ function businessDays(from, n) {
   return out;
 }
 
+// Work is picked and labelled the day before it ships, so the plan opens on the
+// next business day — nothing is ever scheduled for today.
+export function nextBusinessDay(from) {
+  const d = new Date(from.getFullYear(), from.getMonth(), from.getDate() + 1);
+  while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() + 1);
+  return iso(d);
+}
+
 // TRUE stock at Calyx: received inbound − everything shipped out ± adjustments,
 // plus not-yet-received inbound keyed by ETA. (calcSkuInventory can't be used —
 // it is anchored to the MRP as-of date and treats demand, not outbound, as the
@@ -68,11 +76,13 @@ function availabilityFn(actuals) {
   };
 }
 
-export function buildApplySchedule({ mw, grid, actuals, today,
+export function buildApplySchedule({ mw, grid, actuals, today, startDate,
   capacity = DEFAULT_CAPACITY, log = [], overrides = {}, preApplied = {},
-  marketStock = {}, numDays = 30, dueWindowDays = DUE_WINDOW_DAYS }) {
+  marketStock = {}, pinned = [], numDays = 30, dueWindowDays = DUE_WINDOW_DAYS }) {
 
   const todayStr = iso(today);
+  const start = startDate || nextBusinessDay(today);
+  const startD = (() => { const p = start.split("-").map(Number); return new Date(p[0], p[1] - 1, p[2]); })();
   const windowEnd = new Date(today.getFullYear(), today.getMonth(), today.getDate() + dueWindowDays);
   const windowEndStr = iso(windowEnd);
 
@@ -119,7 +129,7 @@ export function buildApplySchedule({ mw, grid, actuals, today,
 
   const availAt = availabilityFn(actuals);
   const used = {};
-  const dates = businessDays(today, numDays);
+  const dates = businessDays(startD, numDays);
   const logByDate = {};
   for (const e of log) (logByDate[e.date] = logByDate[e.date] || []).push(e);
 
@@ -143,6 +153,19 @@ export function buildApplySchedule({ mw, grid, actuals, today,
     a.due.localeCompare(b.due) || a.market.localeCompare(b.market) || a.name.localeCompare(b.name));
   const mktLid = {}, mktBase = {};
   for (const g of order) { mktLid[g.pk] = held(g.market, g.sku, "LID"); mktBase[g.pk] = held(g.market, g.sku, "BASE"); }
+
+  // Pinned lines are days the team has already agreed. They render exactly as
+  // entered and are consumed out of the requirement up front, so the derived
+  // plan works around them instead of re-proposing the same work.
+  const pinByDate = {};
+  for (const p of pinned) {
+    const g = groups[p.market + "|" + p.sku];
+    const it = g && g[p.kind === "BASE" ? "base" : "lid"];
+    const units = Number(p.units) || 0;
+    if (it) it.need = Math.max(0, it.need - units);
+    if (g) { if (p.kind === "BASE") mktBase[g.pk] += units; else mktLid[g.pk] += units; }
+    (pinByDate[p.date] = pinByDate[p.date] || []).push(p);
+  }
   let planned = 0, doneU = 0, appliedPlanned = 0;
 
   for (const date of dates) {
@@ -160,9 +183,40 @@ export function buildApplySchedule({ mw, grid, actuals, today,
       used[s] = (used[s] || 0) + units;
       doneU += units;
     }
+    for (const p of pinByDate[date] || []) {
+      if ((log || []).some((e) => e.date === date && e.market === p.market && e.sku === p.sku && e.kind === p.kind)) continue;
+      const info = skuInfo(p.sku);
+      const units = Number(p.units) || 0;
+      const box = p.kind === "BASE" ? BASE_BOX : LID_BOX;
+      const ov = overrides[slotKey(date, p.market, p.sku, p.kind)];
+      const qty = ov != null ? Math.max(0, Math.round(Number(ov) / box) * box) : units;
+      lines.push({ key: slotKey(date, p.market, p.sku, p.kind), market: p.market, sku: p.sku,
+        name: info.name, kind: p.kind, baseColor: info.base === "Black Sparkle" ? "Black" : "White",
+        units: qty, boxes: qty / box, done: false, edited: ov != null,
+        preApplied: !!p.preApplied, pinned: true, due: p.due || "" });
+      if (p.kind === "BASE" && !p.preApplied) { capLeft -= qty; appliedPlanned += qty; }
+      const ms = p.kind === "BASE" ? baseSkuFor(p.sku) : p.sku;
+      used[ms] = (used[ms] || 0) + qty;
+      planned += qty;
+    }
     if (capLeft < 0) capLeft = 0;
 
-    for (const g of order) {
+    // Within a day, flavours that can go out complete (every half they still
+    // need is in stock) run first — a finished pair lets the market produce,
+    // a lone base just sits there. Base-only fills follow.
+    const readyNow = (g) => {
+      const bn = g.base && g.base.need > 0 ? g.base.need : 0;
+      const ln = g.lid && g.lid.need > 0 ? g.lid.need : 0;
+      if (!bn && !ln) return false;
+      if (ln > 0 && availAt(g.sku, date) - (used[g.sku] || 0) < LID_BOX) return false;
+      if (bn > 0 && availAt(g.baseSku, date) - (used[g.baseSku] || 0) < BASE_BOX) return false;
+      return true;
+    };
+    const ready = [], rest = [];
+    for (const g of order) (readyNow(g) ? ready : rest).push(g);
+
+    // A pinned day is the agreed plan — render it exactly, don't top it up.
+    for (const g of (pinByDate[date] ? [] : [...ready, ...rest])) {
       const bi = g.base, li = g.lid;
       const baseNeed = bi && bi.need > 0 ? bi.need : 0;
       const lidNeed = li && li.need > 0 ? li.need : 0;

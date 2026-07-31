@@ -30,6 +30,8 @@ function migrate(d) {
   if (!d.applySchedule.overrides || typeof d.applySchedule.overrides !== "object") d.applySchedule.overrides = {};
   // bases already labelled for a market+flavor — ship without using capacity
   if (!d.applySchedule.preApplied || typeof d.applySchedule.preApplied !== "object") d.applySchedule.preApplied = {};
+  // days the team has agreed — rendered verbatim, planned around
+  if (!Array.isArray(d.applySchedule.pinned)) d.applySchedule.pinned = [];
   // components each market currently holds: { market: { lidSku: {lid, base} } }
   if (!d.marketStock || typeof d.marketStock !== "object") d.marketStock = {};
   for (const sh of d.inbound) {
