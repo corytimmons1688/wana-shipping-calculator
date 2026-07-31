@@ -126,9 +126,23 @@ export function buildApplySchedule({ mw, grid, actuals, today,
   const days = [];
   const work = items.map((i) => ({ ...i }));
   const preLeft = { ...preApplied };                  // pre-applied stock is finite
-  // a flavour's lids ship with (or after) its labelled bases, never ahead of them
-  const baseOutstanding = {};
-  for (const i of work) if (i.kind === "BASE") baseOutstanding[i.market + "|" + i.sku] = i.need;
+
+  // Base and lid for one flavour are planned together so the market's two halves
+  // stay in step: we only send bases that pair with lids it already holds (or
+  // that go out the same day), and only lids that pair with its bases. Excess of
+  // either side is held back until its counterpart is available.
+  const groups = {};
+  for (const it of work) {
+    const pk = it.market + "|" + it.sku;
+    const g = groups[pk] || (groups[pk] = { pk, market: it.market, sku: it.sku, name: it.name,
+      baseSku: it.baseSku, baseColor: it.baseColor, due: it.due });
+    g[it.kind === "BASE" ? "base" : "lid"] = it;
+    if (it.due < g.due) g.due = it.due;
+  }
+  const order = Object.values(groups).sort((a, b) =>
+    a.due.localeCompare(b.due) || a.market.localeCompare(b.market) || a.name.localeCompare(b.name));
+  const mktLid = {}, mktBase = {};
+  for (const g of order) { mktLid[g.pk] = held(g.market, g.sku, "LID"); mktBase[g.pk] = held(g.market, g.sku, "BASE"); }
   let planned = 0, doneU = 0, appliedPlanned = 0;
 
   for (const date of dates) {
@@ -148,41 +162,55 @@ export function buildApplySchedule({ mw, grid, actuals, today,
     }
     if (capLeft < 0) capLeft = 0;
 
-    for (const it of work) {
-      if (it.need <= 0) continue;
-      const isBase = it.kind === "BASE";
-      const pk = it.market + "|" + it.sku;
-      // hold a flavour's lids until its bases are covered, so they travel together
-      if (!isBase && (baseOutstanding[pk] || 0) > 0) continue;
-      const matSku = isBase ? it.baseSku : it.sku;
-      const box = isBase ? BASE_BOX : LID_BOX;
-      const free = availAt(matSku, date) - (used[matSku] || 0);
-      if (free < box) continue;
-      let qty = Math.min(it.need, Math.floor(free / box) * box);
-      const pre = isBase ? Math.max(0, Number(preLeft[pk]) || 0) : 0;
-      if (isBase) {
-        const preUse = Math.floor(pre / box) * box;
-        const capUse = Math.floor(Math.max(0, capLeft) / box) * box;
-        qty = Math.min(qty, preUse + capUse);
-      }
-      if (qty < box) continue;
-      const ov = overrides[slotKey(date, it.market, it.sku, it.kind)];
-      if (ov != null) qty = Math.min(Math.max(0, Math.round(Number(ov) / box) * box), qty);
-      if (qty <= 0) continue;
+    for (const g of order) {
+      const bi = g.base, li = g.lid;
+      const baseNeed = bi && bi.need > 0 ? bi.need : 0;
+      const lidNeed = li && li.need > 0 ? li.need : 0;
+      if (!baseNeed && !lidNeed) continue;
 
-      const fromPre = isBase ? Math.min(qty, pre) : 0;
-      lines.push({ key: slotKey(date, it.market, it.sku, it.kind), market: it.market, sku: it.sku,
-        name: it.name, kind: it.kind, baseColor: it.baseColor, units: qty, boxes: qty / box,
-        done: false, edited: ov != null, preApplied: fromPre > 0, due: it.due, late: it.due < date });
-      if (isBase) {
-        preLeft[pk] = pre - fromPre;
-        capLeft -= (qty - fromPre);
-        appliedPlanned += (qty - fromPre);
-        baseOutstanding[pk] = Math.max(0, (baseOutstanding[pk] || 0) - qty);
+      const lidFree = Math.max(0, availAt(g.sku, date) - (used[g.sku] || 0));
+      const baseFree = Math.max(0, availAt(g.baseSku, date) - (used[g.baseSku] || 0));
+      const lidCan = Math.min(lidNeed, Math.floor(lidFree / LID_BOX) * LID_BOX);
+
+      // ── BASE: only as many as the market has lids for (held lids that are
+      //    still bare, plus whatever lids ship alongside today) ──────────────
+      if (baseNeed > 0) {
+        const bare = Math.max(0, mktLid[g.pk] - mktBase[g.pk]);
+        const allow = upBox(bare + lidCan, BASE_BOX);
+        const pre = Math.max(0, Number(preLeft[g.pk]) || 0);
+        const preUse = Math.floor(pre / BASE_BOX) * BASE_BOX;
+        const capUse = Math.floor(Math.max(0, capLeft) / BASE_BOX) * BASE_BOX;
+        let qty = Math.min(baseNeed, Math.floor(baseFree / BASE_BOX) * BASE_BOX, allow, preUse + capUse);
+        const ov = overrides[slotKey(date, g.market, g.sku, "BASE")];
+        if (ov != null) qty = Math.min(Math.max(0, Math.round(Number(ov) / BASE_BOX) * BASE_BOX), qty);
+        if (qty >= BASE_BOX) {
+          const fromPre = Math.min(qty, pre);
+          lines.push({ key: slotKey(date, g.market, g.sku, "BASE"), market: g.market, sku: g.sku,
+            name: g.name, kind: "BASE", baseColor: g.baseColor, units: qty, boxes: qty / BASE_BOX,
+            done: false, edited: ov != null, preApplied: fromPre > 0, due: bi.due, late: bi.due < date });
+          preLeft[g.pk] = pre - fromPre;
+          capLeft -= (qty - fromPre);
+          appliedPlanned += (qty - fromPre);
+          used[g.baseSku] = (used[g.baseSku] || 0) + qty;
+          bi.need -= qty; mktBase[g.pk] += qty; planned += qty;
+        }
       }
-      used[matSku] = (used[matSku] || 0) + qty;
-      it.need -= qty;
-      planned += qty;
+
+      // ── LID: only as many as the market has bare bases for (including the
+      //    ones just sent), so lids never run ahead either ───────────────────
+      if (lidNeed > 0) {
+        const bare = Math.max(0, mktBase[g.pk] - mktLid[g.pk]);
+        let qty = Math.min(lidCan, Math.floor(bare / LID_BOX) * LID_BOX);
+        const ov = overrides[slotKey(date, g.market, g.sku, "LID")];
+        if (ov != null) qty = Math.min(Math.max(0, Math.round(Number(ov) / LID_BOX) * LID_BOX), qty);
+        if (qty >= LID_BOX) {
+          lines.push({ key: slotKey(date, g.market, g.sku, "LID"), market: g.market, sku: g.sku,
+            name: g.name, kind: "LID", baseColor: g.baseColor, units: qty, boxes: qty / LID_BOX,
+            done: false, edited: ov != null, preApplied: false, due: li.due, late: li.due < date });
+          used[g.sku] = (used[g.sku] || 0) + qty;
+          li.need -= qty; mktLid[g.pk] += qty; planned += qty;
+        }
+      }
     }
 
     if (lines.length) {
