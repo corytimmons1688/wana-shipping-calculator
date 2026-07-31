@@ -65,9 +65,16 @@ async function suiteql(q, env, { pageSize = 1000 } = {}) {
 
 export default async function handler(req, res) {
   const env = process.env;
-  if (env.CRON_SECRET) {
-    const auth = req.headers.authorization || "";
-    if (auth !== `Bearer ${env.CRON_SECRET}`) return res.status(401).json({ error: "unauthorized" });
+  // Vercel sends `Authorization: Bearer <CRON_SECRET>` on cron invocations.
+  // Trim both sides — a trailing newline pasted into the env var is the most
+  // common cause of a false mismatch — and tolerate a caller omitting "Bearer ".
+  // Constant-time compare so the endpoint can't be used as an oracle.
+  const expected = String(env.CRON_SECRET || "").trim();
+  if (expected) {
+    const got = String(req.headers.authorization || "").trim().replace(/^Bearer\s+/i, "").trim();
+    const a = Buffer.from(got), b = Buffer.from(expected);
+    const ok = a.length === b.length && crypto.timingSafeEqual(a, b);
+    if (!ok) return res.status(401).json({ error: "unauthorized", hint: "Authorization header did not match CRON_SECRET" });
   }
   const missing = ["NS_ACCOUNT", "NS_CONSUMER_KEY", "NS_CONSUMER_SECRET", "NS_TOKEN_ID", "NS_TOKEN_SECRET"].filter((k) => !env[k]);
   if (missing.length) return res.status(503).json({ error: "NetSuite credentials not configured", missing });
