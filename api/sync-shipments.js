@@ -149,6 +149,9 @@ export default async function handler(req, res) {
     return res.status(200).json({ ok: true, generated_at: report.generated_at,
       markets: report.markets, shipments: report.shipments.length, warnings: report.warnings.length });
   } catch (e) {
+    // Surface the reason in Vercel logs — a cron failure is otherwise invisible
+    // because the message only ever reached the HTTP response body.
+    console.error('[sync-shipments] failed:', String(e && e.message || e));
     return res.status(500).json({ error: String(e.message || e) });
   }
 }
