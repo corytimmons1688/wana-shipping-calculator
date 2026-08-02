@@ -101,8 +101,8 @@ export default async function handler(req, res) {
       LEFT JOIN item i ON i.id = tl.item
       WHERE t.type = 'ItemShip' AND tl.mainline = 'F' AND tl.item IS NOT NULL
         AND (i.itemid LIKE 'PL-WCB-%' OR i.itemid LIKE 'PB-WCB-%'
-             OR i.itemid LIKE 'WANA-%' OR i.itemid LIKE '%Label Appl Fee%'
-             OR i.displayname LIKE '%Label Appl Fee%')
+             OR i.itemid LIKE 'WANA-%' OR i.itemid LIKE '%Wana Cube Base Label Appl Fee%'
+             OR i.displayname LIKE '%Wana Cube Base Label Appl Fee%')
       ORDER BY t.trandate DESC`, env);
 
     const fids = [...new Set(lines.map((r) => r.fid))];

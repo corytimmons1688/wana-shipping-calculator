@@ -11,11 +11,13 @@ export const LABEL_RE = /^WANA-([A-Z]{2})-/;
 export const IS_LID = (sku) => /^PL-WCB-/.test(sku || "");
 export const IS_BASE = (sku) => /^PB-WCB-/.test(sku || "");
 export const IS_LABEL = (sku) => LABEL_RE.test(sku || "");
-// NOTE: appl-fee rows carry their text in itemid and have a NULL displayname,
-// so both fields must be considered — testing displayname alone silently
-// dropped every base row and left the labels looking like orphans.
-export const IS_APPL_FEE = (r) => /Label Appl Fee/i.test(typeof r === "string" ? r : `${(r && r.itemid) || ""} ${(r && r.displayname) || ""}`);
-export const APPL_COLOR = (r) => (/black/i.test(typeof r === "string" ? r : `${(r && r.itemid) || ""} ${(r && r.displayname) || ""}`) ? "PB-WCB-221-00" : "PB-WCB-002-00");
+// Appl-fee rows carry their text in itemid with a NULL displayname, so both
+// fields must be read. The name must say WANA CUBE: legacy 25D/45D programmes
+// have their own base-label appl fees, and matching those attributed legacy
+// jars to PB-WCB bases that were never shipped.
+const feeText = (r) => (typeof r === "string" ? r : `${(r && r.itemid) || ""} ${(r && r.displayname) || ""}`);
+export const IS_APPL_FEE = (r) => /wana\s*cube.*label\s*appl\s*fee/i.test(feeText(r));
+export const APPL_COLOR = (r) => (/black/i.test(feeText(r)) ? "PB-WCB-221-00" : "PB-WCB-002-00");
 
 // §9.3 — carrier names are free-form; map explicitly, pass unknowns through.
 const CARRIER = { FEDEX: "FedEx", "FEDEX FREIGHT": "FedEx Freight", ESTES: "Estes",
@@ -98,6 +100,10 @@ export function buildShipmentReport(rows, meta = {}) {
   const out = [];
   for (const g of Object.values(groups)) {
     const raw = g._raw;
+    // Skip groups with no Wana Cube component at all — a market still running
+    // legacy 25D/45D jars ships WANA-<ST>-* labels that look similar but are a
+    // different product line and do not belong in this report.
+    if (!raw.some((r) => IS_LID(r.itemid) || IS_BASE(r.itemid))) continue;
     const labels = raw.filter((r) => IS_LABEL(r.itemid));
     const appl = raw.filter((r) => IS_APPL_FEE(r));
     const lids = raw.filter((r) => IS_LID(r.itemid));
