@@ -4,7 +4,7 @@
 // suggestions, plus editors for inbound shipments, outbound-to-Wana shipments,
 // open POs, and targets. Actuals are shared across scenarios (Supabase `actuals`).
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { calcSkuWeeklyForecast, calcSkuInventory, calcSkuMarketWeekly, shipmentEta, buildWeekGrid, skuInfo } from "../utils/inventory";
 import { buildApplySchedule, slotKey, LID_BOX, BASE_BOX, CAP_MIN, CAP_MAX } from "../utils/applySchedule";
 import { parseLocalDate } from "../utils/calc";
@@ -83,6 +83,19 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
   const [adjVal, setAdjVal] = useState("");
   const [mrpCollapsed, setMrpCollapsed] = useState(() => new Set());
   const [applyMkt, setApplyMkt] = useState("All");
+  // Live NetSuite on-hand, refreshed by the sync cron into shipment_log.
+  const [nsInv, setNsInv] = useState({ loading: true, rows: [], at: null, err: null });
+  const loadNsInv = () => {
+    const U = "https://fxdyiurjioesdmedmgzu.supabase.co/rest/v1/shipment_log?id=eq.1&select=data,updated_at";
+    const K = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ4ZHlpdXJqaW9lc2RtZWRtZ3p1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI3MzIzOTYsImV4cCI6MjA4ODMwODM5Nn0.5ueK5iXQ35oThb02ClX3iErPwYR4tPih9GtBAmhDQYk";
+    setNsInv((p) => ({ ...p, loading: true }));
+    fetch(U, { headers: { apikey: K, Authorization: `Bearer ${K}` } })
+      .then((r) => r.json())
+      .then((rows) => setNsInv({ loading: false, err: null,
+        rows: ((rows[0] || {}).data || {}).inventory || [], at: (rows[0] || {}).updated_at || null }))
+      .catch((e) => setNsInv({ loading: false, rows: [], at: null, err: String(e.message || e) }));
+  };
+  useEffect(() => { if (view === "live") loadNsInv(); }, [view]);
   // Inventory model "as of" date — anchored to the last week of May (May 25,
   // 2026, a Monday on the week grid) since NJ's demand begins that week.
   // Nothing has shipped/been consumed before this, so the projection starts here.
@@ -223,7 +236,6 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
   return (
     <div style={{ padding: "14px 18px" }}>
       <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
-        {card("On hand at Calyx", fm(Math.round(inv.totals.onHand)), "received − shipped to Wana ± adjustments", inv.totals.onHand < 0 ? "#dc2626" : T.AC)}
         {card("In transit (inbound)", fm(Math.round(inv.totals.inTransit)), inv.totals.nextArrival ? `next arrival ${dF(inv.totals.nextArrival)} · ${inv.totals.inTransitShipments} shipments` : `${inv.totals.inTransitShipments} shipments`, T.PU)}
         {card("SKUs at risk", fm(inv.totals.atRisk), "months on hand below 1.0", inv.totals.atRisk > 0 ? "#dc2626" : T.GR)}
         {card("Open PO remaining", fm(Math.round(inv.totals.poRemaining)), "not yet shipped from factory", T.AM)}
@@ -238,6 +250,7 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
         {subBtn("targets", "Targets")}
         {subBtn("factory", "Factory Priority")}
         {subBtn("apply", "Apply Schedule")}
+        {subBtn("live", "Live Inventory (NS)")}
         <span style={{ marginLeft: "auto", fontSize: 9.5, color: T.T2 }}>forecast: scenario “{sc.name}”</span>
       </div>
 
@@ -787,6 +800,63 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
             <div style={{ marginTop: 8, fontSize: 9, color: T.T2 }}>
               Application runs as early as base stock allows — ahead of lid arrival — so a market ships the day after its lids reach Calyx. Bases pairing with lids the market already holds ship the next business day. Lid boxes {fm(LID_BOX)} · base boxes {fm(BASE_BOX)}.
               {sched.queueLeft.length > 0 && <> <span style={{ color: "#92400e" }}>⚠ {fm(Math.round(sched.totals.unapplied))} units can&rsquo;t be applied in this window — base stock hasn&rsquo;t landed.</span></>}
+            </div>
+          </div>
+        );
+      })()}
+
+
+      {view === "live" && (() => {
+        const rows = nsInv.rows.filter((r) => r.onHand !== 0 || r.available !== 0);
+        const tot = rows.reduce((a, r) => a + r.onHand, 0);
+        const bases = rows.filter((r) => r.sku.startsWith("PB-")).reduce((a, r) => a + r.onHand, 0);
+        const numC = { ...td, textAlign: "right", fontFamily: "'JetBrains Mono',monospace", fontSize: 11 };
+        return (
+          <div style={{ background: T.S1, border: "1px solid " + T.BD, borderRadius: 6 }}>
+            <div style={{ padding: "8px 12px", display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+              <span style={{ fontSize: 11, fontWeight: 700 }}>Live inventory — NetSuite</span>
+              <button onClick={loadNsInv} style={{ padding: "3px 10px", borderRadius: 4, border: "1px solid " + T.BD, background: "transparent", color: T.T2, cursor: "pointer", fontSize: 10 }}>↻ Refresh</button>
+              {[["SKUs", fm(rows.length), T.AC], ["Total on hand", fm(tot), T.TX],
+                ["Bases", fm(bases), T.GR], ["Lids", fm(tot - bases), T.PU]].map(([l, v, c], i) => (
+                <div key={i} style={{ background: T.S2, borderRadius: 5, padding: "3px 9px", border: "1px solid " + T.BD }}>
+                  <div style={{ color: T.T2, fontSize: 8, textTransform: "uppercase" }}>{l}</div>
+                  <div style={{ color: c, fontSize: 12.5, fontWeight: 700, fontFamily: "'JetBrains Mono',monospace" }}>{v}</div>
+                </div>
+              ))}
+              <span style={{ marginLeft: "auto", fontSize: 9, color: T.T2 }}>
+                {nsInv.loading ? "loading…" : nsInv.at ? `synced ${new Date(nsInv.at).toLocaleString()}` : "not synced yet"}
+              </span>
+            </div>
+            {nsInv.err && <div style={{ margin: "0 12px 8px", fontSize: 10, color: "#991b1b" }}>Could not load: {nsInv.err}</div>}
+            {!nsInv.loading && !rows.length && (
+              <div style={{ padding: 20, textAlign: "center", fontSize: 11, color: T.T2 }}>
+                No inventory yet — the sync writes this at 6am and noon. Press Refresh after the next run.
+              </div>
+            )}
+            <div style={{ overflow: "auto", maxHeight: "calc(100vh - 320px)" }}>
+              <table style={{ ...tbl, fontSize: 11 }}>
+                <thead><tr>
+                  <th style={{ ...th, minWidth: 128 }}>SKU</th>
+                  <th style={{ ...th, minWidth: 240 }}>Item</th>
+                  <th style={{ ...th, minWidth: 130 }}>Location</th>
+                  <th style={{ ...th, textAlign: "right" }}>On hand</th>
+                  <th style={{ ...th, textAlign: "right" }}>Available</th>
+                </tr></thead>
+                <tbody>
+                  {rows.map((r, i) => (
+                    <tr key={r.sku + i}>
+                      <td style={{ ...td, fontFamily: "'JetBrains Mono',monospace", fontSize: 10 }}>{r.sku}</td>
+                      <td style={{ ...td }}>{String(r.name || "").split(":")[0]}</td>
+                      <td style={{ ...td, color: T.T2, fontSize: 10 }}>{r.location}</td>
+                      <td style={{ ...numC, fontWeight: 700, color: r.onHand < 0 ? "#991b1b" : T.TX, background: r.onHand < 0 ? "#fee2e2" : undefined }}>{fm(r.onHand)}</td>
+                      <td style={{ ...numC, color: T.T2 }}>{fm(r.available)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <div style={{ padding: "6px 12px", fontSize: 9, color: T.T2, borderTop: "1px solid " + T.BD }}>
+              Straight from NetSuite inventory balances by location — the true count, refreshed with the shipment sync. Negative on hand means units shipped against stock that has not been receipted yet.
             </div>
           </div>
         );

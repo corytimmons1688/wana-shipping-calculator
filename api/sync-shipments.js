@@ -80,22 +80,6 @@ export default async function handler(req, res) {
   const expected = String(env.CRON_SECRET || "").trim();
   const NS_KEYS = ["NS_ACCOUNT", "NS_CONSUMER_KEY", "NS_CONSUMER_SECRET", "NS_TOKEN_ID", "NS_TOKEN_SECRET"];
 
-  // ?diag=1 — setup check. Reports which variables the function can SEE and how
-  // long the supplied bearer is. Never returns a secret value. Safe to remove
-  // once the sync is confirmed working.
-  if ((req.query && req.query.diag === "1") || /[?&]diag=1/.test(req.url || "")) {
-    const got = String(req.headers.authorization || "").trim().replace(/^Bearer\s+/i, "").trim();
-    return res.status(200).json({
-      cron_secret_configured: !!expected,
-      cron_secret_length: expected.length,
-      bearer_received_length: got.length,
-      bearer_matches: !!expected && got === expected,
-      netsuite_present: NS_KEYS.filter((k) => !!env[k]),
-      netsuite_missing: NS_KEYS.filter((k) => !env[k]),
-      ns_account_length: String(env.NS_ACCOUNT || "").length,
-    });
-  }
-
   if (expected) {
     const got = String(req.headers.authorization || "").trim().replace(/^Bearer\s+/i, "").trim();
     const a = Buffer.from(got), b = Buffer.from(expected);
@@ -144,8 +128,19 @@ export default async function handler(req, res) {
       for (const r of so) { const k = `${r.transaction}|${r.item}`; poQty[k] = (poQty[k] || 0) + (Number(r.ordered_qty) || 0); }
     }
 
+    // live on-hand for every Wana Cube SKU, by location
+    const invRows = await suiteql(`
+      SELECT i.itemid, i.displayname, BUILTIN.DF(bal.location) AS location,
+             bal.quantityonhand, bal.quantityavailable
+      FROM inventorybalance bal JOIN item i ON i.id = bal.item
+      WHERE i.itemid LIKE 'PL-WCB-%' OR i.itemid LIKE 'PB-WCB-%'`, env).catch(() => []);
+    const inventory = invRows.map((r) => ({ sku: r.itemid, name: r.displayname, location: r.location,
+      onHand: Number(r.quantityonhand) || 0, available: Number(r.quantityavailable) || 0 }))
+      .sort((a, b) => a.sku.localeCompare(b.sku));
+
     const history = lines.map((r) => ({ item_id: r.item_id, createdfrom: r.createdfrom, trandate: r.trandate, qty: Number(r.qty) || 0 }));
     const report = buildShipmentReport(lines, { tracking, carrier, poQty, history });
+    report.inventory = inventory;
 
     const r = await fetch(`${SUPABASE_URL}/rest/v1/shipment_log?id=eq.1`, {
       method: "PATCH",
@@ -155,7 +150,7 @@ export default async function handler(req, res) {
     if (!r.ok) throw new Error(`Supabase ${r.status}: ${(await r.text()).slice(0, 200)}`);
 
     return res.status(200).json({ ok: true, generated_at: report.generated_at,
-      markets: report.markets, shipments: report.shipments.length, warnings: report.warnings.length });
+      markets: report.markets, shipments: report.shipments.length, warnings: report.warnings.length, inventory: inventory.length });
   } catch (e) {
     // Surface the reason in Vercel logs — a cron failure is otherwise invisible
     // because the message only ever reached the HTTP response body.
