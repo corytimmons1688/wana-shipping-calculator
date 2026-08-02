@@ -31,19 +31,37 @@ const dayGap = (a, b) => Math.abs((new Date(a) - new Date(b)) / 86400000) || 0;
  */
 function pair(a, b) {
   const used = new Set();
+  const link = (x, y, i, how, gap) => {
+    used.add(i); x.match = y; y.match = x; x.gapDays = gap; x.how = how; y.how = how;
+  };
+  // Pass 1 — the dashboard records the fulfillment number it shipped against,
+  // so when both sides name the same document that is proof, not inference.
   for (const x of a) {
+    const i = b.findIndex((y, j) => !used.has(j) && x.doc && y.doc && x.doc === y.doc);
+    if (i >= 0) link(x, b[i], i, "document", dayGap(x.date, b[i].date));
+  }
+  // Pass 2 — otherwise the exact quantity, nearest in time.
+  for (const x of a) {
+    if (x.match) continue;
     let best = -1, bestGap = Infinity;
     b.forEach((y, i) => {
-      if (used.has(i) || y.qty !== x.qty) return;
+      if (used.has(i) || y.match || y.qty !== x.qty) return;
       const g = dayGap(x.date, y.date);
       if (g < bestGap) { bestGap = g; best = i; }
     });
-    if (best >= 0) { used.add(best); x.match = b[best]; b[best].match = x; x.gapDays = bestGap; }
+    if (best >= 0) link(x, b[best], best, "quantity", bestGap);
   }
 }
 
 export default function InventoryReconcile({ sku, name, onHand, receipts = [], shipments = [], actuals = {}, onClose }) {
   const model = useMemo(() => {
+    // The dashboard stores a fulfillment number against each outbound, so an
+    // unmatched one can still name the order it should have been fulfilled on.
+    const soByIf = {}, poByIf = {};
+    for (const s of shipments) for (const t of (s.fulfillment_tranids || [])) {
+      soByIf[t] = s.sales_orders || []; poByIf[t] = s.customer_pos || [];
+    }
+
     // ── NetSuite ledger ──────────────────────────────────────────────────
     const nsIn = receipts.filter((r) => r.sku === sku)
       .map((r) => ({ side: "ns", kind: "Receipt", date: toISO(r.date), ref: r.ref, qty: r.qty, sign: 1 }));
@@ -51,9 +69,11 @@ export default function InventoryReconcile({ sku, name, onHand, receipts = [], s
     for (const s of shipments) {
       for (const l of (s.lines || [])) {
         if (l.sku !== sku) continue;
+        const ifs = s.fulfillment_tranids || [];
         nsOut.push({ side: "ns", kind: "Shipment", date: toISO(s.ship_date),
-          ref: (s.fulfillment_tranids || []).join("+") || s.shipment_key,
+          ref: ifs.join("+") || s.shipment_key, doc: ifs[0] || "",
           note: [s.market, ...(s.customer_pos || [])].filter(Boolean).join(" · "),
+          sos: s.sales_orders || [], pos: s.customer_pos || [], market: s.market,
           qty: Number(l.quantity_shipped) || 0, sign: -1 });
       }
     }
@@ -67,13 +87,16 @@ export default function InventoryReconcile({ sku, name, onHand, receipts = [], s
       // called out separately so it is never mistaken for a discrepancy.
       (sh.received ? dashIn : adj).push({ side: "dash", kind: sh.received ? "Inbound received" : "In transit",
         date: toISO(sh.eta), ref: sh.ref || "—", qty: q, sign: sh.received ? 1 : 0,
+        factoryRef: sh.factoryRef || "", eta: sh.eta || "", shipDate: sh.shipDate || "",
         pending: !sh.received });
     }
     for (const sh of actuals.outbound || []) {
       const q = (sh.lines || []).filter((l) => l.sku === sku).reduce((a, l) => a + (Number(l.qty) || 0), 0);
       if (!q) continue;
+      const doc = String(sh.tracking || "").trim();
       dashOut.push({ side: "dash", kind: "Outbound", date: toISO(sh.dateShipped || sh.arriveBy),
-        ref: sh.tracking || sh.market || "—", note: sh.tracking && sh.market ? sh.market : "",
+        ref: doc || sh.market || "—", doc, note: doc && sh.market ? sh.market : "",
+        market: sh.market || "", sos: soByIf[doc] || [], pos: poByIf[doc] || [],
         qty: q, sign: -1 });
     }
     for (const a of actuals.adjustments || []) {
@@ -103,6 +126,21 @@ export default function InventoryReconcile({ sku, name, onHand, receipts = [], s
 
     const events = [...nsIn, ...nsOut, ...dashIn, ...dashOut, ...adj]
       .sort((a, b) => String(b.date).localeCompare(String(a.date)));
+
+    // What is missing, named as the document someone has to go create — and
+    // what evidence says it should exist.
+    const list = (a) => (a || []).filter(Boolean).join(" / ");
+    // Customer PO values are free text and often already read "PO 1 and PO 2",
+    // so only add the "PO" label when it is not already there.
+    const poLabel = (a) => { const v = list(a); return /^po\b/i.test(v) ? v : `PO ${v}`; };
+    for (const e of dashIn) if (!e.match) e.detail =
+      `Missing Item Receipt${e.factoryRef ? ` on PO ${e.factoryRef}` : ""} — based on ${e.ref} delivery expected ${e.eta || "date not set"}`;
+    for (const e of nsIn) if (!e.match) e.detail =
+      `Receipted in NetSuite as ${e.ref} on ${e.date} — no matching inbound shipment on the dashboard`;
+    for (const e of nsOut) if (!e.match) e.detail =
+      `Not on the dashboard — ${e.ref} shipped ${e.date}${e.sos.length ? ` on ${list(e.sos)}` : ""}${e.pos.length ? ` (${poLabel(e.pos)})` : ""}`;
+    for (const e of dashOut) if (!e.match) e.detail =
+      `Item Fulfillment missed${e.sos.length ? ` for ${list(e.sos)}` : e.doc ? ` for ${e.doc}` : ""} — based on ${e.market || "shipment"} expected to ship ${e.date || "date not set"} on dashboard`;
 
     // ── plain-language insight ───────────────────────────────────────────
     const notes = [];
@@ -182,7 +220,7 @@ export default function InventoryReconcile({ sku, name, onHand, receipts = [], s
               <th style={{ ...th, minWidth: 118 }}>Event</th>
               <th style={{ ...th, minWidth: 150 }}>Reference</th>
               <th style={{ ...th, textAlign: "right", minWidth: 78 }}>Quantity</th>
-              <th style={{ ...th, minWidth: 168 }}>Match</th>
+              <th style={{ ...th, minWidth: 300 }}>Match / what is missing</th>
             </tr></thead>
             <tbody>
               {model.events.map((e, i) => {
@@ -205,12 +243,20 @@ export default function InventoryReconcile({ sku, name, onHand, receipts = [], s
                       color: e.sign > 0 ? T.GR : e.sign < 0 ? "#b91c1c" : T.T2 }}>
                       {e.sign > 0 ? "+" : e.sign < 0 ? "−" : ""}{fm(e.qty)}
                     </td>
-                    <td style={{ ...td, fontSize: 9.5 }}>
+                    <td style={{ ...td, fontSize: 9.5, lineHeight: 1.45 }}>
                       {e.pending ? <span style={{ color: T.T2 }}>in transit — excluded</span>
                         : e.isAdj ? <span style={{ color: T.T2 }}>dashboard only</span>
                         : e.match
-                          ? <span style={{ color: T.GR }}>✓ {e.match.ref}{e.gapDays > 1 ? ` · ${Math.round(e.gapDays)}d apart` : ""}</span>
-                          : <span style={{ color: "#b45309", fontWeight: 700 }}>⚠ no counterpart</span>}
+                          ? <span style={{ color: T.GR }}>
+                              ✓ {e.match.ref}
+                              <span style={{ color: T.T2 }}>
+                                {e.how === "document" ? " · same document" : " · matched on quantity"}
+                                {e.gapDays >= 1 ? ` · ${Math.round(e.gapDays)}d apart` : ""}
+                              </span>
+                            </span>
+                          : <span style={{ color: "#b45309" }}>
+                              <span style={{ fontWeight: 700 }}>⚠ </span>{e.detail || "no counterpart"}
+                            </span>}
                     </td>
                   </tr>
                 );
