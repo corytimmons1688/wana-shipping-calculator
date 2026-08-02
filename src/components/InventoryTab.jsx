@@ -10,6 +10,7 @@ import { buildApplySchedule, slotKey, LID_BOX, BASE_BOX, CAP_MIN, CAP_MAX } from
 import { parseLocalDate } from "../utils/calc";
 import { MASTER_SKUS, BASE_TYPES } from "../data/skuMaster";
 import { Ed } from "./Shared";
+import InventoryReconcile from "./InventoryReconcile";
 import { fm, dF } from "../utils/format";
 import { T, tbl, th, td } from "../utils/theme";
 
@@ -86,6 +87,8 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
   // Live NetSuite on-hand, refreshed by the sync cron into shipment_log.
   const [nsInv, setNsInv] = useState({ loading: true, rows: [], at: null, err: null });
   const [nsShip, setNsShip] = useState([]);
+  const [nsRcpt, setNsRcpt] = useState([]);
+  const [recon, setRecon] = useState(null);   // SKU whose reconciliation is open
   const loadNsInv = () => {
     const U = "https://fxdyiurjioesdmedmgzu.supabase.co/rest/v1/shipment_log?id=eq.1&select=data,updated_at";
     const K = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ4ZHlpdXJqaW9lc2RtZWRtZ3p1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI3MzIzOTYsImV4cCI6MjA4ODMwODM5Nn0.5ueK5iXQ35oThb02ClX3iErPwYR4tPih9GtBAmhDQYk";
@@ -95,6 +98,7 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
       .then((rows) => {
         const d = ((rows[0] || {}).data) || {};
         setNsShip(d.shipments || []);
+        setNsRcpt(d.receipts || []);
         setNsInv({ loading: false, err: null, rows: d.inventory || [], at: (rows[0] || {}).updated_at || null });
       })
       .catch((e) => setNsInv({ loading: false, rows: [], at: null, err: String(e.message || e) }));
@@ -916,7 +920,11 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
                       <td style={{ ...td, fontFamily: "'JetBrains Mono',monospace", fontSize: 10 }}>{r.sku}</td>
                       <td style={{ ...td }}>{String(r.name || "").split(":")[0]}</td>
                       <td style={{ ...td, color: T.T2, fontSize: 10 }}>{r.location}</td>
-                      <td style={{ ...numC, fontWeight: 700, color: r.onHand < 0 ? "#991b1b" : T.TX, background: r.onHand < 0 ? "#fee2e2" : undefined }}>{fm(r.onHand)}</td>
+                      <td onClick={() => setRecon(r)} title="Reconcile against the dashboard"
+                        style={{ ...numC, fontWeight: 700, cursor: "pointer",
+                          color: r.onHand < 0 ? "#991b1b" : T.AC,
+                          background: r.onHand < 0 ? "#fee2e2" : undefined,
+                          textDecoration: "underline", textDecorationStyle: "dotted", textUnderlineOffset: 2 }}>{fm(r.onHand)}</td>
                       <td style={{ ...numC, color: T.T2 }}>{fm(r.available)}</td>
                     </tr>
                   ))}
@@ -924,11 +932,16 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
               </table>
             </div>
             <div style={{ padding: "6px 12px", fontSize: 9, color: T.T2, borderTop: "1px solid " + T.BD }}>
-              Straight from NetSuite inventory balances by location — the true count, refreshed with the shipment sync. Negative on hand means units shipped against stock that has not been receipted yet.
+              Straight from NetSuite inventory balances by location — the true count, refreshed with the shipment sync. Negative on hand means units shipped against stock that has not been receipted yet. Click any on-hand figure to reconcile it against the dashboard ledger.
             </div>
           </div>
         );
       })()}
+
+      {recon && (
+        <InventoryReconcile sku={recon.sku} name={recon.name} onHand={recon.onHand}
+          receipts={nsRcpt} shipments={nsShip} actuals={actuals} onClose={() => setRecon(null)} />
+      )}
 
       {view === "inbound" && (
         <div style={{ background: T.S1, border: "1px solid " + T.BD, borderRadius: 6, overflowX: "auto" }}>

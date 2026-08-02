@@ -175,10 +175,24 @@ export default async function handler(req, res) {
       onHand: Number(r.quantityonhand) || 0, available: Number(r.quantityavailable) || 0 }))
       .sort((a, b) => a.sku.localeCompare(b.sku));
 
+    // Item Receipts — the NetSuite side of "stock arrived from the factory".
+    // Lines are triplicated like fulfillments, so SUM nets to the true quantity.
+    const rcptRows = await suiteql(`
+      SELECT t.tranid, t.trandate, i.itemid, SUM(tl.quantity) AS qty
+      FROM transaction t
+      JOIN transactionline tl ON tl.transaction = t.id
+      JOIN item i ON i.id = tl.item
+      WHERE t.type = 'ItemRcpt' AND tl.mainline = 'F'
+        AND (i.itemid LIKE 'PL-WCB-%' OR i.itemid LIKE 'PB-WCB-%')
+      GROUP BY t.tranid, t.trandate, i.itemid`, env).catch(() => []);
+    const receipts = rcptRows.map((r) => ({ ref: r.tranid, date: r.trandate,
+      sku: r.itemid, qty: Math.abs(Number(r.qty) || 0) })).filter((r) => r.qty > 0);
+
     const history = lines.map((r) => ({ item_id: r.item_id, createdfrom: r.createdfrom, trandate: r.trandate, qty: Number(r.qty) || 0 }));
     const report = buildShipmentReport(lines, { tracking, carrier, poQty, history, soMeta });
     report.inventory = inventory;
     report.salesOrders = salesOrders;
+    report.receipts = receipts;
 
     const r = await fetch(`${SUPABASE_URL}/rest/v1/shipment_log?id=eq.1`, {
       method: "PATCH",
@@ -188,7 +202,7 @@ export default async function handler(req, res) {
     if (!r.ok) throw new Error(`Supabase ${r.status}: ${(await r.text()).slice(0, 200)}`);
 
     return res.status(200).json({ ok: true, generated_at: report.generated_at,
-      markets: report.markets, shipments: report.shipments.length, warnings: report.warnings.length, inventory: inventory.length, salesOrders: salesOrders.length });
+      markets: report.markets, shipments: report.shipments.length, warnings: report.warnings.length, inventory: inventory.length, salesOrders: salesOrders.length, receipts: receipts.length });
   } catch (e) {
     // Surface the reason in Vercel logs — a cron failure is otherwise invisible
     // because the message only ever reached the HTTP response body.
