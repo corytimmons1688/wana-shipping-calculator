@@ -25,8 +25,12 @@ const ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZ
 const pct = (s) => encodeURIComponent(s).replace(/[!'()*]/g, (c) => "%" + c.charCodeAt(0).toString(16).toUpperCase());
 
 // NetSuite TBA: OAuth 1.0a, HMAC-SHA256, account id as the realm.
-function authHeader(method, url, env) {
-  const p = {
+// The signature base string MUST include the query-string parameters (limit,
+// offset) alongside the oauth_* ones — signing only the bare path produces a
+// signature NetSuite can't reproduce, and it answers INVALID_LOGIN.
+function authHeader(method, urlStr, env) {
+  const u = new URL(urlStr);
+  const oauth = {
     oauth_consumer_key: env.NS_CONSUMER_KEY,
     oauth_nonce: crypto.randomBytes(16).toString("hex"),
     oauth_signature_method: "HMAC-SHA256",
@@ -34,13 +38,17 @@ function authHeader(method, url, env) {
     oauth_token: env.NS_TOKEN_ID,
     oauth_version: "1.0",
   };
-  const paramStr = Object.keys(p).sort().map((k) => `${pct(k)}=${pct(p[k])}`).join("&");
-  const base = [method.toUpperCase(), pct(url), pct(paramStr)].join("&");
+  // every parameter that travels with the request, oauth_* plus the query
+  const all = { ...oauth };
+  u.searchParams.forEach((v, k) => { all[k] = v; });
+  const paramStr = Object.keys(all).sort()
+    .map((k) => `${pct(k)}=${pct(all[k])}`).join("&");
+  const base = [method.toUpperCase(), pct(u.origin + u.pathname), pct(paramStr)].join("&");
   const key = `${pct(env.NS_CONSUMER_SECRET)}&${pct(env.NS_TOKEN_SECRET)}`;
-  p.oauth_signature = crypto.createHmac("sha256", key).update(base).digest("base64");
-  const realm = String(env.NS_ACCOUNT).toUpperCase();
-  return "OAuth realm=\"" + realm + "\"," +
-    Object.keys(p).sort().map((k) => `${pct(k)}="${pct(p[k])}"`).join(",");
+  oauth.oauth_signature = crypto.createHmac("sha256", key).update(base).digest("base64");
+  // only oauth_* params belong in the header
+  return `OAuth realm="${String(env.NS_ACCOUNT).toUpperCase()}",` +
+    Object.keys(oauth).sort().map((k) => `${pct(k)}="${pct(oauth[k])}"`).join(",");
 }
 
 async function suiteql(q, env, { pageSize = 1000 } = {}) {
@@ -51,7 +59,7 @@ async function suiteql(q, env, { pageSize = 1000 } = {}) {
     const url = `https://${host}.suitetalk.api.netsuite.com/services/rest/query/v1/suiteql?limit=${pageSize}&offset=${offset}`;
     const res = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Prefer: "transient", Authorization: authHeader("POST", url.split("?")[0], env) },
+      headers: { "Content-Type": "application/json", Prefer: "transient", Authorization: authHeader("POST", url, env) },
       body: JSON.stringify({ q }),
     });
     if (!res.ok) throw new Error(`SuiteQL ${res.status}: ${(await res.text()).slice(0, 300)}`);
