@@ -222,7 +222,7 @@ const mainTabs = [{ k:"demand", l:"Market Demand", i:"📊" },{ k:"forecast", l:
         {tab === "inventory" && <InventoryTab sc={sc} actuals={actuals} updActuals={updActuals} />}
         {tab === "shiplog" && <ShipmentLogTab />}
         {tab === "shipping" && <ShippingTab ships={displayShips} prod={prod} frt={frt} gld={gld} weeklyDem={weeklyDem} sc={sc} upd={upd} updShipEdit={updShipEdit} addShipment={addShipment} updShipAddition={updShipAddition} removeShipAddition={removeShipAddition} deleteShipment={deleteShipment} restoreShipment={restoreShipment} clearShipEdits={clearShipEdits} hasShipEdits={hasShipEdits} />}
-        {tab === "settings" && <SettingsTab sc={sc} cap={cap} upd={upd} />}
+        {tab === "settings" && <SettingsTab sc={sc} cap={cap} upd={upd} actuals={actuals} updActuals={updActuals} />}
       </>)}
       <AiAssistant sc={sc} gld={gld} ships={ships} prod={prod} frt={frt} cap={cap} />
     </div>

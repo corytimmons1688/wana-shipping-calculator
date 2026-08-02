@@ -38,6 +38,7 @@ export function nextBusinessDay(from) {
   return iso(d);
 }
 const nextBizStr = (s) => nextBusinessDay(parse(s));
+const shortDate = (iso) => { const p = String(iso).split("-"); return p.length === 3 ? `${+p[1]}/${+p[2]}` : iso; };
 
 // True stock at Calyx (received − shipped ± adjustments) plus dated arrivals.
 function availability(actuals) {
@@ -46,7 +47,7 @@ function availability(actuals) {
     for (const l of sh.lines || []) {
       const q = Number(l.qty) || 0; if (!l.sku || !q) continue;
       if (sh.received === true) onHand[l.sku] = (onHand[l.sku] || 0) + q;
-      else if (sh.eta) arrivals.push({ sku: l.sku, date: sh.eta, qty: q });
+      else if (sh.eta) arrivals.push({ sku: l.sku, date: sh.eta, qty: q, ref: sh.ref || "" });
     }
   for (const sh of actuals.outbound || [])
     for (const l of sh.lines || []) { const q = Number(l.qty) || 0; if (l.sku && q) onHand[l.sku] = (onHand[l.sku] || 0) - q; }
@@ -57,14 +58,15 @@ function availability(actuals) {
     for (const a of arrivals) { if (a.sku !== sku) continue; if (a.date <= dateStr) v += a.qty; else break; }
     return v;
   };
-  // first date at least `qty` of a sku is on hand at Calyx
+  // First date at least `qty` of a sku is at Calyx, plus WHICH container got us
+  // there — so a ship line can name the thing it is actually waiting on.
   const readyBy = (sku, qty, fromDate) => {
-    if ((onHand[sku] || 0) >= qty) return fromDate;
+    if ((onHand[sku] || 0) >= qty) return { date: fromDate, ref: "", fromStock: true };
     let run = onHand[sku] || 0;
     for (const a of arrivals) {
       if (a.sku !== sku) continue;
       run += a.qty;
-      if (run >= qty) return a.date > fromDate ? a.date : fromDate;
+      if (run >= qty) return { date: a.date > fromDate ? a.date : fromDate, ref: a.ref, fromStock: false };
     }
     return null;                                   // never enough in the horizon
   };
@@ -193,19 +195,25 @@ export function buildApplySchedule({ mw, grid, actuals, today, startDate,
       if (early > 0) shipQueue.push({ g, kind: "BASE", units: early, date: nextBizStr(a.date), reason: "lids already at market" });
       const rest = a.units - early;
       if (rest > 0) {
-        const lidReady = av.readyBy(g.sku, rest + (usedLid[g.sku] || 0), a.date);
-        const d = lidReady ? nextBizStr(lidReady > a.date ? lidReady : a.date) : null;
-        if (d) shipQueue.push({ g, kind: "BASE", units: rest, date: d, reason: "waits for lids" });
+        const lr = av.readyBy(g.sku, rest + (usedLid[g.sku] || 0), a.date);
+        if (lr) {
+          const lidsBind = lr.date > a.date && !lr.fromStock;
+          shipQueue.push({ g, kind: "BASE", units: rest, date: nextBizStr(lidsBind ? lr.date : a.date),
+            reason: lidsBind ? `waits for ${lr.ref || "lids"} · ${shortDate(lr.date)}`
+                             : `application completes ${shortDate(a.date)}` });
+        }
       }
     }
     if (g.lidNeed > 0 && !pinKeys.has(g.market + "|" + g.sku + "|LID")) {
       const need = g.lidNeed;
-      const lidReady = av.readyBy(g.sku, need + (usedLid[g.sku] || 0), start);
-      if (lidReady) {
+      const lr = av.readyBy(g.sku, need + (usedLid[g.sku] || 0), start);
+      if (lr) {
         const applyD = applyDone[g.pk] ? applyDone[g.pk].date : start;
-        const base = lidReady > applyD ? lidReady : applyD;
+        const lidsBind = lr.date > applyD && !lr.fromStock;
         usedLid[g.sku] = (usedLid[g.sku] || 0) + need;
-        shipQueue.push({ g, kind: "LID", units: need, date: nextBizStr(base), reason: lidReady > applyD ? "day after lids land" : "with its bases" });
+        shipQueue.push({ g, kind: "LID", units: need, date: nextBizStr(lidsBind ? lr.date : applyD),
+          reason: lidsBind ? `waits for ${lr.ref || "lids"} · ${shortDate(lr.date)}`
+                           : (applyDone[g.pk] ? "with its bases" : "lids in stock") });
       }
     }
   }

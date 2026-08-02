@@ -756,8 +756,8 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
               </label>
               <label style={{ fontSize: 10, color: T.T2, display: "flex", alignItems: "center", gap: 4 }}>
                 Capacity/day
-                <input type="number" min={CAP_MIN} max={CAP_MAX} step={BASE_BOX} value={aps.capacity}
-                  onChange={(e) => { const v = Math.min(CAP_MAX, Math.max(CAP_MIN, Number(e.target.value) || CAP_MIN)); updSched((s) => { s.capacity = v; }); }}
+                <input type="number" min={aps.capMin ?? CAP_MIN} max={aps.capMax ?? CAP_MAX} step={BASE_BOX} value={aps.capacity}
+                  onChange={(e) => { const v = Math.min(aps.capMax ?? CAP_MAX, Math.max(aps.capMin ?? CAP_MIN, Number(e.target.value) || (aps.capMin ?? CAP_MIN))); updSched((s) => { s.capacity = v; }); }}
                   style={{ width: 74, background: T.S2, border: "1px solid " + T.BD, color: T.AC, borderRadius: 3, padding: "2px 5px", fontSize: 11, fontFamily: "'JetBrains Mono',monospace" }} />
               </label>
               <label style={{ fontSize: 10, color: T.T2, display: "flex", alignItems: "center", gap: 4 }}>

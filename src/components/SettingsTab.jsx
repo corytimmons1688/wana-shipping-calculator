@@ -4,7 +4,7 @@ import { fm, f$, fC } from "../utils/format";
 import { T, tbl, th, td } from "../utils/theme";
 import { QC, Ed, Bg, Sec } from "./Shared";
 
-export default function SettingsTab({ sc, cap, upd }) {
+export default function SettingsTab({ sc, cap, upd, actuals, updActuals }) {
   const [stab, setStab] = useState("molds");
   const tabs = [
     { k: "molds", l: "Mold Specs" }, { k: "ptl", l: "Proto Timeline" },
@@ -20,6 +20,41 @@ export default function SettingsTab({ sc, cap, upd }) {
     phases.push("prod");
     return (
       <div style={{ flex: "1 1 280px", minWidth: 280, background: T.S2, borderRadius: 7, padding: 12, border: "1px solid " + T.BD }}>
+      {/* Label-application throughput — the Apply Schedule's daily ceiling.
+          Raise these as the line ramps up and gets more efficient. */}
+      {actuals && updActuals && (() => {
+        const aps = actuals.applySchedule || {};
+        const setAps = (k, v) => updActuals((a) => {
+          if (!a.applySchedule) a.applySchedule = {};
+          a.applySchedule[k] = Math.max(0, Math.round(Number(v) || 0));
+          const lo = a.applySchedule.capMin ?? 10000, hi = a.applySchedule.capMax ?? 15000;
+          if (a.applySchedule.capacity == null) a.applySchedule.capacity = lo;
+          a.applySchedule.capacity = Math.min(hi, Math.max(lo, a.applySchedule.capacity));
+        });
+        const inp = (label, key, val) => (
+          <label style={{ fontSize: 11, color: T.T2, display: "flex", alignItems: "center", gap: 5 }}>
+            {label}
+            <input type="number" min={0} step={378} value={val}
+              onChange={(e) => setAps(key, e.target.value)}
+              style={{ width: 88, background: T.S2, border: "1px solid " + T.BD, color: T.AC,
+                borderRadius: 3, padding: "3px 6px", fontSize: 12, fontFamily: "'JetBrains Mono',monospace" }} />
+          </label>
+        );
+        return (
+          <div style={{ background: T.S1, border: "1px solid " + T.BD, borderRadius: 6, padding: "10px 14px", marginBottom: 14 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 6 }}>Label application capacity</div>
+            <div style={{ display: "flex", gap: 14, flexWrap: "wrap", alignItems: "center" }}>
+              {inp("Min / day", "capMin", aps.capMin ?? 10000)}
+              {inp("Max / day", "capMax", aps.capMax ?? 15000)}
+              {inp("Current / day", "capacity", aps.capacity ?? 12474)}
+              <span style={{ fontSize: 9.5, color: T.T2 }}>
+                Bounds the Apply Schedule&rsquo;s daily ceiling — raise them as the line ramps up. 1 base box = 378.
+              </span>
+            </div>
+          </div>
+        );
+      })()}
+
         <div style={{ fontSize: 13, fontWeight: 700, color, marginBottom: 8 }}>{icon} {label}</div>
         {phases.map(ph => {
           const d = m[ph]; const pL = ph === "proto" ? "Prototype #1" : ph === "proto2" ? "Prototype #2" : "Production"; const wk = d.daily * d.qty * d.days;

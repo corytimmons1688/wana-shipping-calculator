@@ -26,6 +26,9 @@ function migrate(d) {
   // edited quantities persist; the day-by-day plan itself is derived.
   if (!d.applySchedule || typeof d.applySchedule !== "object") d.applySchedule = {};
   if (d.applySchedule.capacity == null) d.applySchedule.capacity = 12474;
+  // label-application throughput bounds — editable in Settings as the line ramps
+  if (d.applySchedule.capMin == null) d.applySchedule.capMin = 10000;
+  if (d.applySchedule.capMax == null) d.applySchedule.capMax = 15000;
   if (!Array.isArray(d.applySchedule.log)) d.applySchedule.log = [];
   if (!d.applySchedule.overrides || typeof d.applySchedule.overrides !== "object") d.applySchedule.overrides = {};
   // bases already labelled for a market+flavor — ship without using capacity
