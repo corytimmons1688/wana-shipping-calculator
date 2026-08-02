@@ -11,6 +11,7 @@ import { parseLocalDate } from "../utils/calc";
 import { MASTER_SKUS, BASE_TYPES } from "../data/skuMaster";
 import { Ed } from "./Shared";
 import InventoryReconcile, { buildReconciliation, inventoryFlag } from "./InventoryReconcile";
+import { matchReceipts } from "../utils/receiptMatch";
 import { fm, dF } from "../utils/format";
 import { T, tbl, th, td } from "../utils/theme";
 
@@ -90,6 +91,8 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
   const [nsRcpt, setNsRcpt] = useState([]);
   const [recon, setRecon] = useState(null);   // SKU whose reconciliation is open
   const [flagOnly, setFlagOnly] = useState(false);
+  // what the last receipt sweep marked received, and what it only suspects
+  const [autoRcv, setAutoRcv] = useState({ applied: [], possible: [] });
   const loadNsInv = () => {
     const U = "https://fxdyiurjioesdmedmgzu.supabase.co/rest/v1/shipment_log?id=eq.1&select=data,updated_at";
     const K = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ4ZHlpdXJqaW9lc2RtZWRtZ3p1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI3MzIzOTYsImV4cCI6MjA4ODMwODM5Nn0.5ueK5iXQ35oThb02ClX3iErPwYR4tPih9GtBAmhDQYk";
@@ -105,6 +108,28 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
       .catch((e) => setNsInv({ loading: false, rows: [], at: null, err: String(e.message || e) }));
   };
   useEffect(() => { loadNsInv(); }, []); // eslint-disable-line
+
+  // A NetSuite item receipt is proof the factory shipment landed, so flip the
+  // dashboard's "received" flag rather than waiting for someone to tick it.
+  // Only exact full-line matches are applied; each one records the receipt it
+  // came from so the decision stays auditable and reversible.
+  useEffect(() => {
+    if (!nsRcpt.length || !(actuals.inbound || []).length) return;
+    const { confirmed, possible } = matchReceipts(actuals.inbound, nsRcpt);
+    setAutoRcv((prev) => ({ applied: confirmed.length ? [...prev.applied, ...confirmed] : prev.applied, possible }));
+    if (!confirmed.length) return;
+    const by = Object.fromEntries(confirmed.map((c) => [c.id, c]));
+    updActuals((d) => {
+      for (const sh of d.inbound || []) {
+        const m = by[sh.id];
+        if (!m || sh.received) continue;
+        sh.received = true;
+        sh.receivedRef = m.receiptRef;      // the NetSuite item receipt
+        sh.receivedOn = m.date;
+        sh.autoReceived = true;             // distinguishes this from a human tick
+      }
+    });
+  }, [nsRcpt, actuals.inbound]); // eslint-disable-line
   // Inventory model "as of" date — anchored to the last week of May (May 25,
   // 2026, a Monday on the week grid) since NJ's demand begins that week.
   // Nothing has shipped/been consumed before this, so the projection starts here.
@@ -310,6 +335,31 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
       {inv.unscheduled.length > 0 && view !== "inbound" && (
         <div style={{ marginBottom: 10, fontSize: 10, color: "#92400e", background: "#fef3c7", border: "1px solid " + T.AM, borderRadius: 5, padding: "5px 10px" }}>
           ⚠ {inv.unscheduled.length} inbound shipment{inv.unscheduled.length > 1 ? "s" : ""} without dates ({inv.unscheduled.join(", ")}) — excluded from projections. Add dates or mark received in the Inbound view.
+        </div>
+      )}
+
+      {(autoRcv.applied.length > 0 || autoRcv.possible.length > 0) && (
+        <div style={{ marginBottom: 10, fontSize: 10, borderRadius: 5, padding: "6px 10px",
+          color: "#166534", background: "#f0fdf4", border: "1px solid " + T.GR }}>
+          {autoRcv.applied.length > 0 && (
+            <div>
+              ✓ {autoRcv.applied.length} inbound shipment{autoRcv.applied.length > 1 ? "s" : ""} marked received from NetSuite item receipts —{" "}
+              {autoRcv.applied.map((a) => `${a.ref} → ${a.receiptRef} (${a.date})`).join(", ")}.
+              <button onClick={() => {
+                const ids = new Set(autoRcv.applied.map((a) => a.id));
+                updActuals((d) => { for (const sh of d.inbound || []) if (ids.has(sh.id) && sh.autoReceived) {
+                  sh.received = false; delete sh.receivedRef; delete sh.receivedOn; delete sh.autoReceived; } });
+                setAutoRcv((p) => ({ ...p, applied: [] }));
+              }} style={{ marginLeft: 8, padding: "1px 8px", borderRadius: 4, border: "1px solid " + T.GR,
+                background: "transparent", color: "#166534", cursor: "pointer", fontSize: 9.5 }}>Undo</button>
+            </div>
+          )}
+          {autoRcv.possible.length > 0 && (
+            <div style={{ marginTop: autoRcv.applied.length ? 5 : 0, color: "#92400e" }}>
+              ⚠ {autoRcv.possible.length} shipment{autoRcv.possible.length > 1 ? "s" : ""} partly match a receipt but not on every line — left unreceived for you to check:{" "}
+              {autoRcv.possible.map((a) => `${a.ref} ≈ ${a.receiptRef} (${a.matched}/${a.lines} lines)`).join(", ")}.
+            </div>
+          )}
         </div>
       )}
 
