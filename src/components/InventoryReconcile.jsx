@@ -137,8 +137,14 @@ export default function InventoryReconcile({ sku, name, onHand, receipts = [], s
       `Missing Item Receipt${e.factoryRef ? ` on PO ${e.factoryRef}` : ""} — based on ${e.ref} delivery expected ${e.eta || "date not set"}`;
     for (const e of nsIn) if (!e.match) e.detail =
       `Receipted in NetSuite as ${e.ref} on ${e.date} — no matching inbound shipment on the dashboard`;
-    for (const e of nsOut) if (!e.match) e.detail =
-      `Not on the dashboard — ${e.ref} shipped ${e.date}${e.sos.length ? ` on ${list(e.sos)}` : ""}${e.pos.length ? ` (${poLabel(e.pos)})` : ""}`;
+    // NetSuite is the system of record for what physically left the dock. A
+    // fulfillment the dashboard has not caught up with is not an error to
+    // investigate — it is accurate, and the dashboard is the side that is
+    // behind. Accept the quantity, and raise the catch-up outside this tool.
+    for (const e of nsOut) if (!e.match) {
+      e.accepted = true;
+      e.detail = `Accepted as shipped — ${e.ref} on ${e.date}${e.sos.length ? ` against ${list(e.sos)}` : ""}${e.pos.length ? ` (${poLabel(e.pos)})` : ""}. NetSuite is the source of truth; request the dashboard catch-up outside this tool.`;
+    }
     for (const e of dashOut) if (!e.match) e.detail =
       `Item Fulfillment missed${e.sos.length ? ` for ${list(e.sos)}` : e.doc ? ` for ${e.doc}` : ""} — based on ${e.market || "shipment"} expected to ship ${e.date || "date not set"} on dashboard`;
 
@@ -151,7 +157,7 @@ export default function InventoryReconcile({ sku, name, onHand, receipts = [], s
     if (noReceiptFeed) notes.push("NetSuite item receipts have not been synced yet, so arrivals cannot be matched on the NetSuite side. Re-run the sync — until then treat the inbound rows below as unverified, not as missing receipts.");
     if (orphanNsIn.length) notes.push(`${orphanNsIn.length} NetSuite receipt${orphanNsIn.length > 1 ? "s" : ""} totalling ${t(orphanNsIn)} have no matching inbound shipment in the dashboard — NetSuite has booked stock the dashboard never recorded arriving, so the dashboard reads low.`);
     if (orphanDashIn.length && !noReceiptFeed) notes.push(`${orphanDashIn.length} dashboard inbound shipment${orphanDashIn.length > 1 ? "s are" : " is"} marked received (${t(orphanDashIn)}) with no NetSuite item receipt — either the receipt has not been entered yet, or the shipment was marked received early. The dashboard reads high by this amount.`);
-    if (orphanNsOut.length) notes.push(`${orphanNsOut.length} NetSuite fulfillment${orphanNsOut.length > 1 ? "s" : ""} totalling ${t(orphanNsOut)} are not reflected as dashboard outbound — stock has physically left but the dashboard still counts it, reading high.`);
+    if (orphanNsOut.length) notes.push(`${orphanNsOut.length} NetSuite fulfillment${orphanNsOut.length > 1 ? "s" : ""} totalling ${t(orphanNsOut)} ${orphanNsOut.length > 1 ? "are" : "is"} not on the dashboard yet. NetSuite is the source of truth for what shipped, so ${orphanNsOut.length > 1 ? "these are" : "this is"} accepted as accurate and already netted out below — the dashboard is simply behind. Request the catch-up outside this dashboard; nothing here needs investigating.`);
     if (orphanDashOut.length) notes.push(`${orphanDashOut.length} dashboard outbound shipment${orphanDashOut.length > 1 ? "s" : ""} totalling ${t(orphanDashOut)} have no NetSuite fulfillment — either not yet fulfilled in NetSuite, or recorded here in error. The dashboard reads low.`);
     if (adjT) notes.push(`A manual adjustment of ${adjT > 0 ? "+" : ""}${fm(adjT)} is applied in the dashboard only; NetSuite has no equivalent entry.`);
     if (inTransit) notes.push(`${fm(inTransit)} is still in transit and correctly excluded from both on-hand figures — it is not part of the gap.`);
@@ -161,8 +167,14 @@ export default function InventoryReconcile({ sku, name, onHand, receipts = [], s
         : `Every event pairs up, yet the totals still differ by ${fm(Math.abs(gap))}. That points at a starting balance rather than a missing transaction — stock that predates the dashboard's first recorded shipment.`);
     }
 
+    // Outflow NetSuite recorded that the dashboard has not — accepted as real,
+    // so it accounts for part of the gap rather than sitting unexplained.
+    const accepted = orphanNsOut.reduce((a, e) => a + e.qty, 0);
+    const residual = (Number(onHand) || 0) - (dashExpected - accepted);
+
     return { events, nsInT, nsOutT, dashInT, dashOutT, adjT, inTransit, dashExpected, gap,
-      orphans: orphanNsIn.length + orphanDashIn.length + orphanNsOut.length + orphanDashOut.length, notes };
+      accepted, acceptedCount: orphanNsOut.length, residual,
+      orphans: orphanNsIn.length + orphanDashIn.length + orphanDashOut.length, notes };
   }, [sku, onHand, receipts, shipments, actuals]);
 
   const stat = (l, v, c) => (
@@ -189,7 +201,10 @@ export default function InventoryReconcile({ sku, name, onHand, receipts = [], s
             {stat("NetSuite on hand", fm(onHand), T.TX)}
             {stat("Dashboard expects", fm(model.dashExpected), T.T2)}
             {stat("Gap", (model.gap > 0 ? "+" : "") + fm(model.gap), model.gap === 0 ? T.GR : "#b45309")}
-            {stat("Unexplained events", fm(model.orphans), model.orphans ? "#b45309" : T.GR)}
+            {model.accepted > 0 && stat("Accepted from NetSuite", "−" + fm(model.accepted), "#1e40af")}
+            {stat("Unexplained after that", (model.residual > 0 ? "+" : "") + fm(model.residual),
+              model.residual === 0 ? T.GR : "#b45309")}
+            {stat("Needs action", fm(model.orphans), model.orphans ? "#b45309" : T.GR)}
           </div>
         </div>
 
@@ -205,6 +220,7 @@ export default function InventoryReconcile({ sku, name, onHand, receipts = [], s
             dashboard: {fm(model.dashInT)} received − {fm(model.dashOutT)} shipped
             {model.adjT ? ` ${model.adjT > 0 ? "+" : "−"} ${fm(Math.abs(model.adjT))} adj` : ""} = {fm(model.dashExpected)}
             &nbsp;·&nbsp; netsuite: {fm(model.nsInT)} receipted − {fm(model.nsOutT)} fulfilled = {fm(model.nsInT - model.nsOutT)}
+            {model.accepted > 0 && <><br />accepting {fm(model.accepted)} shipped in NetSuite but not yet on the dashboard → {fm(model.dashExpected - model.accepted)} expected, leaving {fm(model.residual)} unexplained</>}
           </div>
         </div>
 
@@ -224,9 +240,9 @@ export default function InventoryReconcile({ sku, name, onHand, receipts = [], s
             </tr></thead>
             <tbody>
               {model.events.map((e, i) => {
-                const orphan = !e.match && !e.isAdj && !e.pending;
+                const orphan = !e.match && !e.isAdj && !e.pending && !e.accepted;
                 return (
-                  <tr key={i} style={{ background: orphan ? "#fffbeb" : e.pending ? T.S1 : undefined }}>
+                  <tr key={i} style={{ background: orphan ? "#fffbeb" : e.accepted ? "#eff6ff" : e.pending ? T.S1 : undefined }}>
                     <td style={{ ...td, ...mono, fontSize: 10, color: T.T2 }}>{e.date || "—"}</td>
                     <td style={{ ...td }}>
                       <span style={{ fontSize: 9, fontWeight: 700, padding: "1px 5px", borderRadius: 3,
@@ -246,6 +262,10 @@ export default function InventoryReconcile({ sku, name, onHand, receipts = [], s
                     <td style={{ ...td, fontSize: 9.5, lineHeight: 1.45 }}>
                       {e.pending ? <span style={{ color: T.T2 }}>in transit — excluded</span>
                         : e.isAdj ? <span style={{ color: T.T2 }}>dashboard only</span>
+                        : e.accepted
+                          ? <span style={{ color: "#1e40af" }}>
+                              <span style={{ fontWeight: 700 }}>✓ </span>{e.detail}
+                            </span>
                         : e.match
                           ? <span style={{ color: T.GR }}>
                               ✓ {e.match.ref}
