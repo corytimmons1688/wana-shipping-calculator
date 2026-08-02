@@ -10,7 +10,7 @@ import { buildApplySchedule, slotKey, LID_BOX, BASE_BOX, CAP_MIN, CAP_MAX } from
 import { parseLocalDate } from "../utils/calc";
 import { MASTER_SKUS, BASE_TYPES } from "../data/skuMaster";
 import { Ed } from "./Shared";
-import InventoryReconcile from "./InventoryReconcile";
+import InventoryReconcile, { buildReconciliation, inventoryFlag } from "./InventoryReconcile";
 import { fm, dF } from "../utils/format";
 import { T, tbl, th, td } from "../utils/theme";
 
@@ -89,6 +89,7 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
   const [nsShip, setNsShip] = useState([]);
   const [nsRcpt, setNsRcpt] = useState([]);
   const [recon, setRecon] = useState(null);   // SKU whose reconciliation is open
+  const [flagOnly, setFlagOnly] = useState(false);
   const loadNsInv = () => {
     const U = "https://fxdyiurjioesdmedmgzu.supabase.co/rest/v1/shipment_log?id=eq.1&select=data,updated_at";
     const K = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ4ZHlpdXJqaW9lc2RtZWRtZ3p1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI3MzIzOTYsImV4cCI6MjA4ODMwODM5Nn0.5ueK5iXQ35oThb02ClX3iErPwYR4tPih9GtBAmhDQYk";
@@ -879,7 +880,12 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
 
 
       {view === "live" && (() => {
-        const rows = nsInv.rows.filter((r) => r.onHand !== 0 || r.available !== 0);
+        const all = nsInv.rows.filter((r) => r.onHand !== 0 || r.available !== 0)
+          .map((r) => ({ ...r, flag: inventoryFlag(
+            buildReconciliation({ sku: r.sku, onHand: r.onHand, receipts: nsRcpt, shipments: nsShip, actuals }),
+            r.onHand) }));
+        const suspect = all.filter((r) => r.flag.rank >= 2);
+        const rows = flagOnly ? suspect : all;
         const tot = rows.reduce((a, r) => a + r.onHand, 0);
         const bases = rows.filter((r) => r.sku.startsWith("PB-")).reduce((a, r) => a + r.onHand, 0);
         const numC = { ...td, textAlign: "right", fontFamily: "'JetBrains Mono',monospace", fontSize: 11 };
@@ -888,8 +894,12 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
             <div style={{ padding: "8px 12px", display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
               <span style={{ fontSize: 11, fontWeight: 700 }}>Live inventory — NetSuite</span>
               <button onClick={loadNsInv} style={{ padding: "3px 10px", borderRadius: 4, border: "1px solid " + T.BD, background: "transparent", color: T.T2, cursor: "pointer", fontSize: 10 }}>↻ Refresh</button>
+              <label style={{ fontSize: 10, color: T.T2, display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}>
+                <input type="checkbox" checked={flagOnly} onChange={(e) => setFlagOnly(e.target.checked)} /> Flagged only
+              </label>
               {[["SKUs", fm(rows.length), T.AC], ["Total on hand", fm(tot), T.TX],
-                ["Bases", fm(bases), T.GR], ["Lids", fm(tot - bases), T.PU]].map(([l, v, c], i) => (
+                ["Bases", fm(bases), T.GR], ["Lids", fm(tot - bases), T.PU],
+                ["Need review", fm(suspect.length), suspect.length ? "#b45309" : T.GR]].map(([l, v, c], i) => (
                 <div key={i} style={{ background: T.S2, borderRadius: 5, padding: "3px 9px", border: "1px solid " + T.BD }}>
                   <div style={{ color: T.T2, fontSize: 8, textTransform: "uppercase" }}>{l}</div>
                   <div style={{ color: c, fontSize: 12.5, fontWeight: 700, fontFamily: "'JetBrains Mono',monospace" }}>{v}</div>
@@ -913,6 +923,7 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
                   <th style={{ ...th, minWidth: 130 }}>Location</th>
                   <th style={{ ...th, textAlign: "right" }}>On hand</th>
                   <th style={{ ...th, textAlign: "right" }}>Available</th>
+                  <th style={{ ...th, minWidth: 128 }}>Check</th>
                 </tr></thead>
                 <tbody>
                   {rows.map((r, i) => (
@@ -926,6 +937,13 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
                           background: r.onHand < 0 ? "#fee2e2" : undefined,
                           textDecoration: "underline", textDecorationStyle: "dotted", textUnderlineOffset: 2 }}>{fm(r.onHand)}</td>
                       <td style={{ ...numC, color: T.T2 }}>{fm(r.available)}</td>
+                      <td style={{ ...td }} title={r.flag.why}>
+                        <span style={{ fontSize: 9, fontWeight: 700, padding: "1px 6px", borderRadius: 3,
+                          color: r.flag.color, background: r.flag.bg, whiteSpace: "nowrap",
+                          fontFamily: r.flag.key === "gap" ? "'JetBrains Mono',monospace" : "inherit" }}>
+                          {r.flag.rank >= 2 ? "⚠ " : r.flag.key === "ok" ? "✓ " : ""}{r.flag.label}
+                        </span>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

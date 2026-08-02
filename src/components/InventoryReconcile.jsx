@@ -53,8 +53,13 @@ function pair(a, b) {
   }
 }
 
-export default function InventoryReconcile({ sku, name, onHand, receipts = [], shipments = [], actuals = {}, onClose }) {
-  const model = useMemo(() => {
+/**
+ * Reconcile one SKU's NetSuite balance against the dashboard ledger.
+ * Pure — the Live Inventory table calls it per row to flag suspect SKUs, and
+ * the panel calls it again for the SKU the user opened.
+ */
+export function buildReconciliation({ sku, onHand, receipts = [], shipments = [], actuals = {} }) {
+  {
     // The dashboard stores a fulfillment number against each outbound, so an
     // unmatched one can still name the order it should have been fulfilled on.
     const soByIf = {}, poByIf = {};
@@ -172,10 +177,21 @@ export default function InventoryReconcile({ sku, name, onHand, receipts = [], s
     const accepted = orphanNsOut.reduce((a, e) => a + e.qty, 0);
     const residual = (Number(onHand) || 0) - (dashExpected - accepted);
 
+    // A SKU the dashboard has never recorded is a different problem from one it
+    // records incorrectly — flagging both the same way buries the real ones.
+    const tracked = dashIn.length + dashOut.length + adj.length + nsIn.length + nsOut.length > 0;
+    const covered = dashIn.length + dashOut.length + adj.length > 0;
+
     return { events, nsInT, nsOutT, dashInT, dashOutT, adjT, inTransit, dashExpected, gap,
-      accepted, acceptedCount: orphanNsOut.length, residual,
+      accepted, acceptedCount: orphanNsOut.length, residual, tracked, covered,
       orphans: orphanNsIn.length + orphanDashIn.length + orphanDashOut.length, notes };
-  }, [sku, onHand, receipts, shipments, actuals]);
+  }
+}
+
+export default function InventoryReconcile({ sku, name, onHand, receipts = [], shipments = [], actuals = {}, onClose }) {
+  const model = useMemo(
+    () => buildReconciliation({ sku, onHand, receipts, shipments, actuals }),
+    [sku, onHand, receipts, shipments, actuals]);
 
   const stat = (l, v, c) => (
     <div key={l} style={{ background: T.S1, borderRadius: 5, padding: "4px 10px", border: "1px solid " + T.BD }}>
@@ -292,4 +308,28 @@ export default function InventoryReconcile({ sku, name, onHand, receipts = [], s
       </div>
     </div>
   );
+}
+
+/**
+ * One-glance verdict for a SKU, most severe first. Drives the flag in the
+ * Live Inventory table so a discrepancy is visible without opening anything —
+ * a negative balance is only the loudest symptom, not the only one.
+ */
+export function inventoryFlag(m, onHand) {
+  if (onHand < 0)
+    return { key: "negative", rank: 4, label: "Negative", color: "#991b1b", bg: "#fee2e2",
+      why: "On hand is below zero — units shipped against stock that was never receipted." };
+  if (!m.tracked)
+    return { key: "untracked", rank: 0, label: "No movement", color: "#64748b", bg: "#f1f5f9",
+      why: "Neither ledger records any movement for this SKU." };
+  if (!m.covered)
+    return { key: "uncovered", rank: 2, label: "Not on dashboard", color: "#92400e", bg: "#fef3c7",
+      why: "NetSuite holds stock for this SKU but the dashboard has no inbound, outbound or adjustment explaining it." };
+  if (m.residual !== 0 || m.orphans > 0)
+    return { key: "gap", rank: 3, label: `${m.residual > 0 ? "+" : ""}${m.residual.toLocaleString()}`,
+      color: "#b45309", bg: "#fffbeb",
+      why: `${m.residual.toLocaleString()} unexplained after accepting NetSuite fulfillments` +
+           (m.orphans ? `, ${m.orphans} item${m.orphans > 1 ? "s" : ""} needing action.` : ".") };
+  return { key: "ok", rank: 1, label: "Reconciled", color: "#15803d", bg: "#dcfce7",
+    why: "Both ledgers agree and every event has a counterpart." };
 }
