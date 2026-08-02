@@ -10,11 +10,11 @@ import DemandTab from "./components/DemandTab";
 import ItemForecastTab from "./components/ItemForecastTab";
 import ShippingTab from "./components/ShippingTab";
 import InventoryTab from "./components/InventoryTab";
-import ShipmentLogTab from "./components/ShipmentLogTab";
+import MarketOrdersTab from "./components/MarketOrdersTab";
 import SettingsTab from "./components/SettingsTab";
 import AiAssistant from "./components/AiAssistant";
 
-const MAIN_TABS = ["demand", "forecast", "shipping", "inventory", "shiplog", "settings"];
+const MAIN_TABS = ["demand", "forecast", "shipping", "inventory", "orders", "settings"];
 
 export default function App() {
   // Persist the active tab so a page refresh stays on the same page.
@@ -171,7 +171,7 @@ export default function App() {
     const rows = [{ l:"Go-Live Demand", k:"gld", fn:fm },{ l:"Total Freight", k:"freight", fn:f$, best:minFr },{ l:"Base Molds", k:"bM", fn:fm },{ l:"Lid Molds", k:"lM", fn:fm }];
     return (<div style={{ padding:"16px 18px" }}><div style={{ fontSize:15, fontWeight:700, color:T.TX, marginBottom:12 }}>Scenario Comparison</div><div style={{ overflowX:"auto" }}><table style={tbl}><thead><tr><th style={th}>Metric</th>{data.map((d, i) => <th key={i} style={{ ...th, textAlign:"right" }}>{d.name}</th>)}</tr></thead><tbody>{rows.map((r, ri) => (<tr key={ri}><td style={{ ...td, fontWeight:600 }}>{r.l}</td>{data.map((d, i) => { const v = d[r.k]; const best = r.best != null && v === r.best; return <td key={i} style={{ ...td, textAlign:"right", fontWeight:700, color:best ? T.GR : T.TX }}>{r.fn(v)}</td>; })}</tr>))}</tbody></table></div></div>);
   };
-const mainTabs = [{ k:"demand", l:"Market Demand", i:"📊" },{ k:"forecast", l:"Item Forecast", i:"📈" },{ k:"shipping", l:"Shipping Calculator", i:"📦" },{ k:"inventory", l:"Inventory", i:"📋" },{ k:"shiplog", l:"Shipment Log", i:"🚚" },{ k:"settings", l:"Settings", i:"⚙️" }];
+const mainTabs = [{ k:"demand", l:"Market Demand", i:"📊" },{ k:"forecast", l:"Item Forecast", i:"📈" },{ k:"shipping", l:"Shipping Calculator", i:"📦" },{ k:"inventory", l:"Inventory", i:"📋" },{ k:"orders", l:"Market Orders", i:"🚚" },{ k:"settings", l:"Settings", i:"⚙️" }];
   return (
     <div style={{ background:T.BG, color:T.TX, minHeight:"100vh", fontFamily:"'DM Sans','Segoe UI',sans-serif", fontSize:14 }}>
       <div style={{ padding:"10px 18px", background:T.S1, borderBottom:"1px solid "+T.BD, display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:8 }}>
@@ -220,7 +220,7 @@ const mainTabs = [{ k:"demand", l:"Market Demand", i:"📊" },{ k:"forecast", l:
         {tab === "demand" && <DemandTab sc={sc} gld={gld} annD={annD} upd={upd} />}
         {tab === "forecast" && <ItemForecastTab sc={sc} upd={upd} />}
         {tab === "inventory" && <InventoryTab sc={sc} actuals={actuals} updActuals={updActuals} />}
-        {tab === "shiplog" && <ShipmentLogTab />}
+        {tab === "orders" && <MarketOrdersTab />}
         {tab === "shipping" && <ShippingTab ships={displayShips} prod={prod} frt={frt} gld={gld} weeklyDem={weeklyDem} sc={sc} upd={upd} updShipEdit={updShipEdit} addShipment={addShipment} updShipAddition={updShipAddition} removeShipAddition={removeShipAddition} deleteShipment={deleteShipment} restoreShipment={restoreShipment} clearShipEdits={clearShipEdits} hasShipEdits={hasShipEdits} />}
         {tab === "settings" && <SettingsTab sc={sc} cap={cap} upd={upd} actuals={actuals} updActuals={updActuals} />}
       </>)}

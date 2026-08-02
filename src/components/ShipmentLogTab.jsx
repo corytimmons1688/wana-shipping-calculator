@@ -20,7 +20,7 @@ const MARKET_NAME = { NJ: "New Jersey", NY: "New York", CO: "Colorado", MA: "Mas
 
 const mono = { fontFamily: "'JetBrains Mono',monospace" };
 
-export default function ShipmentLogTab() {
+export default function ShipmentLogTab({ embedded = false }) {
   const [state, setState] = useState({ loading: true, error: null, data: null, updatedAt: null });
   const [mkt, setMkt] = useState("All");
   const [days, setDays] = useState(30);
@@ -89,7 +89,7 @@ export default function ShipmentLogTab() {
   const sel = { background: T.S2, border: "1px solid " + T.BD, color: T.AC, borderRadius: 3, padding: "2px 6px", fontSize: 11, fontFamily: "inherit" };
 
   return (
-    <div style={{ padding: "14px 18px" }}>
+    <div style={{ padding: embedded ? 0 : "14px 18px" }}>
       <div style={{ display: "flex", gap: 10, marginBottom: 12, flexWrap: "wrap", alignItems: "center" }}>
         <span style={{ fontSize: 12, fontWeight: 700 }}>Shipment log — actual fulfillments</span>
         <label style={{ fontSize: 10, color: T.T2, display: "flex", alignItems: "center", gap: 4 }}>

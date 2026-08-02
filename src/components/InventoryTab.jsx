@@ -10,7 +10,6 @@ import { buildApplySchedule, slotKey, LID_BOX, BASE_BOX, CAP_MIN, CAP_MAX } from
 import { parseLocalDate } from "../utils/calc";
 import { MASTER_SKUS, BASE_TYPES } from "../data/skuMaster";
 import { Ed } from "./Shared";
-import PurchaseOrdersView from "./PurchaseOrdersView";
 import { fm, dF } from "../utils/format";
 import { T, tbl, th, td } from "../utils/theme";
 
@@ -84,7 +83,6 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
   const [adjVal, setAdjVal] = useState("");
   const [mrpCollapsed, setMrpCollapsed] = useState(() => new Set());
   const [applyMkt, setApplyMkt] = useState("All");
-  const [nsSO, setNsSO] = useState([]);
   // Live NetSuite on-hand, refreshed by the sync cron into shipment_log.
   const [nsInv, setNsInv] = useState({ loading: true, rows: [], at: null, err: null });
   const [nsShip, setNsShip] = useState([]);
@@ -97,7 +95,6 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
       .then((rows) => {
         const d = ((rows[0] || {}).data) || {};
         setNsShip(d.shipments || []);
-        setNsSO(d.salesOrders || []);
         setNsInv({ loading: false, err: null, rows: d.inventory || [], at: (rows[0] || {}).updated_at || null });
       })
       .catch((e) => setNsInv({ loading: false, rows: [], at: null, err: String(e.message || e) }));
@@ -298,7 +295,6 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
         {subBtn("overview", "Overview")}
         {subBtn("mrp", "MRP")}
         {subBtn("inbound", "Inbound (factory → Calyx)")}
-        {subBtn("pos", "Purchase Orders")}
         {subBtn("targets", "Targets")}
         {subBtn("factory", "Factory Priority")}
         {subBtn("apply", "Apply Schedule")}
@@ -984,11 +980,6 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
             </tbody>
           </table>
         </div>
-      )}
-
-      {view === "pos" && (
-        <PurchaseOrdersView salesOrders={nsSO} shipments={nsShip} syncedAt={nsInv.at}
-          onRefresh={loadNsInv} loading={nsInv.loading} />
       )}
 
       {view === "targets" && (
