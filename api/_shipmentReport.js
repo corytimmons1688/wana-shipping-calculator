@@ -11,8 +11,11 @@ export const LABEL_RE = /^WANA-([A-Z]{2})-/;
 export const IS_LID = (sku) => /^PL-WCB-/.test(sku || "");
 export const IS_BASE = (sku) => /^PB-WCB-/.test(sku || "");
 export const IS_LABEL = (sku) => LABEL_RE.test(sku || "");
-export const IS_APPL_FEE = (name) => /Label Appl Fee/i.test(name || "");
-export const APPL_COLOR = (name) => (/black/i.test(name || "") ? "PB-WCB-221-00" : "PB-WCB-002-00");
+// NOTE: appl-fee rows carry their text in itemid and have a NULL displayname,
+// so both fields must be considered — testing displayname alone silently
+// dropped every base row and left the labels looking like orphans.
+export const IS_APPL_FEE = (r) => /Label Appl Fee/i.test(typeof r === "string" ? r : `${(r && r.itemid) || ""} ${(r && r.displayname) || ""}`);
+export const APPL_COLOR = (r) => (/black/i.test(typeof r === "string" ? r : `${(r && r.itemid) || ""} ${(r && r.displayname) || ""}`) ? "PB-WCB-221-00" : "PB-WCB-002-00");
 
 // §9.3 — carrier names are free-form; map explicitly, pass unknowns through.
 const CARRIER = { FEDEX: "FedEx", "FEDEX FREIGHT": "FedEx Freight", ESTES: "Estes",
@@ -57,7 +60,7 @@ export function buildShipmentReport(rows, meta = {}) {
   }
 
   // §5.2 keep only reportable families
-  const keep = lines.filter((r) => r.itemid && (IS_LID(r.itemid) || IS_BASE(r.itemid) || IS_LABEL(r.itemid) || IS_APPL_FEE(r.displayname)));
+  const keep = lines.filter((r) => r.itemid && (IS_LID(r.itemid) || IS_BASE(r.itemid) || IS_LABEL(r.itemid) || IS_APPL_FEE(r)));
 
   // §5.3 group by (date, tracking) — bases/lids and their labels ship on
   // separate fulfillments against separate SOs but are one physical shipment.
@@ -96,7 +99,7 @@ export function buildShipmentReport(rows, meta = {}) {
   for (const g of Object.values(groups)) {
     const raw = g._raw;
     const labels = raw.filter((r) => IS_LABEL(r.itemid));
-    const appl = raw.filter((r) => IS_APPL_FEE(r.displayname));
+    const appl = raw.filter((r) => IS_APPL_FEE(r));
     const lids = raw.filter((r) => IS_LID(r.itemid));
     const bases = raw.filter((r) => IS_BASE(r.itemid));
 
@@ -125,7 +128,7 @@ export function buildShipmentReport(rows, meta = {}) {
           message: `Label ${r.itemid} qty ${q} has no matching appl-fee line — not a Wana Cube base application; row omitted.` });
         continue;
       }
-      out.push({ shipment: g, sku: APPL_COLOR(fee.displayname),
+      out.push({ shipment: g, sku: APPL_COLOR(fee),
         flavor: `${flavorFromLabel(r.displayname)} - BASE`, component_type: "BASE", quantity_shipped: q,
         total_shipped_on_po: cumulative(r.item_id, r.createdfrom, g.ship_date) || q,
         po_quantity: orderedQty(r.item_id, r.createdfrom),
@@ -133,7 +136,7 @@ export function buildShipmentReport(rows, meta = {}) {
     }
     // §6 base reconciliation: Σ appl fees per colour == Σ PB- shipped per colour
     for (const color of ["PB-WCB-002-00", "PB-WCB-221-00"]) {
-      const feeTotal = appl.filter((a) => APPL_COLOR(a.displayname) === color).reduce((a, r) => a + (Number(r.qty) || 0), 0);
+      const feeTotal = appl.filter((a) => APPL_COLOR(a) === color).reduce((a, r) => a + (Number(r.qty) || 0), 0);
       const baseTotal = bases.filter((b) => b.itemid === color).reduce((a, r) => a + (Number(r.qty) || 0), 0);
       if (feeTotal || baseTotal) g.reconciliation = [...(g.reconciliation || []),
         { base_sku: color, appl_fee_total: feeTotal, base_qty_shipped: baseTotal, status: feeTotal === baseTotal ? "pass" : "mismatch" }];
