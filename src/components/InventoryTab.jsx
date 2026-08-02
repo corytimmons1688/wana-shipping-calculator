@@ -85,17 +85,21 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
   const [applyMkt, setApplyMkt] = useState("All");
   // Live NetSuite on-hand, refreshed by the sync cron into shipment_log.
   const [nsInv, setNsInv] = useState({ loading: true, rows: [], at: null, err: null });
+  const [nsShip, setNsShip] = useState([]);
   const loadNsInv = () => {
     const U = "https://fxdyiurjioesdmedmgzu.supabase.co/rest/v1/shipment_log?id=eq.1&select=data,updated_at";
     const K = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ4ZHlpdXJqaW9lc2RtZWRtZ3p1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI3MzIzOTYsImV4cCI6MjA4ODMwODM5Nn0.5ueK5iXQ35oThb02ClX3iErPwYR4tPih9GtBAmhDQYk";
     setNsInv((p) => ({ ...p, loading: true }));
     fetch(U, { headers: { apikey: K, Authorization: `Bearer ${K}` } })
       .then((r) => r.json())
-      .then((rows) => setNsInv({ loading: false, err: null,
-        rows: ((rows[0] || {}).data || {}).inventory || [], at: (rows[0] || {}).updated_at || null }))
+      .then((rows) => {
+        const d = ((rows[0] || {}).data) || {};
+        setNsShip(d.shipments || []);
+        setNsInv({ loading: false, err: null, rows: d.inventory || [], at: (rows[0] || {}).updated_at || null });
+      })
       .catch((e) => setNsInv({ loading: false, rows: [], at: null, err: String(e.message || e) }));
   };
-  useEffect(() => { if (view === "live") loadNsInv(); }, [view]);
+  useEffect(() => { loadNsInv(); }, []); // eslint-disable-line
   // Inventory model "as of" date — anchored to the last week of May (May 25,
   // 2026, a Monday on the week grid) since NJ's demand begins that week.
   // Nothing has shipped/been consumed before this, so the projection starts here.
@@ -105,6 +109,38 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
   const inv = useMemo(() => calcSkuInventory(actuals, fc, today), [actuals, fc]); // eslint-disable-line
   const mw = useMemo(() => calcSkuMarketWeekly(sc.markets), [sc.markets]);
   const grid = useMemo(() => buildWeekGrid(), []);
+
+  // ── plan vs actual ─────────────────────────────────────────────────────────
+  // Match each scheduled ship line to what NetSuite says actually left, so the
+  // floor sees the plan tick itself off and — more usefully — sees what was
+  // MISSED on a day where the rest of the load went out.
+  const MKT_CODE = { "New Jersey": "NJ", "New York": "NY", Colorado: "CO", Massachusetts: "MA",
+    Arizona: "AZ", Illinois: "IL", Michigan: "MI", Missouri: "MO", Montana: "MT",
+    "New Mexico": "NM", Ohio: "OH", Oklahoma: "OK", Connecticut: "CT", Maryland: "MD" };
+  const actualIdx = useMemo(() => {
+    const ix = {};
+    for (const sh of nsShip || []) {
+      const d = parseLocalDate(String(sh.ship_date || "").replace(/(\d+)\/(\d+)\/(\d+)/, (m, a, b, c) => `${c}-${String(a).padStart(2, "0")}-${String(b).padStart(2, "0")}`));
+      const iso = isNaN(d) ? null : d.toISOString().slice(0, 10);
+      for (const l of sh.lines || []) {
+        const k = `${sh.market}|${l.sku}|${l.component_type}`;
+        (ix[k] = ix[k] || []).push({ date: iso, qty: l.quantity_shipped, tracking: sh.tracking_display });
+      }
+    }
+    return ix;
+  }, [nsShip]);
+  // a scheduled line counts as shipped if the same market+sku+kind moved within
+  // four days of the planned date — carriers slip, the intent still matches
+  const actualFor = (market, sku, kind, date) => {
+    const hits = actualIdx[`${MKT_CODE[market] || market}|${sku}|${kind}`] || [];
+    let best = null;
+    for (const h of hits) {
+      if (!h.date) continue;
+      const diff = Math.abs((parseLocalDate(h.date) - parseLocalDate(date)) / 86400000);
+      if (diff <= 4 && (!best || diff < best.diff)) best = { ...h, diff };
+    }
+    return best;
+  };
 
   // ── shared mutation helpers ────────────────────────────────────────────────
   const updIn = (id, fn) => updActuals((a) => { const sh = a.inbound.find((s) => s.id === id); if (sh) fn(sh); });
@@ -694,11 +730,15 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
             {l.preApplied && <span title="Already applied — no capacity used" style={{ marginLeft: 4, fontSize: 7.5, color: T.GR, border: "1px solid " + T.GR + "66", borderRadius: 3, padding: "0 3px" }}>pre</span>}
           </>
         );
-        const lineRow = (l, date, showBase) => (
-          <tr key={l.key} style={{ background: l.done ? T.S2 + "AA" : undefined, opacity: l.done ? 0.5 : 1 }}>
+        const lineRow = (l, date, showBase, st) => (
+          <tr key={l.key} style={{
+            background: st && st.shipped ? "#dcfce7" : st && st.missed ? "#fef3c7" : (l.done ? T.S2 + "AA" : undefined),
+            opacity: (l.done && !st) ? 0.5 : 1 }}>
             <td style={{ ...td, fontSize: 9.5, fontWeight: 600, textDecoration: l.done ? "line-through" : undefined }}>{l.market}</td>
             <td style={{ ...td, fontSize: 9.5, textDecoration: l.done ? "line-through" : undefined }}>
               {l.name} <span style={{ fontWeight: 700 }}>– {l.kind}</span>{badge(l)}
+              {st && st.shipped && <span title={`Confirmed in NetSuite${st.a.tracking ? " — " + st.a.tracking : ""}`} style={{ marginLeft: 4, fontSize: 7.5, color: T.GR, border: "1px solid " + T.GR, borderRadius: 3, padding: "0 3px", fontWeight: 700 }}>✓ shipped {fm(st.a.qty)}</span>}
+              {st && st.missed && <span title="Other lines on this day shipped, this one did not" style={{ marginLeft: 4, fontSize: 7.5, color: "#92400e", border: "1px solid " + T.AM, borderRadius: 3, padding: "0 3px", fontWeight: 700 }}>⚠ not shipped</span>}
               {l.reason && <div style={{ fontSize: 8, color: T.T2 }}>{l.reason}</div>}
             </td>
             {showBase && <td style={{ ...td, textAlign: "center" }}>
@@ -734,6 +774,13 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
                   {sched.days.map((d) => {
                     const rows = pick(d);
                     if (!rows.length) return null;
+                    // reconcile only the shipping pane against NetSuite actuals
+                    const stat = {};
+                    if (!showBase) {
+                      let any = false;
+                      for (const l of rows) { const a = actualFor(l.market, l.sku, l.kind, d.date); if (a) { stat[l.key] = { shipped: true, a }; any = true; } }
+                      if (any) for (const l of rows) if (!stat[l.key]) stat[l.key] = { missed: true };
+                    }
                     const applied = d.apply.reduce((a, l) => a + (l.preApplied ? 0 : l.units), 0);
                     const over = applied > aps.capacity;
                     return [
@@ -746,7 +793,7 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
                           </span>
                         </td>
                       </tr>,
-                      ...rows.map((l) => lineRow(l, d.date, showBase)),
+                      ...rows.map((l) => lineRow(l, d.date, showBase, stat[l.key])),
                     ];
                   })}
                 </tbody>
