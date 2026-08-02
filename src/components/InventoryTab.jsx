@@ -117,13 +117,26 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
   const MKT_CODE = { "New Jersey": "NJ", "New York": "NY", Colorado: "CO", Massachusetts: "MA",
     Arizona: "AZ", Illinois: "IL", Michigan: "MI", Missouri: "MO", Montana: "MT",
     "New Mexico": "NM", Ohio: "OH", Oklahoma: "OK", Connecticut: "CT", Maryland: "MD" };
+  // strip state prefixes and known naming drift so "New Jersey Sunrise" and
+  // "Sunrise", or "Swift Recovery Bounce Back Cherry Cola" and "Swift Recovery
+  // Cherry Cola", resolve to the same flavour
+  const normName = (v) => String(v || "").toLowerCase()
+    .replace(/^(new jersey|new york|colorado|arizona|illinois|michigan|montana|ohio|oklahoma|missouri|new mexico|connecticut|maryland|massachusetts)\s+/, "")
+    .replace(/bounce back /g, "").replace(/rasberry/g, "raspberry")
+    .replace(/[^a-z]/g, "");
   const actualIdx = useMemo(() => {
     const ix = {};
     for (const sh of nsShip || []) {
       const d = parseLocalDate(String(sh.ship_date || "").replace(/(\d+)\/(\d+)\/(\d+)/, (m, a, b, c) => `${c}-${String(a).padStart(2, "0")}-${String(b).padStart(2, "0")}`));
       const iso = isNaN(d) ? null : d.toISOString().slice(0, 10);
       for (const l of sh.lines || []) {
-        const k = `${sh.market}|${l.sku}|${l.component_type}`;
+        // A LID row's sku is the PL- code and matches the plan directly. A BASE
+        // row's sku is the shared PB- base, so it can only be tied back to a
+        // flavour by name — normalise both sides before comparing.
+        const key = l.component_type === "LID"
+          ? l.sku
+          : normName(String(l.flavor || "").replace(/\s*-\s*(BASE|LID)\s*$/i, ""));
+        const k = `${sh.market}|${key}|${l.component_type}`;
         (ix[k] = ix[k] || []).push({ date: iso, qty: l.quantity_shipped, tracking: sh.tracking_display });
       }
     }
@@ -131,8 +144,9 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
   }, [nsShip]);
   // a scheduled line counts as shipped if the same market+sku+kind moved within
   // four days of the planned date — carriers slip, the intent still matches
-  const actualFor = (market, sku, kind, date) => {
-    const hits = actualIdx[`${MKT_CODE[market] || market}|${sku}|${kind}`] || [];
+  const actualFor = (market, sku, kind, date, name) => {
+    const key = kind === "LID" ? sku : normName(name);
+    const hits = actualIdx[`${MKT_CODE[market] || market}|${key}|${kind}`] || [];
     let best = null;
     for (const h of hits) {
       if (!h.date) continue;
@@ -744,10 +758,19 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
             {showBase && <td style={{ ...td, textAlign: "center" }}>
               <span style={{ fontSize: 8, fontWeight: 700, padding: "1px 5px", borderRadius: 3, border: "1px solid " + T.BD, background: l.baseColor === "Black" ? "#1a1a2e" : "#f1f5f9", color: l.baseColor === "Black" ? "#fff" : "#334155" }}>{l.baseColor}</span>
             </td>}
-            <td style={cellN}>{l.done ? fm(l.units) : <Ed value={l.units} onChange={(v) => setQty(l, date, v)} style={{ color: l.edited ? T.AM : "#1e40af", fontSize: 10 }} />}</td>
+            <td style={cellN}>
+              {st && st.shipped
+                ? <span title={`Planned ${fm(l.units)} — NetSuite says ${fm(st.a.qty)} shipped`} style={{ fontWeight: 700, color: T.GR }}>
+                    {fm(st.a.qty)}{st.a.qty !== l.units && <span style={{ color: T.T2, fontWeight: 400 }}> ({fm(l.units)} plan)</span>}
+                  </span>
+                : (l.done ? fm(l.units) : <Ed value={l.units} onChange={(v) => setQty(l, date, v)} style={{ color: l.edited ? T.AM : "#1e40af", fontSize: 10 }} />)}
+            </td>
             <td style={{ ...cellN, color: T.T2 }}>{fm(l.boxes)}</td>
             <td style={{ ...td, textAlign: "center" }}>
-              <input type="checkbox" checked={!!l.done} onChange={(e) => setDone(l, date, e.target.checked)} style={{ cursor: "pointer" }} />
+              <input type="checkbox" checked={!!l.done || !!(st && st.shipped)} readOnly={!!(st && st.shipped)}
+                title={st && st.shipped ? "Confirmed shipped in NetSuite" : undefined}
+                onChange={(e) => { if (!(st && st.shipped)) setDone(l, date, e.target.checked); }}
+                style={{ cursor: st && st.shipped ? "default" : "pointer" }} />
             </td>
           </tr>
         );
@@ -778,7 +801,7 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
                     const stat = {};
                     if (!showBase) {
                       let any = false;
-                      for (const l of rows) { const a = actualFor(l.market, l.sku, l.kind, d.date); if (a) { stat[l.key] = { shipped: true, a }; any = true; } }
+                      for (const l of rows) { const a = actualFor(l.market, l.sku, l.kind, d.date, l.name); if (a) { stat[l.key] = { shipped: true, a }; any = true; } }
                       if (any) for (const l of rows) if (!stat[l.key]) stat[l.key] = { missed: true };
                     }
                     const applied = d.apply.reduce((a, l) => a + (l.preApplied ? 0 : l.units), 0);
