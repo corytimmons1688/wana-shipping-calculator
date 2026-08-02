@@ -83,6 +83,8 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
   const [adjVal, setAdjVal] = useState("");
   const [mrpCollapsed, setMrpCollapsed] = useState(() => new Set());
   const [applyMkt, setApplyMkt] = useState("All");
+  const [poMkt, setPoMkt] = useState("All");
+  const [nsSO, setNsSO] = useState([]);
   // Live NetSuite on-hand, refreshed by the sync cron into shipment_log.
   const [nsInv, setNsInv] = useState({ loading: true, rows: [], at: null, err: null });
   const [nsShip, setNsShip] = useState([]);
@@ -95,6 +97,7 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
       .then((rows) => {
         const d = ((rows[0] || {}).data) || {};
         setNsShip(d.shipments || []);
+        setNsSO(d.salesOrders || []);
         setNsInv({ loading: false, err: null, rows: d.inventory || [], at: (rows[0] || {}).updated_at || null });
       })
       .catch((e) => setNsInv({ loading: false, rows: [], at: null, err: String(e.message || e) }));
@@ -295,8 +298,7 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
         {subBtn("overview", "Overview")}
         {subBtn("mrp", "MRP")}
         {subBtn("inbound", "Inbound (factory → Calyx)")}
-        {subBtn("outbound", "Outbound to Wana")}
-        {subBtn("pos", "Open POs")}
+        {subBtn("pos", "Sales Orders")}
         {subBtn("targets", "Targets")}
         {subBtn("factory", "Factory Priority")}
         {subBtn("apply", "Apply Schedule")}
@@ -984,126 +986,97 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
         </div>
       )}
 
-      {view === "outbound" && (
-        <div>
-          <div style={{ display: "flex", gap: 6, alignItems: "center", marginBottom: 10, flexWrap: "wrap" }}>
-            {outMarkets.map((m) => (
-              <button key={m} onClick={() => setOutMkt(m)} style={{ padding: "3px 10px", borderRadius: 999, cursor: "pointer", fontSize: 10, fontFamily: "inherit",
-                border: "1px solid " + (outMkt === m ? T.PU : T.BD), background: outMkt === m ? T.PU + "15" : "transparent", color: outMkt === m ? T.PU : T.T2, fontWeight: outMkt === m ? 700 : 500 }}>{m}</button>
-            ))}
-            <button onClick={addOutbound} style={{ marginLeft: "auto", padding: "4px 12px", borderRadius: 5, border: "1px solid " + T.GR, background: T.GR + "10", color: T.GR, cursor: "pointer", fontSize: 11, fontWeight: 700 }}>+ Add outbound shipment</button>
+      {view === "pos" && (() => {
+        const all = nsSO || [];
+        const mkts = [...new Set(all.map((r) => r.market).filter(Boolean))].sort();
+        const rows = all.filter((r) => poMkt === "All" || r.market === poMkt);
+        // one card per sales order — the customer's PO number is the identifier
+        const orders = {};
+        for (const r of rows) {
+          const o = orders[r.so] || (orders[r.so] = { so: r.so, po: r.custPo, customer: r.customer,
+            market: r.market, status: r.status, lines: [], ordered: 0, shipped: 0 });
+          o.lines.push(r); o.ordered += r.ordered; o.shipped += r.shipped;
+        }
+        const list = Object.values(orders).sort((a, b) => String(b.so).localeCompare(String(a.so)));
+        const tOrd = rows.reduce((a, r) => a + r.ordered, 0), tShp = rows.reduce((a, r) => a + r.shipped, 0);
+        const numC = { ...td, textAlign: "right", fontFamily: "'JetBrains Mono',monospace", fontSize: 10.5 };
+        const bar = (pct) => (
+          <div style={{ width: 54, height: 6, background: T.BD, borderRadius: 3, overflow: "hidden", display: "inline-block", verticalAlign: "middle" }}>
+            <div style={{ width: Math.min(100, pct) + "%", height: "100%", background: pct >= 100 ? T.GR : pct > 0 ? T.AC : "transparent" }} />
           </div>
-
-          <div style={{ background: T.S1, border: "1px solid " + T.BD, borderRadius: 6, overflowX: "auto", marginBottom: 12 }}>
-            <table style={{ ...tbl, fontSize: 11 }}>
-              <thead><tr>
-                <th style={{ ...th }}>Market</th><th style={{ ...th }}>Shipped</th><th style={{ ...th }}>Arrives by</th>
-                <th style={{ ...th }}>Tracking</th><th style={{ ...th }}>Status</th>
-                <th style={{ ...th, textAlign: "right" }}>Units</th><th style={{ ...th }}></th>
-              </tr></thead>
-              <tbody>
-                {outboundShown.length === 0 && <tr><td colSpan={7} style={{ ...td, color: T.T2, textAlign: "center", padding: 18 }}>No outbound shipments recorded{outMkt !== "All" ? ` for ${outMkt}` : ""} yet.</td></tr>}
-                {outboundShown.map((sh) => {
-                  const exp = expShip === sh.id;
-                  const units = (sh.lines || []).reduce((a, l) => a + (Number(l.qty) || 0), 0);
-                  const arrived = sh.arriveBy && parseLocalDate(sh.arriveBy) <= today;
-                  return [
-                    <tr key={sh.id} style={{ background: exp ? T.PU + "0A" : undefined }}>
-                      <td style={{ ...td, fontWeight: 700, cursor: "pointer" }} onClick={() => setExpShip(exp ? null : sh.id)}>
-                        <span style={{ color: T.T2, fontSize: 9, marginRight: 4 }}>{exp ? "▼" : "▶"}</span>
-                        <select value={sh.market || "New Jersey"} onChange={(e) => updOut(sh.id, (s) => { s.market = e.target.value; })} onClick={(e) => e.stopPropagation()}
-                          style={{ fontSize: 11, padding: "2px 3px", borderRadius: 4, border: "1px solid " + T.BD, background: T.S1, color: T.TX }}>
-                          {sc.markets.map((m) => <option key={m.name} value={m.name}>{m.name}</option>)}
-                        </select>
-                      </td>
-                      <td style={{ ...td }}><DateEd value={sh.dateShipped} onChange={(v) => updOut(sh.id, (s) => { s.dateShipped = v; })} /></td>
-                      <td style={{ ...td }}><DateEd value={sh.arriveBy} onChange={(v) => updOut(sh.id, (s) => { s.arriveBy = v; })} /></td>
-                      <td style={{ ...td }}><Ed value={sh.tracking || ""} type="text" onChange={(v) => updOut(sh.id, (s) => { s.tracking = v; })} /></td>
-                      <td style={{ ...td }}>
-                        {sh.delivered ? <Chip txt="Delivered" bg="#dcfce7" bd={T.GR} tx="#166534" />
-                          : !sh.dateShipped ? <Chip txt="Planned" bg={T.S2} bd={T.BD} tx={T.T2} />
-                          : arrived ? <span style={{ whiteSpace: "nowrap" }}><Chip txt="Arrived?" bg="#fef3c7" bd={T.AM} tx="#92400e" /><button onClick={() => updOut(sh.id, (s) => { s.delivered = true; })} style={{ marginLeft: 4, padding: "1px 6px", borderRadius: 4, border: "1px solid " + T.GR, background: T.GR + "10", color: T.GR, cursor: "pointer", fontSize: 9 }}>mark delivered</button></span>
-                          : <Chip txt="In transit" bg="#dbeafe" bd={T.AC} tx="#1d4ed8" />}
-                      </td>
-                      <td style={{ ...td, textAlign: "right", fontFamily: "'JetBrains Mono',monospace", fontWeight: 700 }}>{fm(units)}</td>
-                      <td style={{ ...td }}>
-                        <button onClick={() => { if (window.confirm("Delete this outbound shipment?")) updActuals((a) => { a.outbound = a.outbound.filter((x) => x.id !== sh.id); }); }}
-                          style={{ border: "none", background: "transparent", color: T.T2, cursor: "pointer", fontSize: 12 }} title="Delete shipment">🗑</button>
-                      </td>
-                    </tr>,
-                    exp && <tr key={sh.id + "x"}><td colSpan={7} style={{ padding: 0, borderBottom: "1px solid " + T.BD }}>{lineRows(sh, "out")}</td></tr>,
-                  ];
-                })}
-              </tbody>
-            </table>
-            <div style={{ padding: "6px 12px", fontSize: 9, color: T.T2, borderTop: "1px solid " + T.BD }}>
-              Outbound units deduct from Calyx on-hand on the ship date. Enter finished flavors as their PL- lid SKU and use “Auto-add base lines” for the matching PB- base units.
-            </div>
-          </div>
-
-          <div style={{ background: T.S1, border: "1px solid " + T.BD, borderRadius: 6, overflowX: "auto" }}>
-            <div style={{ padding: "8px 12px", display: "flex", alignItems: "center", gap: 10 }}>
-              <span style={{ fontSize: 11, fontWeight: 700 }}>Flavor schedule (Wana-facing)</span>
-              <button onClick={() => updActuals((a) => a.milestones.push({ market: outMkt !== "All" ? outMkt : "New Jersey", sku: "", expectedArrival: "", kitchenDate: "" }))}
-                style={{ padding: "3px 9px", borderRadius: 4, border: "1px solid " + T.AC, background: T.AC + "10", color: T.AC, cursor: "pointer", fontSize: 10, fontWeight: 600 }}>+ Add flavor row</button>
-              <span style={{ fontSize: 9.5, color: T.T2 }}>expected arrival is free text (e.g. “TBD not before 7/11”)</span>
-            </div>
-            <table style={{ ...tbl, fontSize: 11 }}>
-              <thead><tr>
-                <th style={{ ...th }}>Market</th><th style={{ ...th, minWidth: 220 }}>Flavor / SKU</th>
-                <th style={{ ...th }}>Expected arrival</th><th style={{ ...th }}>First kitchen date</th><th style={{ ...th }}></th>
-              </tr></thead>
-              <tbody>
-                {milestonesShown.length === 0 && <tr><td colSpan={5} style={{ ...td, color: T.T2, textAlign: "center", padding: 16 }}>No flavor schedule rows{outMkt !== "All" ? ` for ${outMkt}` : ""} yet.</td></tr>}
-                {milestonesShown.map((m) => {
-                  const mi = (actuals.milestones || []).indexOf(m);
-                  return (
-                    <tr key={mi}>
-                      <td style={{ ...td, color: T.T2 }}>{m.market}</td>
-                      <td style={{ ...td }}><SkuSelect value={m.sku} onChange={(v) => updActuals((a) => { a.milestones[mi].sku = v; })} width={230} /></td>
-                      <td style={{ ...td }}><Ed value={m.expectedArrival || ""} type="text" onChange={(v) => updActuals((a) => { a.milestones[mi].expectedArrival = v; })} /></td>
-                      <td style={{ ...td }}><DateEd value={m.kitchenDate} onChange={(v) => updActuals((a) => { a.milestones[mi].kitchenDate = v; })} /></td>
-                      <td style={{ ...td }}><button onClick={() => updActuals((a) => a.milestones.splice(mi, 1))} style={{ border: "none", background: "transparent", color: T.T2, cursor: "pointer", fontSize: 12 }} title="Remove">✕</button></td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {view === "pos" && (
-        <div style={{ background: T.S1, border: "1px solid " + T.BD, borderRadius: 6, overflowX: "auto" }}>
-          <div style={{ padding: "8px 12px", display: "flex", alignItems: "center", gap: 10 }}>
-            <AddPoRow onAdd={(sku, qty) => ensurePo(sku, (p) => { p.poQty = qty; })} />
-            <span style={{ fontSize: 10, color: T.T2 }}>Received + in transit derives from inbound shipment lines; use Manual adj for history not entered as shipments.</span>
-          </div>
-          <table style={{ ...tbl, fontSize: 11 }}>
-            <thead><tr>
-              <th style={{ ...th, minWidth: 200 }}>SKU</th>
-              <th style={{ ...th, textAlign: "right" }}>PO qty</th>
-              <th style={{ ...th, textAlign: "right" }}>Recv + transit</th>
-              <th style={{ ...th, textAlign: "right" }}>Manual adj</th>
-              <th style={{ ...th, textAlign: "right" }}>Remaining</th>
-            </tr></thead>
-            <tbody>
-              {poRows.length === 0 && <tr><td colSpan={5} style={{ ...td, color: T.T2, textAlign: "center", padding: 18 }}>No PO lines yet — add the open Wana PO quantities per SKU.</td></tr>}
-              {poRows.map((r) => (
-                <tr key={r.key}>
-                  <td style={{ ...td }}><span style={{ fontWeight: 600 }}>{r.name}</span> <span style={{ fontSize: 9, color: T.T2, fontFamily: "'JetBrains Mono',monospace" }}>{r.key}</span></td>
-                  <td style={{ ...td, textAlign: "right" }}><Ed value={r.poQty} onChange={(v) => ensurePo(r.key, (p) => { p.poQty = Number(v) || 0; })} /></td>
-                  <td style={{ ...td, textAlign: "right", fontFamily: "'JetBrains Mono',monospace" }}>{fm(Math.round(r.poRecvDerived))}</td>
-                  <td style={{ ...td, textAlign: "right" }}><Ed value={r.poAdj} onChange={(v) => ensurePo(r.key, (p) => { p.adjQty = Number(v) || 0; })} /></td>
-                  <td style={{ ...td, textAlign: "right", fontFamily: "'JetBrains Mono',monospace", fontWeight: 700 }}>
-                    {r.poOver > 0 ? <Chip txt={`over ${fm(Math.round(r.poOver))}`} bg="#fef3c7" bd={T.AM} tx="#92400e" /> : fm(Math.round(r.poRemaining))}
-                  </td>
-                </tr>
+        );
+        return (
+          <div style={{ background: T.S1, border: "1px solid " + T.BD, borderRadius: 6 }}>
+            <div style={{ padding: "8px 12px", display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+              <span style={{ fontSize: 11, fontWeight: 700 }}>Sales orders — WCB by market</span>
+              <label style={{ fontSize: 10, color: T.T2, display: "flex", alignItems: "center", gap: 4 }}>
+                State
+                <select value={poMkt} onChange={(e) => setPoMkt(e.target.value)}
+                  style={{ background: T.S2, border: "1px solid " + T.BD, color: T.AC, borderRadius: 3, padding: "2px 6px", fontSize: 11, fontFamily: "inherit" }}>
+                  <option value="All">All states</option>
+                  {mkts.map((m) => <option key={m} value={m}>{m}</option>)}
+                </select>
+              </label>
+              <button onClick={loadNsInv} style={{ padding: "3px 10px", borderRadius: 4, border: "1px solid " + T.BD, background: "transparent", color: T.T2, cursor: "pointer", fontSize: 10 }}>↻ Refresh</button>
+              {[["Orders", fm(list.length), T.AC], ["Ordered", fm(tOrd), T.TX],
+                ["Shipped", fm(tShp), T.GR], ["Outstanding", fm(tOrd - tShp), tOrd - tShp > 0 ? T.AM : T.T2]].map(([l, v, c], i) => (
+                <div key={i} style={{ background: T.S2, borderRadius: 5, padding: "3px 9px", border: "1px solid " + T.BD }}>
+                  <div style={{ color: T.T2, fontSize: 8, textTransform: "uppercase" }}>{l}</div>
+                  <div style={{ color: c, fontSize: 12.5, fontWeight: 700, fontFamily: "'JetBrains Mono',monospace" }}>{v}</div>
+                </div>
               ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+              <span style={{ marginLeft: "auto", fontSize: 9, color: T.T2 }}>from NetSuite · {nsInv.at ? new Date(nsInv.at).toLocaleString() : "not synced"}</span>
+            </div>
+            {!list.length && <div style={{ padding: 20, textAlign: "center", fontSize: 11, color: T.T2 }}>No sales orders yet — the sync writes these at 6am and noon.</div>}
+            <div style={{ overflow: "auto", maxHeight: "calc(100vh - 320px)" }}>
+              <table style={{ ...tbl, fontSize: 10.5 }}>
+                <thead><tr>
+                  <th style={{ ...th, minWidth: 120 }}>SKU</th>
+                  <th style={{ ...th, minWidth: 210 }}>Item</th>
+                  <th style={{ ...th, textAlign: "right" }}>Ordered</th>
+                  <th style={{ ...th, textAlign: "right" }}>Shipped</th>
+                  <th style={{ ...th, textAlign: "right" }}>Outstanding</th>
+                  <th style={{ ...th, textAlign: "right", minWidth: 96 }}>Complete</th>
+                </tr></thead>
+                <tbody>
+                  {list.map((o) => {
+                    const pct = o.ordered ? Math.round((o.shipped / o.ordered) * 100) : 0;
+                    return [
+                      <tr key={"h" + o.so}>
+                        <td colSpan={6} style={{ ...td, background: T.S2, fontWeight: 700, fontSize: 10, position: "sticky", left: 0 }}>
+                          <span style={{ color: T.AC }}>{o.po || "— no customer PO —"}</span>
+                          <span style={{ marginLeft: 8, fontWeight: 400, color: T.T2 }}>{o.so} · {o.customer}</span>
+                          <span style={{ marginLeft: 8, fontWeight: 400, color: T.T2, fontFamily: "'JetBrains Mono',monospace" }}>
+                            {fm(o.shipped)} / {fm(o.ordered)} ({pct}%)
+                          </span>
+                          <span style={{ marginLeft: 6 }}>{bar(pct)}</span>
+                        </td>
+                      </tr>,
+                      ...o.lines.sort((a, b) => a.sku.localeCompare(b.sku)).map((r, i) => {
+                        const p = r.ordered ? Math.round((r.shipped / r.ordered) * 100) : 0;
+                        const out = r.ordered - r.shipped;
+                        return (
+                          <tr key={o.so + r.sku + i} style={{ background: p >= 100 ? "#dcfce7" : undefined }}>
+                            <td style={{ ...td, fontFamily: "'JetBrains Mono',monospace", fontSize: 10 }}>{r.sku}</td>
+                            <td style={{ ...td }}>{String(r.name || "").split(":")[0]}</td>
+                            <td style={numC}>{fm(r.ordered)}</td>
+                            <td style={{ ...numC, color: T.GR }}>{fm(r.shipped)}</td>
+                            <td style={{ ...numC, fontWeight: out > 0 ? 700 : 400, color: out > 0 ? T.TX : T.T2 }}>{fm(out)}</td>
+                            <td style={{ ...numC }}>{p}% {bar(p)}</td>
+                          </tr>
+                        );
+                      }),
+                    ];
+                  })}
+                </tbody>
+              </table>
+            </div>
+            <div style={{ padding: "6px 12px", fontSize: 9, color: T.T2, borderTop: "1px solid " + T.BD }}>
+              Every open NetSuite sales order carrying Wana Cube SKUs, grouped by the customer&rsquo;s PO number. Shipped is NetSuite&rsquo;s fulfilled quantity per line, so this stays true as fulfillments post — refreshed with the 6am and noon sync.
+            </div>
+          </div>
+        );
+      })()}
 
       {view === "targets" && (
         <div style={{ background: T.S1, border: "1px solid " + T.BD, borderRadius: 6, overflowX: "auto" }}>

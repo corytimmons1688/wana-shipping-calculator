@@ -129,6 +129,30 @@ export default async function handler(req, res) {
       for (const r of so) { const k = `${r.transaction}|${r.item}`; poQty[k] = (poQty[k] || 0) + (Number(r.ordered_qty) || 0); }
     }
 
+    // open sales orders carrying Wana Cube SKUs — the customer's PO number
+    // (otherrefnum) is how each market identifies its own order
+    const soRows = await suiteql(`
+      SELECT t.tranid, t.otherrefnum AS cust_po, BUILTIN.DF(t.entity) AS customer, t.status,
+             i.itemid, i.displayname, ABS(tl.quantity) AS ordered,
+             ABS(NVL(tl.quantityshiprecv,0)) AS shipped
+      FROM transaction t
+      JOIN transactionline tl ON tl.transaction = t.id
+      JOIN item i ON i.id = tl.item
+      WHERE t.type = 'SalesOrd' AND tl.mainline = 'F'
+        AND (i.itemid LIKE 'PL-WCB-%' OR i.itemid LIKE 'PB-WCB-%')`, env).catch(() => []);
+    const stateOf = (name) => {
+      const m = String(name || "").match(/\(([A-Z]{2})\)/);
+      if (m) return m[1];
+      const n = String(name || "").toLowerCase();
+      for (const [k, v] of Object.entries({ "new jersey": "NJ", "new york": "NY", colorado: "CO",
+        massachusetts: "MA", arizona: "AZ", illinois: "IL", michigan: "MI" })) if (n.includes(k)) return v;
+      return null;
+    };
+    const salesOrders = soRows.map((r) => ({ so: r.tranid, custPo: r.cust_po || "", customer: r.customer,
+      market: stateOf(r.customer), status: r.status, sku: r.itemid, name: r.displayname,
+      ordered: Number(r.ordered) || 0, shipped: Number(r.shipped) || 0 }))
+      .filter((r) => r.ordered > 0);
+
     // live on-hand for every Wana Cube SKU, by location
     const invRows = await suiteql(`
       SELECT i.itemid, i.displayname, BUILTIN.DF(bal.location) AS location,
@@ -142,6 +166,7 @@ export default async function handler(req, res) {
     const history = lines.map((r) => ({ item_id: r.item_id, createdfrom: r.createdfrom, trandate: r.trandate, qty: Number(r.qty) || 0 }));
     const report = buildShipmentReport(lines, { tracking, carrier, poQty, history });
     report.inventory = inventory;
+    report.salesOrders = salesOrders;
 
     const r = await fetch(`${SUPABASE_URL}/rest/v1/shipment_log?id=eq.1`, {
       method: "PATCH",
@@ -151,7 +176,7 @@ export default async function handler(req, res) {
     if (!r.ok) throw new Error(`Supabase ${r.status}: ${(await r.text()).slice(0, 200)}`);
 
     return res.status(200).json({ ok: true, generated_at: report.generated_at,
-      markets: report.markets, shipments: report.shipments.length, warnings: report.warnings.length, inventory: inventory.length });
+      markets: report.markets, shipments: report.shipments.length, warnings: report.warnings.length, inventory: inventory.length, salesOrders: salesOrders.length });
   } catch (e) {
     // Surface the reason in Vercel logs — a cron failure is otherwise invisible
     // because the message only ever reached the HTTP response body.
