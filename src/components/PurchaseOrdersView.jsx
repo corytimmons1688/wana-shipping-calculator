@@ -8,7 +8,7 @@
 import { useState, useMemo } from "react";
 import { fm } from "../utils/format";
 import { T, tbl, th, td } from "../utils/theme";
-import { trackingUrl } from "../utils/tracking";
+import { trackingTarget } from "../utils/tracking";
 
 const MARKET_NAME = { NJ: "New Jersey", NY: "New York", CO: "Colorado", MA: "Massachusetts",
   AZ: "Arizona", IL: "Illinois", MI: "Michigan", MO: "Missouri", MT: "Montana", NM: "New Mexico",
@@ -25,16 +25,36 @@ export function Bar({ pct, w = 54 }) {
   );
 }
 
-export function TrackingLink({ carrier, number, label, size = 10 }) {
-  const url = trackingUrl(carrier, number);
-  const text = label || number;
-  if (!url) return <span style={{ color: T.T2, fontSize: size }}>{text || "—"}</span>;
+// Click the number to copy it, then the arrow to open tracking. Most of these
+// are Logistics Plus references that carriers will not resolve from a URL, so
+// copy-then-paste is the path that actually works — see utils/tracking.js.
+export function TrackingLink({ carrier, number, size = 10 }) {
+  const [copied, setCopied] = useState(false);
+  const t = trackingTarget(carrier, number);
+  if (!t) return <span style={{ color: T.T2, fontSize: size }}>—</span>;
+  const copy = (e) => {
+    e.stopPropagation();
+    navigator.clipboard?.writeText(String(number)).then(() => {
+      setCopied(true); setTimeout(() => setCopied(false), 1400);
+    }).catch(() => {});
+  };
   return (
-    <a href={url} target="_blank" rel="noreferrer" title={`Track ${number} — opens ${carrier || "carrier"} tracking`}
-      style={{ ...mono, color: T.AC, fontSize: size, textDecoration: "underline", textDecorationStyle: "dotted", textUnderlineOffset: 2 }}
-      onClick={(e) => e.stopPropagation()}>
-      {text} ↗
-    </a>
+    <span style={{ display: "inline-flex", alignItems: "center", gap: 4 }}>
+      <span onClick={copy} title="Click to copy"
+        style={{ ...mono, fontSize: size, color: T.TX, cursor: "pointer",
+          textDecoration: "underline", textDecorationStyle: "dotted", textUnderlineOffset: 2 }}>
+        {number}
+      </span>
+      {copied
+        ? <span style={{ fontSize: size - 1, color: T.GR, fontWeight: 700 }}>copied ✓</span>
+        : <a href={t.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()}
+            title={t.direct
+              ? `Open ${carrier || "carrier"} tracking for ${number}`
+              : `Opens ${carrier || "Logistics Plus"} tracking search — paste the number (click it to copy)`}
+            style={{ fontSize: size, color: T.AC, textDecoration: "none" }}>
+            {t.direct ? "↗" : "⧉"}
+          </a>}
+    </span>
   );
 }
 

@@ -1,41 +1,53 @@
-// tracking.js — turn a carrier + tracking/PRO number into a clickable link.
+// tracking.js — turn a carrier + tracking number into something actionable.
 //
-// Logistics Plus books every one of these shipments, but their eShipPlus REST
-// API has no "give me a tracking URL" call: it exposes GetShipmentStatus /
-// GetShipmentStatusCondensed, which return status events keyed on the eShipPlus
-// BookingReferenceNumber — a number NetSuite does not store. What NetSuite does
-// store is the carrier PRO/tracking number, and every carrier publishes a
-// stable public tracking URL keyed on exactly that. So we link direct to the
-// carrier: no new integration, no credentials, works on data we already have.
+// What we learned the hard way: most of these numbers do NOT resolve on carrier
+// public tracking. NetSuite holds exactly one number per fulfillment, and for
+// the LTL carriers it is a Logistics Plus reference — FedEx returns "can't be
+// found" for 9406498754 whether or not the freight qualifier is supplied, so
+// the URL was never the problem. Deep-linking those numbers just produces a
+// dead end that looks like a bug in this dashboard.
+//
+// So: deep-link ONLY the formats that are unambiguously carrier-native (UPS 1Z,
+// FedEx Express 12-digit, USPS). Everything else gets the carrier's tracking
+// page plus a one-click copy, so the number is on the clipboard ready to paste.
 
-const CARRIERS = [
-  [/fedex\s*freight/i, (n) => `https://www.fedex.com/fedextrack/?trknbr=${n}`],
-  [/fedex/i,           (n) => `https://www.fedex.com/fedextrack/?trknbr=${n}`],
-  [/estes/i,           (n) => `https://www.estes-express.com/myestes/shipment-tracking/track?searchValue=${n}`],
-  [/forward\s*air/i,   (n) => `https://www.forwardair.com/tracking?tracking=${n}`],
-  [/\bups\b/i,         (n) => `https://www.ups.com/track?tracknum=${n}`],
-  [/xpo/i,             (n) => `https://www.xpo.com/tracking/?referenceNumbers=${n}`],
-  [/old\s*dominion|\bodfl\b/i, (n) => `https://www.odfl.com/us/en/tools/tracking.html?pro=${n}`],
-  [/saia/i,            (n) => `https://www.saia.com/track/details?searchBy=PRO&numbers=${n}`],
-  [/\babf\b|arcbest/i, (n) => `https://arcb.com/tools/tracking.html#/${n}`],
-  [/\br\s*\+\s*l\b|rl\s*carriers/i, (n) => `https://www2.rlcarriers.com/freight/shipping/shipment-tracing?pro=${n}`],
-  [/tforce/i,          (n) => `https://www.tforcefreight.com/ltl/apps/Tracking?proNumbers=${n}`],
-  [/dayton/i,          (n) => `https://www.daytonfreight.com/tracking?number=${n}`],
+// Numbers whose format identifies the carrier on its own. These resolve.
+const PARCEL = [
+  [/^1Z[0-9A-Z]{16}$/i, (n) => `https://www.ups.com/track?tracknum=${n}`],
+  [/^\d{12}$/,          (n) => `https://www.fedex.com/fedextrack/?trknbr=${n}`],
+  [/^\d{15}$/,          (n) => `https://www.fedex.com/fedextrack/?trknbr=${n}`],
+  [/^(94|93|92|95)\d{18,20}$/, (n) => `https://tools.usps.com/go/TrackConfirmAction?tLabels=${n}`],
 ];
 
-// Everything ships through Logistics Plus, so their portal is the safe fallback
-// when the carrier is unknown or blank — the user can paste the number there.
-const LP_FALLBACK = "https://www.eshipplus.com/";
+// Tracking landing pages — paste the copied number here.
+const PAGES = [
+  [/fedex/i,                       "https://www.fedex.com/en-us/tracking.html"],
+  [/estes/i,                       "https://www.estes-express.com/myestes/shipment-tracking/"],
+  [/forward\s*air/i,               "https://www.forwardair.com/tracking"],
+  [/\bups\b/i,                     "https://www.ups.com/track"],
+  [/xpo/i,                         "https://www.xpo.com/tracking/"],
+  [/old\s*dominion|\bodfl\b/i,     "https://www.odfl.com/us/en/tools/tracking.html"],
+  [/saia/i,                        "https://www.saia.com/track"],
+  [/\babf\b|arcbest/i,             "https://arcb.com/tools/tracking.html"],
+  [/\br\s*\+\s*l\b|rl\s*carriers/i,"https://www2.rlcarriers.com/freight/shipping/shipment-tracing"],
+  [/tforce/i,                      "https://www.tforcefreight.com/ltl/apps/Tracking"],
+  [/dayton/i,                      "https://www.daytonfreight.com/tracking"],
+];
 
-/** @returns {string|null} a public tracking URL, or null if there is nothing to link. */
-export function trackingUrl(carrier, number) {
+// Everything here is booked through Logistics Plus, so their portal is where a
+// number with no carrier — or an unrecognised one — will actually be found.
+export const LP_PORTAL = "https://www.eshipplus.com/";
+
+/**
+ * @returns {{url: string, direct: boolean}|null}
+ *   direct=true  → the link lands on the shipment itself
+ *   direct=false → the link opens a search form; paste the copied number
+ */
+export function trackingTarget(carrier, number) {
   const n = String(number || "").trim();
   if (!n) return null;
+  for (const [re, url] of PARCEL) if (re.test(n)) return { url: url(encodeURIComponent(n)), direct: true };
   const c = String(carrier || "");
-  for (const [re, url] of CARRIERS) if (re.test(c)) return url(encodeURIComponent(n));
-  // No carrier match: Google the number. Beats a dead link, and LTL PRO numbers
-  // resolve to the right carrier's page on the first hit.
-  return `https://www.google.com/search?q=${encodeURIComponent(n + " tracking")}`;
+  for (const [re, url] of PAGES) if (re.test(c)) return { url, direct: false };
+  return { url: LP_PORTAL, direct: false };
 }
-
-export { LP_FALLBACK };
