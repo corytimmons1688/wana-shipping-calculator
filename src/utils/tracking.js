@@ -1,13 +1,20 @@
 // tracking.js — build a direct carrier tracking link from the NetSuite
 // tracking number + shipping method.
 //
-// Caveat worth knowing: NetSuite's tracking field is free text, not a validated
-// carrier number. Across all fulfillments it holds real UPS 1Z barcodes, bare
-// LTL PRO numbers, BOL numbers, air-waybill forms like 164-8121980, and literal
-// placeholders — "PICKEDUP" appears on nine separate fulfillments. Links are
-// only as good as what was typed in, so NON_TRACKING below suppresses the link
-// for values that plainly are not numbers rather than sending anyone to a
-// carrier page that cannot possibly resolve them.
+// FedEx LTL is the trap here: FedEx Freight PROs resolve ONLY on
+// fedexfreight.com. Send the same PRO to fedex.com and it answers "the tracking
+// number you entered can't be found", which looks like bad data but is just the
+// wrong site. NetSuite labels these loads both "FedEx Freight" and plain
+// "FEDEX", and 10-digit numbers under either label are Freight PROs — verified
+// against live shipments 9406498754 and 0368241193, both of which track.
+//
+// One caveat that is real: the tracking field is free text, so it also holds
+// typed-in placeholders. "PICKEDUP" sits in it on nine fulfillments. Those are
+// suppressed below rather than linked to a page that cannot resolve them.
+
+const fedexFreight = (n) => `https://www.fedexfreight.com/fedextrack/?trknbr=${n}&trkqual=~${n}~FDFR`;
+// Express/Ground barcodes are 12 or 15 digits; anything shorter is an LTL PRO.
+const isParcelLen = (raw) => /^\d{12}$|^\d{15}$/.test(raw);
 
 // Formats that identify their own carrier regardless of what the shipping
 // method says — these win, because the method field is frequently wrong.
@@ -18,8 +25,8 @@ const BY_FORMAT = [
 
 // Carrier tracking URLs, keyed on the NetSuite shipping method.
 const BY_CARRIER = [
-  [/fedex\s*freight/i,              (n) => `https://www.fedex.com/fedextrack/?trknbr=${n}&trkqual=~${n}~FDFR`],
-  [/fedex/i,                        (n) => `https://www.fedex.com/fedextrack/?trknbr=${n}`],
+  [/fedex\s*freight/i,              (n) => fedexFreight(n)],
+  [/fedex/i, (n, raw) => (isParcelLen(raw) ? `https://www.fedex.com/fedextrack/?trknbr=${n}` : fedexFreight(n))],
   [/estes/i,                        (n) => `https://www.estes-express.com/myestes/shipment-tracking/track?searchValue=${n}&searchType=PRO`],
   [/forward\s*air/i,                (n) => `https://www.forwardair.com/tracking?trackingNumbers=${n}`],
   [/\bups\b/i,                      (n) => `https://www.ups.com/track?loc=en_US&tracknum=${n}&requester=ST/`],
@@ -51,8 +58,8 @@ export function trackingUrl(carrier, number) {
   const n = String(number || "").trim();
   if (!isTrackable(n)) return null;
   const enc = encodeURIComponent(n);
-  for (const [re, url] of BY_FORMAT) if (re.test(n)) return url(enc);
+  for (const [re, url] of BY_FORMAT) if (re.test(n)) return url(enc, n);
   const c = String(carrier || "");
-  for (const [re, url] of BY_CARRIER) if (re.test(c)) return url(enc);
+  for (const [re, url] of BY_CARRIER) if (re.test(c)) return url(enc, n);
   return LP_PORTAL;
 }
