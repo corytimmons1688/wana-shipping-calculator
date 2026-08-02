@@ -121,20 +121,29 @@ export default async function handler(req, res) {
 
     // §4.4 ordered quantities — never join `item` here, it times out at 180s
     const soIds = [...new Set(lines.map((r) => r.createdfrom).filter(Boolean))].slice(0, 900);
-    const poQty = {};
+    const poQty = {}, soMeta = {};
     if (soIds.length) {
-      const so = await suiteql(`SELECT tl.transaction, tl.item, ABS(tl.quantity) AS ordered_qty FROM transactionline tl
-        WHERE tl.transaction IN (${soIds.join(",")}) AND tl.item IS NOT NULL AND tl.mainline = 'F'`, env).catch(() => []);
+      const [so, hdr] = await Promise.all([
+        suiteql(`SELECT tl.transaction, tl.item, ABS(tl.quantity) AS ordered_qty FROM transactionline tl
+          WHERE tl.transaction IN (${soIds.join(",")}) AND tl.item IS NOT NULL AND tl.mainline = 'F'`, env).catch(() => []),
+        // the SO header behind each fulfillment — carries the customer's own PO
+        // number, which is how every market refers to the order
+        suiteql(`SELECT t.id, t.tranid, t.otherrefnum AS cust_po, BUILTIN.DF(t.entity) AS customer
+          FROM transaction t WHERE t.id IN (${soIds.join(",")})`, env).catch(() => []),
+      ]);
       // key by SO + item so progress is measured against the right order
       for (const r of so) { const k = `${r.transaction}|${r.item}`; poQty[k] = (poQty[k] || 0) + (Number(r.ordered_qty) || 0); }
+      for (const r of hdr) soMeta[r.id] = { so: r.tranid, custPo: r.cust_po || "", customer: r.customer };
     }
 
     // open sales orders carrying Wana Cube SKUs — the customer's PO number
     // (otherrefnum) is how each market identifies its own order
     const soRows = await suiteql(`
-      SELECT t.tranid, t.otherrefnum AS cust_po, BUILTIN.DF(t.entity) AS customer, t.status,
+      SELECT t.id AS so_id, t.tranid, t.otherrefnum AS cust_po, BUILTIN.DF(t.entity) AS customer,
+             t.status, t.trandate, t.duedate, t.memo,
+             BUILTIN.DF(t.terms) AS terms, BUILTIN.DF(t.shipmethod) AS shipmethod,
              i.itemid, i.displayname, ABS(tl.quantity) AS ordered,
-             ABS(NVL(tl.quantityshiprecv,0)) AS shipped
+             ABS(NVL(tl.quantityshiprecv,0)) AS shipped, tl.rate
       FROM transaction t
       JOIN transactionline tl ON tl.transaction = t.id
       JOIN item i ON i.id = tl.item
@@ -148,8 +157,11 @@ export default async function handler(req, res) {
         massachusetts: "MA", arizona: "AZ", illinois: "IL", michigan: "MI" })) if (n.includes(k)) return v;
       return null;
     };
-    const salesOrders = soRows.map((r) => ({ so: r.tranid, custPo: r.cust_po || "", customer: r.customer,
-      market: stateOf(r.customer), status: r.status, sku: r.itemid, name: r.displayname,
+    const salesOrders = soRows.map((r) => ({ soId: r.so_id, so: r.tranid, custPo: r.cust_po || "",
+      customer: r.customer, market: stateOf(r.customer), status: r.status,
+      orderDate: r.trandate || "", dueDate: r.duedate || "", memo: r.memo || "",
+      terms: r.terms || "", shipMethod: r.shipmethod || "",
+      sku: r.itemid, name: r.displayname, rate: Number(r.rate) || 0,
       ordered: Number(r.ordered) || 0, shipped: Number(r.shipped) || 0 }))
       .filter((r) => r.ordered > 0);
 
@@ -164,7 +176,7 @@ export default async function handler(req, res) {
       .sort((a, b) => a.sku.localeCompare(b.sku));
 
     const history = lines.map((r) => ({ item_id: r.item_id, createdfrom: r.createdfrom, trandate: r.trandate, qty: Number(r.qty) || 0 }));
-    const report = buildShipmentReport(lines, { tracking, carrier, poQty, history });
+    const report = buildShipmentReport(lines, { tracking, carrier, poQty, history, soMeta });
     report.inventory = inventory;
     report.salesOrders = salesOrders;
 

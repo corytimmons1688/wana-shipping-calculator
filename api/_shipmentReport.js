@@ -50,6 +50,10 @@ export function toISO(d) {
  */
 export function buildShipmentReport(rows, meta = {}) {
   const tracking = meta.tracking || {}, carrier = meta.carrier || {}, poQty = meta.poQty || {};
+  // {soInternalId: {so, custPo, customer}} — lets every shipped line name the
+  // purchase order it belongs to, which is how the markets track their orders.
+  const soMeta = meta.soMeta || {};
+  const soOf = (id) => soMeta[id] || soMeta[String(id)] || {};
   const warnings = [];
 
   // §5.1 dedup — collapse identical (fid, item, qty). Same item at DIFFERENT
@@ -119,6 +123,7 @@ export function buildShipmentReport(rows, meta = {}) {
         component_type: "LID", quantity_shipped: q,
         total_shipped_on_po: cumulative(r.item_id, r.createdfrom, g.ship_date) || q,
         po_quantity: orderedQty(r.item_id, r.createdfrom),
+        sales_order: soOf(r.createdfrom).so || "", customer_po: soOf(r.createdfrom).custPo || "",
         source_sku: r.itemid, source_item_id: r.item_id });
     }
     // §5.5 BASE rows are derived from the LABEL lines (bases carry no flavour);
@@ -138,6 +143,7 @@ export function buildShipmentReport(rows, meta = {}) {
         flavor: `${flavorFromLabel(r.displayname)} - BASE`, component_type: "BASE", quantity_shipped: q,
         total_shipped_on_po: cumulative(r.item_id, r.createdfrom, g.ship_date) || q,
         po_quantity: orderedQty(r.item_id, r.createdfrom),
+        sales_order: soOf(r.createdfrom).so || "", customer_po: soOf(r.createdfrom).custPo || "",
         source_sku: r.itemid, source_item_id: r.item_id });
     }
     // §6 base reconciliation: Σ appl fees per colour == Σ PB- shipped per colour
@@ -152,15 +158,23 @@ export function buildShipmentReport(rows, meta = {}) {
   }
 
   // assemble
-  const shipments = Object.values(groups).map((g) => ({
-    shipment_key: g.shipment_key, ship_date: g.ship_date, market: g.market,
-    customer_id: g.customer_id, customer_name: g.customer_name,
-    carrier: g.carrier, tracking_number: g.tracking_number,
-    tracking_display: g.tracking_number ? `${g.carrier || "?"}: ${g.tracking_number}` : (g.carrier || "—"),
-    fulfillment_tranids: g.fulfillment_tranids, reconciliation: g.reconciliation || [],
-    lines: out.filter((l) => l.shipment === g).map(({ shipment, ...l }) => ({ ...l,
-      po_percent_complete: l.po_quantity ? Number((l.total_shipped_on_po / l.po_quantity).toFixed(4)) : null })),
-  })).filter((s) => s.lines.length).sort((a, b) => toISO(b.ship_date).localeCompare(toISO(a.ship_date)));
+  const shipments = Object.values(groups).map((g) => {
+    const lines = out.filter((l) => l.shipment === g).map(({ shipment, ...l }) => ({ ...l,
+      po_percent_complete: l.po_quantity ? Number((l.total_shipped_on_po / l.po_quantity).toFixed(4)) : null }));
+    return {
+      shipment_key: g.shipment_key, ship_date: g.ship_date, market: g.market,
+      customer_id: g.customer_id, customer_name: g.customer_name,
+      carrier: g.carrier, tracking_number: g.tracking_number,
+      tracking_display: g.tracking_number ? `${g.carrier || "?"}: ${g.tracking_number}` : (g.carrier || "—"),
+      // one physical shipment can serve several SOs (lids and labels bill
+      // separately), so both are lists — the customer PO is the headline.
+      customer_pos: [...new Set(lines.map((l) => l.customer_po).filter(Boolean))],
+      sales_orders: [...new Set(lines.map((l) => l.sales_order).filter(Boolean))],
+      fulfillment_tranids: g.fulfillment_tranids, reconciliation: g.reconciliation || [],
+      units: lines.reduce((a, l) => a + (Number(l.quantity_shipped) || 0), 0),
+      lines,
+    };
+  }).filter((s) => s.lines.length).sort((a, b) => toISO(b.ship_date).localeCompare(toISO(a.ship_date)));
 
   const markets = [...new Set(shipments.map((s) => s.market).filter(Boolean))].sort();
   return { generated_at: new Date().toISOString(), source: "netsuite.suiteql", markets, shipments, warnings };

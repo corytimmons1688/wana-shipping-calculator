@@ -10,6 +10,7 @@ import { buildApplySchedule, slotKey, LID_BOX, BASE_BOX, CAP_MIN, CAP_MAX } from
 import { parseLocalDate } from "../utils/calc";
 import { MASTER_SKUS, BASE_TYPES } from "../data/skuMaster";
 import { Ed } from "./Shared";
+import PurchaseOrdersView from "./PurchaseOrdersView";
 import { fm, dF } from "../utils/format";
 import { T, tbl, th, td } from "../utils/theme";
 
@@ -83,7 +84,6 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
   const [adjVal, setAdjVal] = useState("");
   const [mrpCollapsed, setMrpCollapsed] = useState(() => new Set());
   const [applyMkt, setApplyMkt] = useState("All");
-  const [poMkt, setPoMkt] = useState("All");
   const [nsSO, setNsSO] = useState([]);
   // Live NetSuite on-hand, refreshed by the sync cron into shipment_log.
   const [nsInv, setNsInv] = useState({ loading: true, rows: [], at: null, err: null });
@@ -298,7 +298,7 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
         {subBtn("overview", "Overview")}
         {subBtn("mrp", "MRP")}
         {subBtn("inbound", "Inbound (factory → Calyx)")}
-        {subBtn("pos", "Sales Orders")}
+        {subBtn("pos", "Purchase Orders")}
         {subBtn("targets", "Targets")}
         {subBtn("factory", "Factory Priority")}
         {subBtn("apply", "Apply Schedule")}
@@ -986,97 +986,10 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
         </div>
       )}
 
-      {view === "pos" && (() => {
-        const all = nsSO || [];
-        const mkts = [...new Set(all.map((r) => r.market).filter(Boolean))].sort();
-        const rows = all.filter((r) => poMkt === "All" || r.market === poMkt);
-        // one card per sales order — the customer's PO number is the identifier
-        const orders = {};
-        for (const r of rows) {
-          const o = orders[r.so] || (orders[r.so] = { so: r.so, po: r.custPo, customer: r.customer,
-            market: r.market, status: r.status, lines: [], ordered: 0, shipped: 0 });
-          o.lines.push(r); o.ordered += r.ordered; o.shipped += r.shipped;
-        }
-        const list = Object.values(orders).sort((a, b) => String(b.so).localeCompare(String(a.so)));
-        const tOrd = rows.reduce((a, r) => a + r.ordered, 0), tShp = rows.reduce((a, r) => a + r.shipped, 0);
-        const numC = { ...td, textAlign: "right", fontFamily: "'JetBrains Mono',monospace", fontSize: 10.5 };
-        const bar = (pct) => (
-          <div style={{ width: 54, height: 6, background: T.BD, borderRadius: 3, overflow: "hidden", display: "inline-block", verticalAlign: "middle" }}>
-            <div style={{ width: Math.min(100, pct) + "%", height: "100%", background: pct >= 100 ? T.GR : pct > 0 ? T.AC : "transparent" }} />
-          </div>
-        );
-        return (
-          <div style={{ background: T.S1, border: "1px solid " + T.BD, borderRadius: 6 }}>
-            <div style={{ padding: "8px 12px", display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-              <span style={{ fontSize: 11, fontWeight: 700 }}>Sales orders — WCB by market</span>
-              <label style={{ fontSize: 10, color: T.T2, display: "flex", alignItems: "center", gap: 4 }}>
-                State
-                <select value={poMkt} onChange={(e) => setPoMkt(e.target.value)}
-                  style={{ background: T.S2, border: "1px solid " + T.BD, color: T.AC, borderRadius: 3, padding: "2px 6px", fontSize: 11, fontFamily: "inherit" }}>
-                  <option value="All">All states</option>
-                  {mkts.map((m) => <option key={m} value={m}>{m}</option>)}
-                </select>
-              </label>
-              <button onClick={loadNsInv} style={{ padding: "3px 10px", borderRadius: 4, border: "1px solid " + T.BD, background: "transparent", color: T.T2, cursor: "pointer", fontSize: 10 }}>↻ Refresh</button>
-              {[["Orders", fm(list.length), T.AC], ["Ordered", fm(tOrd), T.TX],
-                ["Shipped", fm(tShp), T.GR], ["Outstanding", fm(tOrd - tShp), tOrd - tShp > 0 ? T.AM : T.T2]].map(([l, v, c], i) => (
-                <div key={i} style={{ background: T.S2, borderRadius: 5, padding: "3px 9px", border: "1px solid " + T.BD }}>
-                  <div style={{ color: T.T2, fontSize: 8, textTransform: "uppercase" }}>{l}</div>
-                  <div style={{ color: c, fontSize: 12.5, fontWeight: 700, fontFamily: "'JetBrains Mono',monospace" }}>{v}</div>
-                </div>
-              ))}
-              <span style={{ marginLeft: "auto", fontSize: 9, color: T.T2 }}>from NetSuite · {nsInv.at ? new Date(nsInv.at).toLocaleString() : "not synced"}</span>
-            </div>
-            {!list.length && <div style={{ padding: 20, textAlign: "center", fontSize: 11, color: T.T2 }}>No sales orders yet — the sync writes these at 6am and noon.</div>}
-            <div style={{ overflow: "auto", maxHeight: "calc(100vh - 320px)" }}>
-              <table style={{ ...tbl, fontSize: 10.5 }}>
-                <thead><tr>
-                  <th style={{ ...th, minWidth: 120 }}>SKU</th>
-                  <th style={{ ...th, minWidth: 210 }}>Item</th>
-                  <th style={{ ...th, textAlign: "right" }}>Ordered</th>
-                  <th style={{ ...th, textAlign: "right" }}>Shipped</th>
-                  <th style={{ ...th, textAlign: "right" }}>Outstanding</th>
-                  <th style={{ ...th, textAlign: "right", minWidth: 96 }}>Complete</th>
-                </tr></thead>
-                <tbody>
-                  {list.map((o) => {
-                    const pct = o.ordered ? Math.round((o.shipped / o.ordered) * 100) : 0;
-                    return [
-                      <tr key={"h" + o.so}>
-                        <td colSpan={6} style={{ ...td, background: T.S2, fontWeight: 700, fontSize: 10, position: "sticky", left: 0 }}>
-                          <span style={{ color: T.AC }}>{o.po || "— no customer PO —"}</span>
-                          <span style={{ marginLeft: 8, fontWeight: 400, color: T.T2 }}>{o.so} · {o.customer}</span>
-                          <span style={{ marginLeft: 8, fontWeight: 400, color: T.T2, fontFamily: "'JetBrains Mono',monospace" }}>
-                            {fm(o.shipped)} / {fm(o.ordered)} ({pct}%)
-                          </span>
-                          <span style={{ marginLeft: 6 }}>{bar(pct)}</span>
-                        </td>
-                      </tr>,
-                      ...o.lines.sort((a, b) => a.sku.localeCompare(b.sku)).map((r, i) => {
-                        const p = r.ordered ? Math.round((r.shipped / r.ordered) * 100) : 0;
-                        const out = r.ordered - r.shipped;
-                        return (
-                          <tr key={o.so + r.sku + i} style={{ background: p >= 100 ? "#dcfce7" : undefined }}>
-                            <td style={{ ...td, fontFamily: "'JetBrains Mono',monospace", fontSize: 10 }}>{r.sku}</td>
-                            <td style={{ ...td }}>{String(r.name || "").split(":")[0]}</td>
-                            <td style={numC}>{fm(r.ordered)}</td>
-                            <td style={{ ...numC, color: T.GR }}>{fm(r.shipped)}</td>
-                            <td style={{ ...numC, fontWeight: out > 0 ? 700 : 400, color: out > 0 ? T.TX : T.T2 }}>{fm(out)}</td>
-                            <td style={{ ...numC }}>{p}% {bar(p)}</td>
-                          </tr>
-                        );
-                      }),
-                    ];
-                  })}
-                </tbody>
-              </table>
-            </div>
-            <div style={{ padding: "6px 12px", fontSize: 9, color: T.T2, borderTop: "1px solid " + T.BD }}>
-              Every open NetSuite sales order carrying Wana Cube SKUs, grouped by the customer&rsquo;s PO number. Shipped is NetSuite&rsquo;s fulfilled quantity per line, so this stays true as fulfillments post — refreshed with the 6am and noon sync.
-            </div>
-          </div>
-        );
-      })()}
+      {view === "pos" && (
+        <PurchaseOrdersView salesOrders={nsSO} shipments={nsShip} syncedAt={nsInv.at}
+          onRefresh={loadNsInv} loading={nsInv.loading} />
+      )}
 
       {view === "targets" && (
         <div style={{ background: T.S1, border: "1px solid " + T.BD, borderRadius: 6, overflowX: "auto" }}>
