@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { T } from "../utils/theme";
 import { fm, f$ } from "../utils/format";
 import { marketMonthlyDemand } from "../utils/calc";
+import { apiFetch } from "../auth/authClient";
 
 function buildContext(sc, gld, ships, prod, frt, cap, airCost) {
   var mo = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -129,9 +130,8 @@ export default function AiAssistant({ sc, gld, ships, prod, frt, cap }) {
       apiMsgs.push({ role: newMsgs[i].role, content: newMsgs[i].content });
     }
 
-    fetch("/api/chat", {
+    apiFetch("/api/chat", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         model: "claude-sonnet-4-5-20250514",
         max_tokens: 1000,

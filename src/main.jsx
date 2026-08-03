@@ -1,6 +1,6 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import App from "./App";
+import AuthGate from "./auth/AuthGate";
 
 class ErrorBoundary extends React.Component {
   constructor(props) { super(props); this.state = { err: null, info: null }; }
@@ -21,5 +21,5 @@ class ErrorBoundary extends React.Component {
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(
-  React.createElement(ErrorBoundary, null, React.createElement(App, null))
+  React.createElement(ErrorBoundary, null, React.createElement(AuthGate, null))
 );

@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import { useSupabase } from "./hooks/useSupabase";
 import { useActuals } from "./hooks/useActuals";
 import { initScenario, initScenarioCOOpt2, mkScenario } from "./data/defaults";
@@ -11,17 +11,21 @@ import ItemForecastTab from "./components/ItemForecastTab";
 import ShippingTab from "./components/ShippingTab";
 import InventoryTab from "./components/InventoryTab";
 import MarketOrdersTab from "./components/MarketOrdersTab";
+import AdminPage from "./auth/AdminPage";
 import SettingsTab from "./components/SettingsTab";
 import AiAssistant from "./components/AiAssistant";
 
-const MAIN_TABS = ["demand", "forecast", "shipping", "inventory", "orders", "settings"];
+const MAIN_TABS = ["demand", "forecast", "shipping", "inventory", "orders", "settings", "admin"];
 
-export default function App() {
+export default function App({ auth = null }) {
   // Persist the active tab so a page refresh stays on the same page.
   const [tab, setTabRaw] = useState(() => {
     try { const t = localStorage.getItem("wana.tab"); return MAIN_TABS.includes(t) ? t : "demand"; } catch { return "demand"; }
   });
   const setTab = useCallback((t) => { setTabRaw(t); try { localStorage.setItem("wana.tab", t); } catch { /* ignore */ } }, []);
+  // Admin is the one tab that can vanish between sessions — never strand
+  // someone on it after their rights change or on a shared machine.
+  useEffect(() => { if (tab === "admin" && !auth?.isAdmin) setTab("demand"); }, [tab, auth, setTab]);
   const [scenarios, setScenarios] = useState(() => [mkScenario("Base Plan", initScenario()), mkScenario("Colorado Option 2", initScenarioCOOpt2())]);
   const [active, setActive] = useState(0);
   const [cmp, setCmp] = useState(false);
@@ -171,7 +175,7 @@ export default function App() {
     const rows = [{ l:"Go-Live Demand", k:"gld", fn:fm },{ l:"Total Freight", k:"freight", fn:f$, best:minFr },{ l:"Base Molds", k:"bM", fn:fm },{ l:"Lid Molds", k:"lM", fn:fm }];
     return (<div style={{ padding:"16px 18px" }}><div style={{ fontSize:15, fontWeight:700, color:T.TX, marginBottom:12 }}>Scenario Comparison</div><div style={{ overflowX:"auto" }}><table style={tbl}><thead><tr><th style={th}>Metric</th>{data.map((d, i) => <th key={i} style={{ ...th, textAlign:"right" }}>{d.name}</th>)}</tr></thead><tbody>{rows.map((r, ri) => (<tr key={ri}><td style={{ ...td, fontWeight:600 }}>{r.l}</td>{data.map((d, i) => { const v = d[r.k]; const best = r.best != null && v === r.best; return <td key={i} style={{ ...td, textAlign:"right", fontWeight:700, color:best ? T.GR : T.TX }}>{r.fn(v)}</td>; })}</tr>))}</tbody></table></div></div>);
   };
-const mainTabs = [{ k:"demand", l:"Market Demand", i:"📊" },{ k:"forecast", l:"Item Forecast", i:"📈" },{ k:"shipping", l:"Shipping Calculator", i:"📦" },{ k:"inventory", l:"Inventory", i:"📋" },{ k:"orders", l:"Market Orders", i:"🚚" },{ k:"settings", l:"Settings", i:"⚙️" }];
+const mainTabs = [{ k:"demand", l:"Market Demand", i:"📊" },{ k:"forecast", l:"Item Forecast", i:"📈" },{ k:"shipping", l:"Shipping Calculator", i:"📦" },{ k:"inventory", l:"Inventory", i:"📋" },{ k:"orders", l:"Market Orders", i:"🚚" },{ k:"settings", l:"Settings", i:"⚙️" },{ k:"admin", l:"Admin", i:"🔑", adminOnly:true }];
   return (
     <div style={{ background:T.BG, color:T.TX, minHeight:"100vh", fontFamily:"'DM Sans','Segoe UI',sans-serif", fontSize:14 }}>
       <div style={{ padding:"10px 18px", background:T.S1, borderBottom:"1px solid "+T.BD, display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:8 }}>
@@ -187,6 +191,17 @@ const mainTabs = [{ k:"demand", l:"Market Demand", i:"📊" },{ k:"forecast", l:
               <span style={{ fontSize:9, color: syncStatus==="error"?"#dc2626":syncStatus==="saving"?T.AM:syncStatus==="saved"?T.GR:T.T2 }}>
                 {syncStatus==="loading"?"⟳ Loading…":syncStatus==="saving"?"⟳ Saving…":syncStatus==="saved"?"✓ Saved":syncStatus==="error"?"✕ Sync error":"○ Connecting…"}
               </span>
+            </div>
+          )}
+          {auth?.user && (
+            <div style={{ display:"flex", alignItems:"center", gap:6, borderLeft:"1px solid "+T.BD, paddingLeft:8, marginLeft:2 }}>
+              <div style={{ textAlign:"right", lineHeight:1.15 }}>
+                <div style={{ fontSize:10, fontWeight:700 }}>{auth.user.name || auth.user.email}</div>
+                <div style={{ fontSize:8.5, color:T.T2 }}>
+                  {auth.user.email}{auth.isAdmin ? " · admin" : ""}
+                </div>
+              </div>
+              <button onClick={auth.signOut} title="Sign out" style={{ padding:"3px 9px", borderRadius:4, border:"1px solid "+T.BD, background:"transparent", color:T.T2, cursor:"pointer", fontSize:10, fontFamily:"inherit" }}>Sign out</button>
             </div>
           )}
           {(actStatus === "saving" || actStatus === "error") && actStatus !== "conflict" && syncStatus !== "conflict" && (
@@ -215,12 +230,13 @@ const mainTabs = [{ k:"demand", l:"Market Demand", i:"📊" },{ k:"forecast", l:
       </div>
       {cmp ? <CmpView /> : (<>
         <div style={{ display:"flex", background:T.S1, borderBottom:"1px solid "+T.BD, padding:"0 18px", overflowX:"auto" }}>
-          {mainTabs.map(t => { const a = tab === t.k; return <button key={t.k} onClick={() => setTab(t.k)} style={{ padding:"9px 16px", cursor:"pointer", border:"none", borderBottom:a ? "2px solid "+T.AC : "2px solid transparent", background:"transparent", color:a ? T.AC : T.T2, fontWeight:a ? 700 : 500, fontSize:12, display:"flex", alignItems:"center", gap:4, whiteSpace:"nowrap", fontFamily:"inherit" }}><span>{t.i}</span>{t.l}</button>; })}
+          {mainTabs.filter(t => !t.adminOnly || auth?.isAdmin).map(t => { const a = tab === t.k; return <button key={t.k} onClick={() => setTab(t.k)} style={{ padding:"9px 16px", cursor:"pointer", border:"none", borderBottom:a ? "2px solid "+T.AC : "2px solid transparent", background:"transparent", color:a ? T.AC : T.T2, fontWeight:a ? 700 : 500, fontSize:12, display:"flex", alignItems:"center", gap:4, whiteSpace:"nowrap", fontFamily:"inherit" }}><span>{t.i}</span>{t.l}</button>; })}
         </div>
         {tab === "demand" && <DemandTab sc={sc} gld={gld} annD={annD} upd={upd} />}
         {tab === "forecast" && <ItemForecastTab sc={sc} upd={upd} />}
         {tab === "inventory" && <InventoryTab sc={sc} actuals={actuals} updActuals={updActuals} />}
         {tab === "orders" && <MarketOrdersTab />}
+        {tab === "admin" && auth?.isAdmin && <AdminPage me={auth.user} />}
         {tab === "shipping" && <ShippingTab ships={displayShips} prod={prod} frt={frt} gld={gld} weeklyDem={weeklyDem} sc={sc} upd={upd} updShipEdit={updShipEdit} addShipment={addShipment} updShipAddition={updShipAddition} removeShipAddition={removeShipAddition} deleteShipment={deleteShipment} restoreShipment={restoreShipment} clearShipEdits={clearShipEdits} hasShipEdits={hasShipEdits} />}
         {tab === "settings" && <SettingsTab sc={sc} cap={cap} upd={upd} actuals={actuals} updActuals={updActuals} />}
       </>)}
