@@ -142,26 +142,52 @@ export function buildApplySchedule({ mw, grid, actuals, today, startDate,
   // longer marks it shipped as well. Entries written before this carry no
   // `side` and still complete both, so old data keeps behaving as it did.
   const sideOf = (e) => e.side || "both";
+  // Collapse to one record per slot first. A line can be ticked on both sides,
+  // and each tick is its own entry — counted separately they would spend the
+  // material and the capacity twice over.
+  const doneSlots = new Map();
   for (const e of log) {
-    const info = skuInfo(e.sku);
     if (market !== "All" && e.market !== market) continue;
-    const units = Number(e.units) || 0, isBase = e.kind === "BASE", side = sideOf(e);
+    const k = slotKey(e.date, e.market, e.sku, e.kind);
+    const cur = doneSlots.get(k) || { e, units: 0, applied: false, shipped: false };
+    cur.units = Math.max(cur.units, Number(e.units) || 0);
+    const side = sideOf(e);
+    if (side !== "ship") cur.applied = true;
+    if (side !== "apply") cur.shipped = true;
+    doneSlots.set(k, cur);
+  }
+  for (const [k, c] of doneSlots) {
+    const e = c.e, info = skuInfo(e.sku);
+    const units = c.units, isBase = e.kind === "BASE";
     const box = isBase ? BASE_BOX : LID_BOX;
-    const row = { key: slotKey(e.date, e.market, e.sku, e.kind), market: e.market, sku: e.sku, name: info.name,
+    const row = { key: k, market: e.market, sku: e.sku, name: info.name,
       kind: e.kind, baseColor: info.base === "Black Sparkle" ? "Black" : "White", units,
       boxes: units / box, done: true, preApplied: !!e.preApplied, due: e.due || "" };
-    if (side !== "apply") put(D(e.date).ship, { ...row }, box);
-    if (isBase && !e.preApplied && side !== "ship") { put(D(e.date).apply, { ...row }, box); D(e.date).applied += units; }
-    // Bases are consumed by application, lids by shipping — so a ship-side tick
-    // must not spend base stock the application pass has already accounted for.
-    if (isBase) { if (side !== "ship") usedBase[baseSkuFor(e.sku)] = (usedBase[baseSkuFor(e.sku)] || 0) + units; }
-    else usedLid[e.sku] = (usedLid[e.sku] || 0) + units;
+    if (c.shipped) put(D(e.date).ship, { ...row }, box);
+    // Capacity is only spent on the day the labels actually went on.
+    if (isBase && !e.preApplied && c.applied) { put(D(e.date).apply, { ...row }, box); D(e.date).applied += units; }
+    (isBase ? usedBase : usedLid)[isBase ? baseSkuFor(e.sku) : e.sku] =
+      ((isBase ? usedBase : usedLid)[isBase ? baseSkuFor(e.sku) : e.sku] || 0) + units;
+    // Work that is finished is no longer outstanding. Without this the planner
+    // still sees the full requirement, schedules the same units a second time,
+    // and that phantom demand pushes other markets off the day — ticking one
+    // New Jersey line made a Colorado line disappear.
+    const g = groups.find((x) => x.pk === e.market + "|" + e.sku);
+    if (g) {
+      if (isBase) { g.baseNeed = Math.max(0, g.baseNeed - units); g.bareLid = Math.max(0, g.bareLid - units); }
+      else g.lidNeed = Math.max(0, g.lidNeed - units);
+    }
   }
   for (const p of pinned) {
     if (market !== "All" && p.market !== market) continue;
     const k = slotKey(p.date, p.market, p.sku, p.kind);
-    if (log.some((e) => slotKey(e.date, e.market, e.sku, e.kind) === k && sideOf(e) !== "apply")) continue;
+    // A pinned line that has been ticked is already accounted for by the log
+    // above. Reserve the slot so the planner leaves it alone, then contribute
+    // only the side the tick has NOT completed. Counting both is what doubled
+    // Mellow Melon to 13,608 and pushed Colorado off the day.
+    const done = doneSlots.get(k);
     pinKeys.add(p.market + "|" + p.sku + "|" + p.kind);
+    if (done && done.applied && done.shipped) continue;
     const info = skuInfo(p.sku), isBase = p.kind === "BASE";
     const ov = overrides[k];
     const box = isBase ? BASE_BOX : LID_BOX;
@@ -169,11 +195,15 @@ export function buildApplySchedule({ mw, grid, actuals, today, startDate,
     const row = { key: k, market: p.market, sku: p.sku, name: info.name, kind: p.kind,
       baseColor: info.base === "Black Sparkle" ? "Black" : "White", units, boxes: units / box,
       done: false, edited: ov != null, preApplied: !!p.preApplied, pinned: true, due: p.due || "" };
-    put(D(p.date).ship, { ...row }, box);
-    if (isBase && !p.preApplied) { put(D(p.date).apply, { ...row }, box); D(p.date).applied += units; }
-    (isBase ? usedBase : usedLid)[isBase ? baseSkuFor(p.sku) : p.sku] = ((isBase ? usedBase : usedLid)[isBase ? baseSkuFor(p.sku) : p.sku] || 0) + units;
-    const g = groups.find((x) => x.pk === p.market + "|" + p.sku);
-    if (g) { if (isBase) g.baseNeed = Math.max(0, g.baseNeed - units); else g.lidNeed = Math.max(0, g.lidNeed - units); if (isBase) g.bareLid = Math.max(0, g.bareLid - units); }
+    if (!done || !done.shipped) put(D(p.date).ship, { ...row }, box);
+    if (isBase && !p.preApplied && (!done || !done.applied)) { put(D(p.date).apply, { ...row }, box); D(p.date).applied += units; }
+    // Material and outstanding need are spent once per slot — the log already
+    // did it if this line was ticked.
+    if (!done) {
+      (isBase ? usedBase : usedLid)[isBase ? baseSkuFor(p.sku) : p.sku] = ((isBase ? usedBase : usedLid)[isBase ? baseSkuFor(p.sku) : p.sku] || 0) + units;
+      const g = groups.find((x) => x.pk === p.market + "|" + p.sku);
+      if (g) { if (isBase) { g.baseNeed = Math.max(0, g.baseNeed - units); g.bareLid = Math.max(0, g.bareLid - units); } else g.lidNeed = Math.max(0, g.lidNeed - units); }
+    }
   }
 
   // ── APPLICATION pass — capacity-bound, pulled as early as base stock allows
