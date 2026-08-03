@@ -818,6 +818,28 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
             {l.preApplied && <span title="Already applied — no capacity used" style={{ marginLeft: 4, fontSize: 7.5, color: T.GR, border: "1px solid " + T.GR + "66", borderRadius: 3, padding: "0 3px" }}>pre</span>}
           </>
         );
+        // When the market actually needs this line. The scheduler already
+        // stamps `due` — the first week its demand goes uncovered — so the tag
+        // answers "are we shipping this in time?" without leaving the row.
+        const demandTag = (l, date) => {
+          if (!l.due) return null;
+          const daysLate = Math.round((new Date(date) - new Date(l.due)) / 86400000);
+          const late = daysLate > 0;
+          const early = -daysLate;
+          return (
+            <span title={late
+                ? `Market demand starts ${dF2(l.due)} — this leaves Calyx ${daysLate} day${daysLate > 1 ? "s" : ""} after that, before any transit time`
+                : `Market demand starts ${dF2(l.due)} — leaves Calyx ${early > 0 ? `${early} day${early > 1 ? "s" : ""} ahead of it` : "the same day"}, before any transit time`}
+              style={{ marginLeft: 4, fontSize: 7.5, fontWeight: 700, borderRadius: 3, padding: "0 3px",
+                whiteSpace: "nowrap",
+                color: late ? "#92400e" : T.T2,
+                border: "1px solid " + (late ? T.AM : T.BD),
+                background: late ? "#fffbeb" : "transparent" }}>
+              {late ? `⚠ needed ${dF2(l.due)} · ${daysLate}d late` : `needed ${dF2(l.due)}`}
+            </span>
+          );
+        };
+
         const lineRow = (l, date, showBase, st) => (
           <tr key={l.key} style={{
             background: st && st.shipped ? "#dcfce7" : st && st.missed ? "#fef3c7" : (l.done ? T.S2 + "AA" : undefined),
@@ -825,6 +847,7 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
             <td style={{ ...td, fontSize: 9.5, fontWeight: 600, textDecoration: l.done ? "line-through" : undefined }}>{l.market}</td>
             <td style={{ ...td, fontSize: 9.5, textDecoration: l.done ? "line-through" : undefined }}>
               {l.name} <span style={{ fontWeight: 700 }}>– {l.kind}</span>{badge(l)}
+              {!showBase && demandTag(l, date)}
               {st && st.shipped && <span title={`Confirmed in NetSuite${st.a.tracking ? " — " + st.a.tracking : ""}`} style={{ marginLeft: 4, fontSize: 7.5, color: T.GR, border: "1px solid " + T.GR, borderRadius: 3, padding: "0 3px", fontWeight: 700 }}>✓ shipped {fm(st.a.qty)}</span>}
               {st && st.missed && <span title="Other lines on this day shipped, this one did not" style={{ marginLeft: 4, fontSize: 7.5, color: "#92400e", border: "1px solid " + T.AM, borderRadius: 3, padding: "0 3px", fontWeight: 700 }}>⚠ not shipped</span>}
               {l.reason && <div style={{ fontSize: 8, color: T.T2 }}>{l.reason}</div>}
