@@ -32,16 +32,16 @@ function rawBody(req) {
 
 export default async function handler(req, res) {
   try {
-    const segs = Array.isArray(req.query.path) ? req.query.path : [req.query.path].filter(Boolean);
-    const qs = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
-    const target = `${UPSTREAM}/${segs.join("/")}${qs}`;
-
-    // Temporary: prove what this function actually computes. No secrets, no
-    // header values — just routing facts.
-    if (req.query.__diag === "1")
-      return res.status(200).json({ upstream: UPSTREAM, origin: ORIGIN, segs, url: req.url, target,
-        probe: await fetch(target, { headers: { Origin: ORIGIN, Referer: ORIGIN + "/" } })
-          .then((r) => ({ status: r.status, body: (r.headers.get("content-type") || "") })).catch((e) => String(e.message)) });
+    // Derive the upstream path from the URL, not from req.query. Vercel names
+    // a [...path] catch-all param "...path" — dots included — so req.query.path
+    // is undefined and every request silently collapsed onto the auth server's
+    // root, which answers 404. The URL is unambiguous; use it.
+    const u = new URL(req.url, "http://proxy.local");
+    const suffix = u.pathname.replace(/^.*?\/api\/auth\/?/, "");
+    // Drop Vercel's injected catch-all param so it never reaches the auth server.
+    for (const k of [...u.searchParams.keys()]) if (k.startsWith("...")) u.searchParams.delete(k);
+    const qs = u.searchParams.toString();
+    const target = `${UPSTREAM}/${suffix}${qs ? `?${qs}` : ""}`;
 
     const headers = {};
     for (const [k, v] of Object.entries(req.headers)) {
