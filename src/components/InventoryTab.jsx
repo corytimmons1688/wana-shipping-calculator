@@ -772,17 +772,29 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
           if (!a.applySchedule.overrides) a.applySchedule.overrides = {};
           fn(a.applySchedule);
         });
-        const setDone = (line, date, on) => updSched((s) => {
+        // `side` is which half of the grid was ticked — applying a base and
+        // shipping it are separate jobs on separate days, so completing one
+        // must not tick the other off.
+        const setDone = (line, date, on, side) => updSched((s) => {
           const k = slotKey(date, line.market, line.sku, line.kind);
+          const same = (e) => e.date === date && e.market === line.market && e.sku === line.sku && e.kind === line.kind;
           if (on) {
-            s.log.push({ date, market: line.market, sku: line.sku, kind: line.kind,
-              units: line.units, due: line.due, preApplied: !!line.preApplied });
+            if (!s.log.some((e) => same(e) && (e.side || "both") === side)) {
+              s.log.push({ date, market: line.market, sku: line.sku, kind: line.kind, side,
+                units: line.units, due: line.due, preApplied: !!line.preApplied });
+            }
             delete s.overrides[k];
-            if (Array.isArray(s.pinned))
+            // Only drop the pin for the side just completed; the other half of
+            // an agreed day stays pinned.
+            if (Array.isArray(s.pinned) && side === "ship")
               s.pinned = s.pinned.filter((p) => !(p.date === date && p.market === line.market && p.sku === line.sku && p.kind === line.kind));
           } else {
-            const i = s.log.findIndex((e) => e.date === date && e.market === line.market && e.sku === line.sku && e.kind === line.kind);
-            if (i >= 0) s.log.splice(i, 1);
+            // Remove this side's entry, and any legacy entry with no side —
+            // those completed both halves, so they must go or the tick returns.
+            for (let i = s.log.length - 1; i >= 0; i--) {
+              const e = s.log[i], es = e.side || "both";
+              if (same(e) && (es === side || es === "both")) s.log.splice(i, 1);
+            }
           }
         });
         const setQty = (line, date, v) => updSched((s) => {
@@ -866,7 +878,7 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
             <td style={{ ...td, textAlign: "center" }}>
               <input type="checkbox" checked={!!l.done || !!(st && st.shipped)} readOnly={!!(st && st.shipped)}
                 title={st && st.shipped ? "Confirmed shipped in NetSuite" : undefined}
-                onChange={(e) => { if (!(st && st.shipped)) setDone(l, date, e.target.checked); }}
+                onChange={(e) => { if (!(st && st.shipped)) setDone(l, date, e.target.checked, showBase ? "apply" : "ship"); }}
                 style={{ cursor: st && st.shipped ? "default" : "pointer" }} />
             </td>
           </tr>

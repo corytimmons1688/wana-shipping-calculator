@@ -121,24 +121,46 @@ export function buildApplySchedule({ mw, grid, actuals, today, startDate,
   const preLeft = { ...preApplied };
   const byDate = {};
   const D = (d) => (byDate[d] = byDate[d] || { date: d, applied: 0, capacity, apply: [], ship: [] });
+  // A row's key is (date, market, sku, kind), and two entries can legitimately
+  // resolve to the same slot — an "early" tranche and the remainder of the same
+  // base line landing on one day. Pushing both hands React duplicate keys,
+  // which breaks reconciliation: filtered-out rows stay in the DOM as ghosts.
+  // Merge instead, so a slot is always exactly one row.
+  const put = (arr, row, box) => {
+    const at = arr.find((r) => r.key === row.key);
+    if (!at) { arr.push(row); return row; }
+    at.units += row.units;
+    at.boxes = at.units / box;
+    if (row.reason && !at.reason) at.reason = row.reason;
+    return at;
+  };
 
   // completed + pinned first — they consume capacity and material
   const pinKeys = new Set();
+  // Applying a base and shipping it are two jobs on two days. A log entry now
+  // says which one it completed, so ticking a line on the application side no
+  // longer marks it shipped as well. Entries written before this carry no
+  // `side` and still complete both, so old data keeps behaving as it did.
+  const sideOf = (e) => e.side || "both";
   for (const e of log) {
     const info = skuInfo(e.sku);
     if (market !== "All" && e.market !== market) continue;
-    const units = Number(e.units) || 0, isBase = e.kind === "BASE";
+    const units = Number(e.units) || 0, isBase = e.kind === "BASE", side = sideOf(e);
+    const box = isBase ? BASE_BOX : LID_BOX;
     const row = { key: slotKey(e.date, e.market, e.sku, e.kind), market: e.market, sku: e.sku, name: info.name,
       kind: e.kind, baseColor: info.base === "Black Sparkle" ? "Black" : "White", units,
-      boxes: units / (isBase ? BASE_BOX : LID_BOX), done: true, preApplied: !!e.preApplied, due: e.due || "" };
-    D(e.date).ship.push(row);
-    if (isBase && !e.preApplied) { D(e.date).apply.push({ ...row }); D(e.date).applied += units; }
-    (isBase ? usedBase : usedLid)[isBase ? baseSkuFor(e.sku) : e.sku] = ((isBase ? usedBase : usedLid)[isBase ? baseSkuFor(e.sku) : e.sku] || 0) + units;
+      boxes: units / box, done: true, preApplied: !!e.preApplied, due: e.due || "" };
+    if (side !== "apply") put(D(e.date).ship, { ...row }, box);
+    if (isBase && !e.preApplied && side !== "ship") { put(D(e.date).apply, { ...row }, box); D(e.date).applied += units; }
+    // Bases are consumed by application, lids by shipping — so a ship-side tick
+    // must not spend base stock the application pass has already accounted for.
+    if (isBase) { if (side !== "ship") usedBase[baseSkuFor(e.sku)] = (usedBase[baseSkuFor(e.sku)] || 0) + units; }
+    else usedLid[e.sku] = (usedLid[e.sku] || 0) + units;
   }
   for (const p of pinned) {
     if (market !== "All" && p.market !== market) continue;
     const k = slotKey(p.date, p.market, p.sku, p.kind);
-    if (log.some((e) => slotKey(e.date, e.market, e.sku, e.kind) === k)) continue;
+    if (log.some((e) => slotKey(e.date, e.market, e.sku, e.kind) === k && sideOf(e) !== "apply")) continue;
     pinKeys.add(p.market + "|" + p.sku + "|" + p.kind);
     const info = skuInfo(p.sku), isBase = p.kind === "BASE";
     const ov = overrides[k];
@@ -147,8 +169,8 @@ export function buildApplySchedule({ mw, grid, actuals, today, startDate,
     const row = { key: k, market: p.market, sku: p.sku, name: info.name, kind: p.kind,
       baseColor: info.base === "Black Sparkle" ? "Black" : "White", units, boxes: units / box,
       done: false, edited: ov != null, preApplied: !!p.preApplied, pinned: true, due: p.due || "" };
-    D(p.date).ship.push(row);
-    if (isBase && !p.preApplied) { D(p.date).apply.push({ ...row }); D(p.date).applied += units; }
+    put(D(p.date).ship, { ...row }, box);
+    if (isBase && !p.preApplied) { put(D(p.date).apply, { ...row }, box); D(p.date).applied += units; }
     (isBase ? usedBase : usedLid)[isBase ? baseSkuFor(p.sku) : p.sku] = ((isBase ? usedBase : usedLid)[isBase ? baseSkuFor(p.sku) : p.sku] || 0) + units;
     const g = groups.find((x) => x.pk === p.market + "|" + p.sku);
     if (g) { if (isBase) g.baseNeed = Math.max(0, g.baseNeed - units); else g.lidNeed = Math.max(0, g.lidNeed - units); if (isBase) g.bareLid = Math.max(0, g.bareLid - units); }
@@ -174,9 +196,9 @@ export function buildApplySchedule({ mw, grid, actuals, today, startDate,
       usedBase[g.baseSku] = (usedBase[g.baseSku] || 0) + qty;
       g.baseNeed -= qty;
       const d = D(date);
-      d.apply.push({ key: slotKey(date, g.market, g.sku, "BASE"), market: g.market, sku: g.sku,
+      put(d.apply, { key: slotKey(date, g.market, g.sku, "BASE"), market: g.market, sku: g.sku,
         name: g.name, kind: "BASE", baseColor: g.baseColor, units: qty, boxes: qty / BASE_BOX,
-        done: false, edited: ov != null, preApplied: fromPre > 0, due: g.due, late: g.due < date });
+        done: false, edited: ov != null, preApplied: fromPre > 0, due: g.due, late: g.due < date }, BASE_BOX);
       d.applied += (qty - fromPre);
       const a = applyDone[g.pk] || (applyDone[g.pk] = { units: 0, date });
       a.units += qty; a.date = date;
@@ -222,13 +244,13 @@ export function buildApplySchedule({ mw, grid, actuals, today, startDate,
     if (s.date > lastDate || s.units <= 0) continue;
     const box = s.kind === "BASE" ? BASE_BOX : LID_BOX;
     const k = slotKey(s.date, s.g.market, s.g.sku, s.kind);
-    if (log.some((e) => slotKey(e.date, e.market, e.sku, e.kind) === k)) continue;
+    if (log.some((e) => slotKey(e.date, e.market, e.sku, e.kind) === k && sideOf(e) !== "apply")) continue;
     const ov = overrides[k];
     const units = ov != null ? Math.max(0, Math.round(Number(ov) / box) * box) : s.units;
     if (units <= 0) continue;
-    D(s.date).ship.push({ key: k, market: s.g.market, sku: s.g.sku, name: s.g.name, kind: s.kind,
+    put(D(s.date).ship, { key: k, market: s.g.market, sku: s.g.sku, name: s.g.name, kind: s.kind,
       baseColor: s.g.baseColor, units, boxes: units / box, done: false, edited: ov != null,
-      preApplied: false, due: s.g.due, late: s.g.due < s.date, reason: s.reason });
+      preApplied: false, due: s.g.due, late: s.g.due < s.date, reason: s.reason }, box);
   }
 
   const days = dates.map((d) => byDate[d]).filter((d) => d && (d.apply.length || d.ship.length));
