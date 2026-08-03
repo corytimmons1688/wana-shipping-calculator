@@ -32,13 +32,17 @@ function rawBody(req) {
 
 export default async function handler(req, res) {
   try {
-    // Derive the upstream path from the URL, not from req.query. Vercel names
-    // a [...path] catch-all param "...path" — dots included — so req.query.path
-    // is undefined and every request silently collapsed onto the auth server's
-    // root, which answers 404. The URL is unambiguous; use it.
+    // The upstream path arrives two ways and we trust either: vercel.json
+    // rewrites /api/auth/:path* here with the suffix in __p, and if that is
+    // ever absent we recover it from the URL. Never from req.query.path —
+    // Vercel names a [...path] catch-all param "...path", dots included, so
+    // that key is always undefined and every request collapses onto the auth
+    // server's root, which answers 404.
     const u = new URL(req.url, "http://proxy.local");
-    const suffix = u.pathname.replace(/^.*?\/api\/auth\/?/, "");
-    // Drop Vercel's injected catch-all param so it never reaches the auth server.
+    const fromRewrite = u.searchParams.get("__p") || "";
+    const suffix = fromRewrite || u.pathname.replace(/^.*?\/api\/auth\/?/, "").replace(/^auth-proxy\/?/, "");
+    // Strip our own routing params so they never reach the auth server.
+    u.searchParams.delete("__p");
     for (const k of [...u.searchParams.keys()]) if (k.startsWith("...")) u.searchParams.delete(k);
     const qs = u.searchParams.toString();
     const target = `${UPSTREAM}/${suffix}${qs ? `?${qs}` : ""}`;

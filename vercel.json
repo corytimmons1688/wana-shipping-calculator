@@ -3,10 +3,23 @@
   "outputDirectory": "dist",
   "framework": null,
   "rewrites": [
-    { "source": "/((?!api/).*)", "destination": "/index.html" }
+    {
+      "source": "/api/auth/:path*",
+      "destination": "/api/auth-proxy?__p=:path*"
+    },
+    {
+      "source": "/((?!api/).*)",
+      "destination": "/index.html"
+    }
   ],
   "crons": [
-    { "path": "/api/sync-shipments", "schedule": "0 12 * * *" },
-    { "path": "/api/sync-shipments", "schedule": "0 18 * * *" }
+    {
+      "path": "/api/sync-shipments",
+      "schedule": "0 12 * * *"
+    },
+    {
+      "path": "/api/sync-shipments",
+      "schedule": "0 18 * * *"
+    }
   ]
 }
