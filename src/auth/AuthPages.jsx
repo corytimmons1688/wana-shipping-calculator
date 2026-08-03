@@ -4,7 +4,7 @@
 // to an auth endpoint, and no password is ever stored or logged.
 
 import { useState, useEffect, useRef } from "react";
-import { authClient, authError, clearAuthToken } from "./authClient";
+import { authClient, authError, clearAuthToken, withReturnUrl, APP_ORIGIN } from "./authClient";
 import { navigate, useRoute } from "./useAuth";
 import { T } from "../utils/theme";
 
@@ -115,10 +115,10 @@ export function LoginPage() {
   };
 
   const resend = async () => {
-    const { error } = await authClient.sendVerificationEmail({
-      email: email.trim(), callbackURL: `${window.location.origin}/verify-email` });
-    setResent(!error);
-    if (error) setErr(authError(error).message);
+    const res = await withReturnUrl((a) => authClient.sendVerificationEmail(a),
+      { email: email.trim() }, "callbackURL", `${APP_ORIGIN}/verify-email`);
+    setResent(!res.error);
+    if (res.error) setErr(authError(res.error).message);
   };
 
   return (
@@ -155,6 +155,7 @@ export function RegisterPage() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
   const [done, setDone] = useState(false);
+  const [offsite, setOffsite] = useState(false);
   const on = (k) => (e) => setF((p) => ({ ...p, [k]: e.target.value }));
 
   const submit = async (e) => {
@@ -163,12 +164,13 @@ export function RegisterPage() {
     if (f.password.length < MIN_PASSWORD) return setErr(`Password must be at least ${MIN_PASSWORD} characters.`);
     if (f.password !== f.confirm) return setErr("Passwords do not match.");
     setBusy(true);
-    const { error } = await authClient.signUp.email({
-      name: f.name.trim(), email: f.email.trim(), password: f.password,
-      callbackURL: `${window.location.origin}/verify-email`,
-    });
+    const res = await withReturnUrl(
+      (a) => authClient.signUp.email(a),
+      { name: f.name.trim(), email: f.email.trim(), password: f.password },
+      "callbackURL", `${APP_ORIGIN}/verify-email`);
     setBusy(false);
-    if (error) return setErr(authError(error).message);   // server wording, verbatim
+    if (res.error) return setErr(authError(res.error).message);   // server wording, verbatim
+    setOffsite(!!res.returnUrlRejected);
     setDone(true);
   };
 
@@ -180,6 +182,13 @@ export function RegisterPage() {
         Accounts outside Calyx Containers also need an administrator to approve access
         before the dashboard opens. You will be told as soon as that happens.
       </Alert>
+      {offsite && (
+        <Alert kind="warn">
+          The verification link will confirm your address on the Packos sign-in server rather
+          than returning you here. Once it says verified, come back and sign in.
+        </Alert>
+      )}
+      <Button onClick={() => navigate("/login")}>Go to sign in</Button>
     </Shell>
   );
 
@@ -222,9 +231,9 @@ export function VerifyEmailPage() {
   }, [token]);
 
   const resend = async () => {
-    const { error } = await authClient.sendVerificationEmail({
-      email: email.trim(), callbackURL: `${window.location.origin}/verify-email` });
-    if (error) setErr(authError(error).message); else { setResent(true); setErr(null); }
+    const res = await withReturnUrl((a) => authClient.sendVerificationEmail(a),
+      { email: email.trim() }, "callbackURL", `${APP_ORIGIN}/verify-email`);
+    if (res.error) setErr(authError(res.error).message); else { setResent(true); setErr(null); }
   };
 
   if (state === "ok") return (
@@ -258,21 +267,29 @@ export function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(false);
+  const [offsite, setOffsite] = useState(false);
 
   const submit = async (e) => {
     e.preventDefault();
     setBusy(true);
     // Ignore the outcome on purpose: a different answer for a known address
     // would let anyone enumerate who has an account.
-    await authClient.requestPasswordReset({
-      email: email.trim(), redirectTo: `${window.location.origin}/reset-password` }).catch(() => {});
-    setBusy(false); setSent(true);
+    const res = await withReturnUrl((a) => authClient.requestPasswordReset(a),
+      { email: email.trim() }, "redirectTo", `${APP_ORIGIN}/reset-password`).catch(() => ({}));
+    setBusy(false); setOffsite(!!res.returnUrlRejected); setSent(true);
   };
 
   if (sent) return (
     <Shell title="Check your email"
       sub="If that account exists, we have sent a password reset link."
-      footer={<Link to="/login">Back to sign in</Link>} />
+      footer={<Link to="/login">Back to sign in</Link>}>
+      {offsite && (
+        <Alert kind="warn">
+          The reset link opens on the Packos sign-in server rather than returning you here.
+          Set your new password there, then come back and sign in.
+        </Alert>
+      )}
+    </Shell>
   );
 
   return (

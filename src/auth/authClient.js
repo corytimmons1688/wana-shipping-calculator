@@ -71,3 +71,27 @@ export function authError(err) {
   }
   return { status, message, code, retryAfter };
 }
+
+// Better Auth validates callbackURL / redirectTo against its own trusted-origins
+// list. Until this app's public origin is added there — an auth-server owner
+// action, not something this codebase can do — every redirect-based flow 403s
+// with INVALID_CALLBACK_URL, which blocks registration outright.
+//
+// So: send the nice "come back to this app" URL, and if the server refuses it,
+// retry without. The email still sends; the link just lands on the auth
+// server's own page instead of back here. Self-healing — the moment the origin
+// is trusted the first call succeeds and users return to this app with no code
+// change.
+const REDIRECT_REJECTED = /INVALID_(CALLBACK_URL|REDIRECT_URL)/i;
+
+export const APP_ORIGIN = `${window.location.origin}${base}`;
+
+export async function withReturnUrl(fn, args, key, url) {
+  const first = await fn({ ...args, [key]: url });
+  const err = first && first.error;
+  if (err && REDIRECT_REJECTED.test(`${err.code || ""} ${err.message || ""}`)) {
+    const retry = await fn(args);
+    return { ...retry, returnUrlRejected: true };
+  }
+  return first;
+}
