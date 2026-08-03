@@ -184,8 +184,14 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
     let best = null;
     for (const h of hits) {
       if (!h.date) continue;
-      const diff = Math.abs((parseLocalDate(h.date) - parseLocalDate(date)) / 86400000);
-      if (diff <= 4 && (!best || diff < best.diff)) best = { ...h, diff };
+      const signed = Math.round((parseLocalDate(h.date) - parseLocalDate(date)) / 86400000);
+      const diff = Math.abs(signed);
+      // A ±4 day window was too tight: 2,592 Swift Recovery shipped Jul 31
+      // against an Aug 5 plan line — five days — so it read as never shipped
+      // while every other line on that truck reconciled. Teams ship ahead when
+      // a truck is going anyway, so allow a fortnight either side and show the
+      // drift rather than silently dropping the match.
+      if (diff <= 14 && (!best || diff < best.diff)) best = { ...h, diff, drift: signed };
     }
     return best;
   };
@@ -860,7 +866,9 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
             <td style={{ ...td, fontSize: 9.5, textDecoration: l.done ? "line-through" : undefined }}>
               {l.name} <span style={{ fontWeight: 700 }}>– {l.kind}</span>{badge(l)}
               {!showBase && demandTag(l, date)}
-              {st && st.shipped && <span title={`Confirmed in NetSuite${st.a.tracking ? " — " + st.a.tracking : ""}`} style={{ marginLeft: 4, fontSize: 7.5, color: T.GR, border: "1px solid " + T.GR, borderRadius: 3, padding: "0 3px", fontWeight: 700 }}>✓ shipped {fm(st.a.qty)}</span>}
+              {st && st.shipped && <span title={`Confirmed in NetSuite${st.a.tracking ? " — " + st.a.tracking : ""}${st.a.date ? ` — shipped ${st.a.date}` : ""}`} style={{ marginLeft: 4, fontSize: 7.5, color: T.GR, border: "1px solid " + T.GR, borderRadius: 3, padding: "0 3px", fontWeight: 700 }}>
+                ✓ shipped {fm(st.a.qty)}{st.a.drift ? ` · ${Math.abs(st.a.drift)}d ${st.a.drift < 0 ? "early" : "late"}` : ""}
+              </span>}
               {st && st.missed && <span title="Other lines on this day shipped, this one did not" style={{ marginLeft: 4, fontSize: 7.5, color: "#92400e", border: "1px solid " + T.AM, borderRadius: 3, padding: "0 3px", fontWeight: 700 }}>⚠ not shipped</span>}
               {l.reason && <div style={{ fontSize: 8, color: T.T2 }}>{l.reason}</div>}
             </td>

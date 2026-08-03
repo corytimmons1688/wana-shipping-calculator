@@ -216,9 +216,27 @@ export function buildApplySchedule({ mw, grid, actuals, today, startDate,
       if (g.baseNeed <= 0 || capLeft < BASE_BOX) continue;
       const free = Math.max(0, av.at(g.baseSku, date) - (usedBase[g.baseSku] || 0));
       const pre = Math.max(0, Number(preLeft[g.pk]) || 0);
-      let qty = Math.min(g.baseNeed, dnBox(free, BASE_BOX), dnBox(pre, BASE_BOX) + dnBox(capLeft, BASE_BOX));
       const ov = overrides[slotKey(date, g.market, g.sku, "BASE")];
-      if (ov != null) qty = Math.min(qty, Math.max(0, Math.round(Number(ov) / BASE_BOX) * BASE_BOX));
+
+      // One SKU, one day. Splitting a flavour across days means the floor sets
+      // up the same label twice and neither day ships, so a SKU only starts on
+      // a day that can finish it: full quantity, or wait.
+      let qty;
+      if (ov != null) {
+        // A hand-edited quantity is the operator's call — respect it as given.
+        qty = Math.min(Math.max(0, Math.round(Number(ov) / BASE_BOX) * BASE_BOX),
+                       dnBox(free, BASE_BOX), dnBox(pre, BASE_BOX) + dnBox(capLeft, BASE_BOX));
+      } else {
+        const want = upBox(g.baseNeed, BASE_BOX);
+        if (dnBox(free, BASE_BOX) < want) continue;          // material not all here yet
+        const fromCap = Math.max(0, want - dnBox(pre, BASE_BOX));
+        // A requirement larger than a whole day can never fit one; give it the
+        // earliest day it has material for and let that day run over, which the
+        // capacity bar already shows in red.
+        if (fromCap > capacity) { if (byDate[date] && byDate[date].applied > 0) continue; }
+        else if (fromCap > capLeft) continue;                // wait for a day with room
+        qty = want;
+      }
       if (qty < BASE_BOX) continue;
       const fromPre = Math.min(qty, pre);
       preLeft[g.pk] = pre - fromPre;
