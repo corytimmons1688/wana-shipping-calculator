@@ -742,12 +742,29 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
 
       {view === "apply" && (() => {
         const aps = actuals.applySchedule || { capacity: 12474, log: [], overrides: {} };
-        const sched = buildApplySchedule({
+        // Always plan across every market, then filter for display. Planning a
+        // single market makes the scheduler hand that market the entire
+        // application line, which produces a schedule that cannot happen:
+        // filtered to New York the plan applied its bases Aug 3-4 and shipped
+        // 128,142 units on Aug 7, when in reality New Jersey and Colorado hold
+        // that capacity and New York's labels do not run until Aug 10-31.
+        // The filter is a lens on one plan, never a plan of its own.
+        const full = buildApplySchedule({
           mw, grid, actuals, today: new Date(), startDate: aps.startDate || undefined,
           capacity: aps.capacity, log: aps.log, overrides: aps.overrides,
           preApplied: aps.preApplied || {}, marketStock: actuals.marketStock || {},
-          pinned: aps.pinned || [], numDays: 40, market: applyMkt,
+          pinned: aps.pinned || [], numDays: 40, market: "All",
         });
+        const sched = applyMkt === "All" ? full : (() => {
+          const keep = (r) => r.market === applyMkt;
+          const days = full.days
+            // `applied` stays the whole line's load — the capacity bar has to
+            // keep telling the truth about contention, or the filtered view
+            // implies headroom that another market is already using.
+            .map((d) => ({ ...d, apply: (d.apply || []).filter(keep), ship: (d.ship || []).filter(keep) }))
+            .filter((d) => d.apply.length || d.ship.length);
+          return { ...full, days };
+        })();
         const firstDay = sched.days.length ? sched.days[0].date : "";
         const updSched = (fn) => updActuals((a) => {
           if (!a.applySchedule) a.applySchedule = { capacity: 12474, log: [], overrides: {} };
