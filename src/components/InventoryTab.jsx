@@ -6,7 +6,8 @@
 
 import { useState, useMemo, useEffect } from "react";
 import { calcSkuWeeklyForecast, calcSkuInventory, calcSkuMarketWeekly, shipmentEta, buildWeekGrid, skuInfo } from "../utils/inventory";
-import { buildApplySchedule, slotKey, LID_BOX, BASE_BOX, CAP_MIN, CAP_MAX } from "../utils/applySchedule";
+import { buildApplySchedule, slotKey, baseSkuFor, LID_BOX, BASE_BOX, CAP_MIN, CAP_MAX } from "../utils/applySchedule";
+import { allocateSalesOrders } from "../utils/salesOrderMatch";
 import { parseLocalDate } from "../utils/calc";
 import { MASTER_SKUS, BASE_TYPES } from "../data/skuMaster";
 import { Ed } from "./Shared";
@@ -93,6 +94,7 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
   const [nsInv, setNsInv] = useState({ loading: true, rows: [], at: null, err: null });
   const [nsShip, setNsShip] = useState([]);
   const [nsRcpt, setNsRcpt] = useState([]);
+  const [nsSO, setNsSO] = useState([]);       // open orders, to book shipments against
   const [recon, setRecon] = useState(null);   // SKU whose reconciliation is open
   const [flagOnly, setFlagOnly] = useState(false);
   // what the last receipt sweep marked received, and what it only suspects
@@ -107,6 +109,7 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
         const d = ((rows[0] || {}).data) || {};
         setNsShip(d.shipments || []);
         setNsRcpt(d.receipts || []);
+        setNsSO(d.salesOrders || []);
         setNsInv({ loading: false, err: null, rows: d.inventory || [], at: (rows[0] || {}).updated_at || null });
       })
       .catch((e) => setNsInv({ loading: false, rows: [], at: null, err: String(e.message || e) }));
@@ -761,6 +764,15 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
           preApplied: aps.preApplied || {}, marketStock: actuals.marketStock || {},
           pinned: aps.pinned || [], numDays: 40, market: "All",
         });
+        // Which order each shipment is booked against. Allocated over the whole
+        // plan, never the filtered view — the order a line draws on must not
+        // depend on which market the screen happens to be showing.
+        const soAlloc = allocateSalesOrders({
+          days: full.days, salesOrders: nsSO,
+          marketCode: (m) => MKT_CODE[m] || m,
+          itemSku: (l) => (l.kind === "BASE" ? baseSkuFor(l.sku) : l.sku),
+          isShipped: (l, date) => !!actualFor(l.market, l.sku, l.kind, date, l.name),
+        });
         const sched = applyMkt === "All" ? full : (() => {
           const keep = (r) => r.market === applyMkt;
           const days = full.days
@@ -816,13 +828,21 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
           const wb = new ExcelJS.Workbook();
           const mk = (name, rows) => {
             const ws = wb.addWorksheet(name);
-            ws.columns = [{ width: 16 }, { width: 16 }, { width: 30 }, { width: 11 }, { width: 11 }, { width: 9 }, { width: 12 }];
-            const h = ws.addRow(["Date", "Market", "Item", "Base", "Qty", "Boxes", "Needed by"]);
+            ws.columns = [{ width: 16 }, { width: 16 }, { width: 30 }, { width: 11 }, { width: 11 }, { width: 9 }, { width: 12 }, { width: 20 }];
+            const h = ws.addRow(["Date", "Market", "Item", "Base", "Qty", "Boxes", "Needed by", "Ship against SO"]);
             h.eachCell((c) => { c.font = { bold: true, size: 9 }; });
             rows.forEach((r) => ws.addRow(r));
           };
           mk("Application", sched.days.flatMap((d) => d.apply.map((l) => [dF2(d.date), l.market, `${l.name} – BASE`, l.baseColor, l.units, l.boxes, l.due || ""])));
-          mk("Shipping", sched.days.flatMap((d) => d.ship.map((l) => [dF2(d.date), l.market, `${l.name} – ${l.kind}`, l.kind === "BASE" ? l.baseColor : "", l.units, l.boxes, l.due || ""])));
+          // The order to book against travels with the export — the sheet is what
+          // reaches the floor, so it has to answer this without the screen.
+          const soText = (l) => {
+            const a = soAlloc[l.key];
+            if (!a || a.confirmed) return "";
+            if (!a.parts.length) return "no open SO";
+            return a.parts.map((p) => p.so).join(" · ") + (a.short > 0 ? " · needs a new SO" : "");
+          };
+          mk("Shipping", sched.days.flatMap((d) => d.ship.map((l) => [dF2(d.date), l.market, `${l.name} – ${l.kind}`, l.kind === "BASE" ? l.baseColor : "", l.units, l.boxes, l.due || "", soText(l)])));
           const buf = await wb.xlsx.writeBuffer();
           const a = document.createElement("a");
           a.href = URL.createObjectURL(new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
@@ -859,6 +879,31 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
           );
         };
 
+        // The order the floor books this shipment against. A market and SKU can
+        // sit on more than one open order — New Jersey runs two, Colorado three
+        // — so a line that outruns the oldest one names every order it spans.
+        const soTag = (l) => {
+          const a = soAlloc[l.key];
+          if (!a || a.confirmed) return null;      // already gone; the ✓ says so
+          const box = { marginLeft: 4, fontSize: 7.5, fontWeight: 700, borderRadius: 3,
+            padding: "0 3px", whiteSpace: "nowrap", fontFamily: "'JetBrains Mono',monospace" };
+          if (!a.parts.length) return (
+            <span title={`No open sales order covers ${a.item} for ${l.market} — raise one in NetSuite before this ships`}
+              style={{ ...box, color: "#92400e", border: "1px solid " + T.AM, background: "#fffbeb" }}>
+              no open SO
+            </span>
+          );
+          const detail = a.parts.map((p) => `${p.so}${p.custPo ? ` · PO ${p.custPo}` : ""} — ${fm(p.units)} units`).join("\n");
+          return (
+            <span title={`Ship against ${a.item}\n${detail}` + (a.short > 0
+                ? `\n\n⚠ ${fm(a.short)} units are beyond every open order — needs a new SO`
+                : "")}
+              style={{ ...box, color: T.PU, border: "1px solid " + T.PU + "66", background: T.PU + "0F" }}>
+              {a.parts.map((p) => p.so).join(" · ")}{a.short > 0 ? " ⚠" : ""}
+            </span>
+          );
+        };
+
         const lineRow = (l, date, showBase, st) => (
           <tr key={l.key} style={{
             background: st && st.shipped ? "#dcfce7" : st && st.missed ? "#fef3c7" : (l.done ? T.S2 + "AA" : undefined),
@@ -867,6 +912,7 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
             <td style={{ ...td, fontSize: 9.5, textDecoration: l.done ? "line-through" : undefined }}>
               {l.name} <span style={{ fontWeight: 700 }}>– {l.kind}</span>{badge(l)}
               {!showBase && demandTag(l, date)}
+              {!showBase && soTag(l)}
               {st && st.shipped && <span title={`Confirmed in NetSuite${st.a.tracking ? " — " + st.a.tracking : ""}${st.a.date ? ` — shipped ${st.a.date}` : ""}`} style={{ marginLeft: 4, fontSize: 7.5, color: T.GR, border: "1px solid " + T.GR, borderRadius: 3, padding: "0 3px", fontWeight: 700 }}>
                 ✓ shipped {fm(st.a.qty)}{st.a.drift ? ` · ${Math.abs(st.a.drift)}d ${st.a.drift < 0 ? "early" : "late"}` : ""}
               </span>}
