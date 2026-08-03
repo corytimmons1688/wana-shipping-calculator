@@ -25,7 +25,12 @@ export default function App({ auth = null }) {
   const setTab = useCallback((t) => { setTabRaw(t); try { localStorage.setItem("wana.tab", t); } catch { /* ignore */ } }, []);
   // Admin is the one tab that can vanish between sessions — never strand
   // someone on it after their rights change or on a shared machine.
-  useEffect(() => { if (tab === "admin" && !auth?.isAdmin) setTab("demand"); }, [tab, auth, setTab]);
+  // Never strand someone on a tab that is no longer shown — a stored tab from
+  // before it was hidden would otherwise render an empty page.
+  useEffect(() => {
+    const hidden = mainTabs.find((t) => t.k === tab && (t.hidden || (t.adminOnly && !auth?.isAdmin)));
+    if (hidden) setTab("demand");
+  }, [tab, auth, setTab]);
   const [scenarios, setScenarios] = useState(() => [mkScenario("Base Plan", initScenario()), mkScenario("Colorado Option 2", initScenarioCOOpt2())]);
   const [active, setActive] = useState(0);
   const [cmp, setCmp] = useState(false);
@@ -175,7 +180,7 @@ export default function App({ auth = null }) {
     const rows = [{ l:"Go-Live Demand", k:"gld", fn:fm },{ l:"Total Freight", k:"freight", fn:f$, best:minFr },{ l:"Base Molds", k:"bM", fn:fm },{ l:"Lid Molds", k:"lM", fn:fm }];
     return (<div style={{ padding:"16px 18px" }}><div style={{ fontSize:15, fontWeight:700, color:T.TX, marginBottom:12 }}>Scenario Comparison</div><div style={{ overflowX:"auto" }}><table style={tbl}><thead><tr><th style={th}>Metric</th>{data.map((d, i) => <th key={i} style={{ ...th, textAlign:"right" }}>{d.name}</th>)}</tr></thead><tbody>{rows.map((r, ri) => (<tr key={ri}><td style={{ ...td, fontWeight:600 }}>{r.l}</td>{data.map((d, i) => { const v = d[r.k]; const best = r.best != null && v === r.best; return <td key={i} style={{ ...td, textAlign:"right", fontWeight:700, color:best ? T.GR : T.TX }}>{r.fn(v)}</td>; })}</tr>))}</tbody></table></div></div>);
   };
-const mainTabs = [{ k:"demand", l:"Market Demand", i:"📊" },{ k:"forecast", l:"Item Forecast", i:"📈" },{ k:"shipping", l:"Shipping Calculator", i:"📦" },{ k:"inventory", l:"Inventory", i:"📋" },{ k:"orders", l:"Market Orders", i:"🚚" },{ k:"settings", l:"Settings", i:"⚙️" },{ k:"admin", l:"Admin", i:"🔑", adminOnly:true }];
+const mainTabs = [{ k:"demand", l:"Market Demand", i:"📊" },{ k:"forecast", l:"Item Forecast", i:"📈" },{ k:"shipping", l:"Shipping Calculator", i:"📦", hidden:true },{ k:"inventory", l:"Inventory", i:"📋" },{ k:"orders", l:"Market Orders", i:"🚚" },{ k:"settings", l:"Settings", i:"⚙️" },{ k:"admin", l:"Admin", i:"🔑", adminOnly:true }];
   return (
     <div style={{ background:T.BG, color:T.TX, minHeight:"100vh", fontFamily:"'DM Sans','Segoe UI',sans-serif", fontSize:14 }}>
       <div style={{ padding:"10px 18px", background:T.S1, borderBottom:"1px solid "+T.BD, display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:8 }}>
@@ -230,7 +235,7 @@ const mainTabs = [{ k:"demand", l:"Market Demand", i:"📊" },{ k:"forecast", l:
       </div>
       {cmp ? <CmpView /> : (<>
         <div style={{ display:"flex", background:T.S1, borderBottom:"1px solid "+T.BD, padding:"0 18px", overflowX:"auto" }}>
-          {mainTabs.filter(t => !t.adminOnly || auth?.isAdmin).map(t => { const a = tab === t.k; return <button key={t.k} onClick={() => setTab(t.k)} style={{ padding:"9px 16px", cursor:"pointer", border:"none", borderBottom:a ? "2px solid "+T.AC : "2px solid transparent", background:"transparent", color:a ? T.AC : T.T2, fontWeight:a ? 700 : 500, fontSize:12, display:"flex", alignItems:"center", gap:4, whiteSpace:"nowrap", fontFamily:"inherit" }}><span>{t.i}</span>{t.l}</button>; })}
+          {mainTabs.filter(t => !t.hidden && (!t.adminOnly || auth?.isAdmin)).map(t => { const a = tab === t.k; return <button key={t.k} onClick={() => setTab(t.k)} style={{ padding:"9px 16px", cursor:"pointer", border:"none", borderBottom:a ? "2px solid "+T.AC : "2px solid transparent", background:"transparent", color:a ? T.AC : T.T2, fontWeight:a ? 700 : 500, fontSize:12, display:"flex", alignItems:"center", gap:4, whiteSpace:"nowrap", fontFamily:"inherit" }}><span>{t.i}</span>{t.l}</button>; })}
         </div>
         {tab === "demand" && <DemandTab sc={sc} gld={gld} annD={annD} upd={upd} />}
         {tab === "forecast" && <ItemForecastTab sc={sc} upd={upd} />}

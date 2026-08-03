@@ -72,6 +72,7 @@ function StatusChipIn({ sh, today, onReceive }) {
 }
 
 const INV_VIEWS = ["overview", "mrp", "inbound", "outbound", "pos", "targets", "factory"];
+const HIDDEN_VIEWS = ["factory"];
 
 export default function InventoryTab({ sc, actuals, updActuals }) {
   // Persist the active sub-view so a page refresh returns to the same place.
@@ -79,6 +80,9 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
     try { const v = localStorage.getItem("wana.invView"); return INV_VIEWS.includes(v) ? v : "overview"; } catch { return "overview"; }
   });
   const setView = (v) => { setViewRaw(v); try { localStorage.setItem("wana.invView", v); } catch { /* ignore */ } };
+  // Views built but not currently surfaced. The render blocks stay intact, so
+  // un-hiding is a one-line change rather than a rebuild.
+  useEffect(() => { if (HIDDEN_VIEWS.includes(view)) setView("overview"); }, [view]); // eslint-disable-line
   const [expKey, setExpKey] = useState(null);
   const [expShip, setExpShip] = useState(null);
   const [outMkt, setOutMkt] = useState("All");
@@ -326,7 +330,7 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
         {subBtn("mrp", "MRP")}
         {subBtn("inbound", "Inbound (factory → Calyx)")}
         {subBtn("targets", "Targets")}
-        {subBtn("factory", "Factory Priority")}
+        {/* Factory Priority hidden — restore this line and HIDDEN_VIEWS below to bring it back */}
         {subBtn("apply", "Apply Schedule")}
         {subBtn("live", "Live Inventory (NS)")}
         <span style={{ marginLeft: "auto", fontSize: 9.5, color: T.T2 }}>forecast: scenario “{sc.name}”</span>
