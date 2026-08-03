@@ -19,10 +19,26 @@ export const BASE_BOX = 378;
 export const CAP_MIN = 10000, CAP_MAX = 15000;
 export const DEFAULT_CAPACITY = 12474;
 export const DUE_WINDOW_DAYS = 45;
+// How much demand a single run covers, and how early it is allowed to start.
+// A run serves one week of a market's demand from the first week it has to
+// cover, and it does not take line time until it is within a week of that week.
+// Collecting the whole 45-day window into one run instead is what turned
+// Colorado Dreamberry into a single 49,140-unit batch — and because a run needs
+// all of its material on hand before it starts, that invented a black-base
+// shortage the MRP never showed (58,968 on hand against the 49,140 it was
+// supposedly short of). Both halves matter: sizing runs without also holding
+// them back just splits one oversized batch into two adjacent ones.
+//
+// One week rather than the two or three it is tempting to reach for, because a
+// busy flavour already wants about a day of line time per week — Colorado
+// Assorted runs ~18.5k against an 18k day. Any horizon past a week hands the
+// one-SKU-one-day rule a run it cannot fit, and the day goes over: at three
+// weeks the worst day plans 216% of capacity, at one week nothing exceeds 101%.
+// The cost is changeovers — the floor sets up more labels more often.
+export const COVERAGE_DAYS = 7;
 // Once a line is this close to the date its market needs stock, a partial run
-// beats a tidy one. Colorado's Dreamberry is the case: 49,140 black bases, and
-// the next black-base arrival is CP-31 on Aug 27 — holding out for one clean
-// run left them ten days past a Aug 17 need with material sitting on the floor.
+// beats a tidy one — run what there is material for rather than leave a market
+// short while holding out for one clean batch.
 export const PARTIAL_LEAD_DAYS = 10;
 
 export const baseSkuFor = (lidSku) => (BASE_TYPES[skuInfo(lidSku).base] || BASE_TYPES["White"]).sku;
@@ -30,6 +46,7 @@ const iso = (d) => { const p = (n) => String(n).padStart(2, "0"); return `${d.ge
 const parse = (s) => { const p = String(s).split("-").map(Number); return new Date(p[0], p[1] - 1, p[2]); };
 export const slotKey = (date, market, sku, kind) => `${date}|${market}|${sku}|${kind}`;
 const minusDays = (isoStr, n) => { const d = parse(isoStr); d.setDate(d.getDate() - n); return iso(d); };
+const plusDays = (isoStr, n) => { const d = parse(isoStr); d.setDate(d.getDate() + n); return iso(d); };
 const upBox = (n, box) => (n <= 0 ? 0 : Math.ceil(n / box) * box);
 const dnBox = (n, box) => (n <= 0 ? 0 : Math.floor(n / box) * box);
 
@@ -82,7 +99,7 @@ function availability(actuals) {
 export function buildApplySchedule({ mw, grid, actuals, today, startDate,
   capacity = DEFAULT_CAPACITY, log = [], overrides = {}, preApplied = {},
   marketStock = {}, pinned = [], numDays = 30, dueWindowDays = DUE_WINDOW_DAYS,
-  market = "All" }) {
+  coverageDays = COVERAGE_DAYS, market = "All" }) {
 
   const todayStr = iso(today);
   const start = startDate || nextBusinessDay(today);
@@ -97,30 +114,61 @@ export function buildApplySchedule({ mw, grid, actuals, today, startDate,
   };
 
   // ── time-phased requirement per market + flavour ──────────────────────────
+  // Demand is cut into runs rather than collected into one. A run opens on the
+  // first week it has to cover and takes the weeks that fall within
+  // `coverageDays` of it; the next week beyond that opens the next run. So a
+  // flavour appears as several right-sized runs across the window instead of
+  // one batch of everything the market will want in the next 45 days.
   const groups = [];
+  // Lids the market already holds with no base under them, kept per market +
+  // flavour rather than per run. Every run of a flavour draws on the same pool,
+  // so holding it on the run would let each one claim the same lids and ship
+  // early on stock that is not there twice.
+  const bareLid = {};
   for (const sku of Object.keys(mw.byKey || {})) {
     if (sku.startsWith("PB-")) continue;
     for (const [mk, weekly] of Object.entries(mw.byKey[sku] || {})) {
       if (market !== "All" && mk !== market) continue;
       let lidPool = held(mk, sku, "LID"), basePool = held(mk, sku, "BASE");
-      const heldLid = lidPool, heldBase = basePool;
-      let lidNeed = 0, baseNeed = 0, due = null;
+      const pk = mk + "|" + sku;
+      bareLid[pk] = Math.max(0, lidPool - basePool);
+      const runs = [];
+      let run = null;
       for (let w = 0; w < weekly.length; w++) {
         const q = Number(weekly[w]) || 0; if (q <= 0) continue;
         const d = (grid[w] && grid[w].key) || todayStr;
         if (d > windowEndStr) break;
-        const uL = Math.min(lidPool, q); lidPool -= uL; if (q - uL > 0) { lidNeed += q - uL; if (!due) due = d; }
-        const uB = Math.min(basePool, q); basePool -= uB; if (q - uB > 0) { baseNeed += q - uB; if (!due) due = d; }
+        const uL = Math.min(lidPool, q); lidPool -= uL;
+        const uB = Math.min(basePool, q); basePool -= uB;
+        const nl = q - uL, nb = q - uB;
+        if (nl <= 0 && nb <= 0) continue;          // held stock still covers it
+        if (!run || d > plusDays(run.due, coverageDays - 1)) { run = { due: d, base: 0, lid: 0 }; runs.push(run); }
+        run.base += nb; run.lid += nl;
       }
-      if (baseNeed <= 0 && lidNeed <= 0) continue;
       const info = skuInfo(sku);
-      groups.push({ pk: mk + "|" + sku, market: mk, sku, name: info.name,
-        baseSku: baseSkuFor(sku), baseColor: info.base === "Black Sparkle" ? "Black" : "White",
-        baseNeed: upBox(baseNeed, BASE_BOX), lidNeed: upBox(lidNeed, LID_BOX),
-        bareLid: Math.max(0, heldLid - heldBase), due: due || todayStr });
+      for (let i = 0; i < runs.length; i++)
+        groups.push({ pk, rk: pk + "|" + i, market: mk, sku, name: info.name,
+          baseSku: baseSkuFor(sku), baseColor: info.base === "Black Sparkle" ? "Black" : "White",
+          baseNeed: upBox(runs[i].base, BASE_BOX), lidNeed: upBox(runs[i].lid, LID_BOX),
+          due: runs[i].due });
     }
   }
   groups.sort((a, b) => a.due.localeCompare(b.due) || a.market.localeCompare(b.market) || a.name.localeCompare(b.name));
+  // Finished and pinned work retires the earliest outstanding run first and
+  // overflows into the next. The runs of a flavour are tranches of one queue,
+  // so units that clear more than the front run have to keep counting against
+  // what follows — otherwise the planner re-schedules demand already covered,
+  // and that phantom need evicts other markets from the day.
+  const retire = (mk, sku, kind, units) => {
+    const pk = mk + "|" + sku, field = kind === "BASE" ? "baseNeed" : "lidNeed";
+    if (kind === "BASE") bareLid[pk] = Math.max(0, (bareLid[pk] || 0) - units);
+    let left = units;
+    for (const g of groups) {
+      if (left <= 0) break;
+      if (g.pk !== pk) continue;
+      const t = Math.min(left, g[field]); g[field] -= t; left -= t;
+    }
+  };
 
   const dates = businessDays(parse(start), numDays);
   const usedBase = {}, usedLid = {};
@@ -178,11 +226,7 @@ export function buildApplySchedule({ mw, grid, actuals, today, startDate,
     // still sees the full requirement, schedules the same units a second time,
     // and that phantom demand pushes other markets off the day — ticking one
     // New Jersey line made a Colorado line disappear.
-    const g = groups.find((x) => x.pk === e.market + "|" + e.sku);
-    if (g) {
-      if (isBase) { g.baseNeed = Math.max(0, g.baseNeed - units); g.bareLid = Math.max(0, g.bareLid - units); }
-      else g.lidNeed = Math.max(0, g.lidNeed - units);
-    }
+    retire(e.market, e.sku, e.kind, units);
   }
   for (const p of pinned) {
     if (market !== "All" && p.market !== market) continue;
@@ -207,20 +251,27 @@ export function buildApplySchedule({ mw, grid, actuals, today, startDate,
     // did it if this line was ticked.
     if (!done) {
       (isBase ? usedBase : usedLid)[isBase ? baseSkuFor(p.sku) : p.sku] = ((isBase ? usedBase : usedLid)[isBase ? baseSkuFor(p.sku) : p.sku] || 0) + units;
-      const g = groups.find((x) => x.pk === p.market + "|" + p.sku);
-      if (g) { if (isBase) { g.baseNeed = Math.max(0, g.baseNeed - units); g.bareLid = Math.max(0, g.bareLid - units); } else g.lidNeed = Math.max(0, g.lidNeed - units); }
+      retire(p.market, p.sku, p.kind, units);
     }
   }
 
   // ── APPLICATION pass — capacity-bound, pulled as early as base stock allows
-  const applyDone = {};                              // pk → { units, date }
-  const partial = new Set();          // pk of lines split to cover a near due date
+  const applyDone = {};                              // rk → { units, date }
   const work = groups.filter((g) => g.baseNeed > 0 && !pinKeys.has(g.market + "|" + g.sku + "|BASE"));
   for (const date of dates) {
     let capLeft = capacity - (byDate[date] ? byDate[date].applied : 0);
     if (capLeft <= 0) continue;
+    const started = new Set();      // flavours already on the line today
     for (const g of work) {
       if (g.baseNeed <= 0 || capLeft < BASE_BOX) continue;
+      // A run waits until it is within its coverage horizon of the week it has
+      // to serve. Without this the later runs simply pile onto the front of the
+      // schedule and the plan is back to building a month of stock at once.
+      if (date < minusDays(g.due, coverageDays)) continue;
+      // One flavour, one run per day — two runs of the same flavour landing on
+      // one day share a slot key, merge into a single row, and rebuild exactly
+      // the oversized batch the runs were split to avoid.
+      if (started.has(g.pk)) continue;
       const free = Math.max(0, av.at(g.baseSku, date) - (usedBase[g.baseSku] || 0));
       const pre = Math.max(0, Number(preLeft[g.pk]) || 0);
       const ov = overrides[slotKey(date, g.market, g.sku, "BASE")];
@@ -249,12 +300,12 @@ export function buildApplySchedule({ mw, grid, actuals, today, startDate,
           // Near or past the market's need date: run what we can rather than
           // leaving them short waiting for the rest of the material.
           qty = Math.min(want, availB, dnBox(pre, BASE_BOX) + dnBox(capLeft, BASE_BOX));
-          if (qty > 0) partial.add(g.pk);
         } else {
           continue;                                          // hold for one clean run
         }
       }
       if (qty < BASE_BOX) continue;
+      started.add(g.pk);
       const fromPre = Math.min(qty, pre);
       preLeft[g.pk] = pre - fromPre;
       capLeft -= (qty - fromPre);
@@ -266,7 +317,7 @@ export function buildApplySchedule({ mw, grid, actuals, today, startDate,
         done: false, edited: ov != null, preApplied: fromPre > 0, due: g.due, late: g.due < date,
         partial: g.baseNeed > 0 }, BASE_BOX);
       d.applied += (qty - fromPre);
-      const a = applyDone[g.pk] || (applyDone[g.pk] = { units: 0, date });
+      const a = applyDone[g.rk] || (applyDone[g.rk] = { units: 0, date });
       a.units += qty; a.date = date;
     }
   }
@@ -277,10 +328,12 @@ export function buildApplySchedule({ mw, grid, actuals, today, startDate,
   // ships the following business day.
   const shipQueue = [];
   for (const g of groups) {
-    const a = applyDone[g.pk];
+    const a = applyDone[g.rk];
     if (a && a.units > 0) {
-      const early = Math.min(a.units, dnBox(g.bareLid, BASE_BOX));
-      if (early > 0) shipQueue.push({ g, kind: "BASE", units: early, date: nextBizStr(a.date), reason: "lids already at market" });
+      // Runs are walked in due order, so the earliest one gets first claim on
+      // the bare lids and drains the pool for the rest.
+      const early = Math.min(a.units, dnBox(bareLid[g.pk] || 0, BASE_BOX));
+      if (early > 0) { bareLid[g.pk] -= early; shipQueue.push({ g, kind: "BASE", units: early, date: nextBizStr(a.date), reason: "lids already at market" }); }
       const rest = a.units - early;
       if (rest > 0) {
         const lr = av.readyBy(g.sku, rest + (usedLid[g.sku] || 0), a.date);
@@ -296,12 +349,12 @@ export function buildApplySchedule({ mw, grid, actuals, today, startDate,
       const need = g.lidNeed;
       const lr = av.readyBy(g.sku, need + (usedLid[g.sku] || 0), start);
       if (lr) {
-        const applyD = applyDone[g.pk] ? applyDone[g.pk].date : start;
+        const applyD = applyDone[g.rk] ? applyDone[g.rk].date : start;
         const lidsBind = lr.date > applyD && !lr.fromStock;
         usedLid[g.sku] = (usedLid[g.sku] || 0) + need;
         shipQueue.push({ g, kind: "LID", units: need, date: nextBizStr(lidsBind ? lr.date : applyD),
           reason: lidsBind ? `waits for ${lr.ref || "lids"} · ${shortDate(lr.date)}`
-                           : (applyDone[g.pk] ? "with its bases" : "lids in stock") });
+                           : (applyDone[g.rk] ? "with its bases" : "lids in stock") });
       }
     }
   }
