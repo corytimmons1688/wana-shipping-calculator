@@ -38,7 +38,13 @@ export default async function handler(req, res) {
 
     const headers = {};
     for (const [k, v] of Object.entries(req.headers)) {
-      if (STRIP.has(k.toLowerCase()) || v == null) continue;
+      const lk = k.toLowerCase();
+      if (STRIP.has(lk) || v == null) continue;
+      // Better Auth derives its own base URL from forwarding headers when it
+      // sits behind a proxy. Relaying Vercel's would tell it that it lives at
+      // this app's hostname, and it then fails to match its own routes — the
+      // symptom is a bare 404 from an endpoint that works when called direct.
+      if (lk.startsWith("x-forwarded-") || lk.startsWith("x-vercel-")) continue;
       headers[k] = Array.isArray(v) ? v.join(", ") : v;
     }
     // The whole point of the proxy.
