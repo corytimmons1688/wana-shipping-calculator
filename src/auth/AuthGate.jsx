@@ -11,6 +11,7 @@ import App from "../App";
 import { useAuth, useRoute, navigate, AUTH_PATHS } from "./useAuth";
 import { LoginPage, RegisterPage, VerifyEmailPage, ForgotPasswordPage, ResetPasswordPage, PendingPage } from "./AuthPages";
 import { T } from "../utils/theme";
+import { AUTH_ENABLED } from "./config";
 
 const PUBLIC = new Set(["/login", "/register", "/verify-email", "/forgot-password", "/reset-password"]);
 
@@ -31,6 +32,11 @@ export default function AuthGate() {
   useEffect(() => {
     if (status === "approved" && (path === "/login" || path === "/register")) navigate("/", { replace: true });
   }, [status, path]);
+
+  // Sign-in switched off — see auth/config.js. Must sit below every hook: an
+  // early return above one changes the hook count between routes and React
+  // throws "Rendered more hooks than during the previous render".
+  if (!AUTH_ENABLED && !PUBLIC.has(path)) return <App auth={null} />;
 
   // Public pages render regardless of session — the token in the URL is the credential.
   if (PUBLIC.has(path)) {

@@ -22,6 +22,9 @@ export const TRUSTED_DOMAINS = (process.env.TRUSTED_EMAIL_DOMAINS || "calyxconta
 export const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || "ctimmons@calyxcontainers.com")
   .split(",").map((s) => s.trim().toLowerCase()).filter(Boolean);
 
+// Master switch, mirroring src/auth/config.js on the server side.
+export const AUTH_REQUIRED = String(process.env.REQUIRE_AUTH || "false").toLowerCase() === "true";
+
 const domainOf = (email) => String(email || "").toLowerCase().split("@")[1] || "";
 export const isTrusted = (email) => TRUSTED_DOMAINS.includes(domainOf(email));
 export const isBootstrapAdmin = (email) => ADMIN_EMAILS.includes(String(email || "").toLowerCase());
@@ -125,6 +128,10 @@ export async function getAccess(user) {
  */
 export async function requireAccess(req, res, { adminOnly = false } = {}) {
   res.setHeader("Cache-Control", "no-store");
+  // Sign-in is switched off while the auth server issues are resolved (see
+  // src/auth/config.js). Set REQUIRE_AUTH=true to enforce again. The endpoints
+  // are still same-origin only — the wildcard CORS is not coming back.
+  if (!AUTH_REQUIRED) return { user: null, access: null, sb, bypassed: true };
   if (!accessConfigured()) {
     res.status(503).json({ error: "access_control_unconfigured",
       hint: "SUPABASE_SERVICE_ROLE_KEY is not set on this deployment." });

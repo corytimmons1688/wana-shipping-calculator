@@ -7,6 +7,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { authClient, apiFetch, clearAuthToken, getAuthToken } from "./authClient";
+import { AUTH_ENABLED } from "./config";
 
 export const AUTH_PATHS = ["/login", "/register", "/verify-email", "/forgot-password", "/reset-password", "/pending"];
 
@@ -47,7 +48,7 @@ export function useAuth() {
   const [state, setState] = useState({ loading: true, user: null, access: null, error: null });
 
   const refresh = useCallback(async () => {
-    if (!getAuthToken()) { setState({ loading: false, user: null, access: null, error: null }); return; }
+    if (!AUTH_ENABLED || !getAuthToken()) { setState({ loading: false, user: null, access: null, error: null }); return; }
     try {
       const r = await apiFetch("/api/access");
       if (r.status === 401) { setState({ loading: false, user: null, access: null, error: null }); return; }
