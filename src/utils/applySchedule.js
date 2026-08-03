@@ -19,11 +19,17 @@ export const BASE_BOX = 378;
 export const CAP_MIN = 10000, CAP_MAX = 15000;
 export const DEFAULT_CAPACITY = 12474;
 export const DUE_WINDOW_DAYS = 45;
+// Once a line is this close to the date its market needs stock, a partial run
+// beats a tidy one. Colorado's Dreamberry is the case: 49,140 black bases, and
+// the next black-base arrival is CP-31 on Aug 27 — holding out for one clean
+// run left them ten days past a Aug 17 need with material sitting on the floor.
+export const PARTIAL_LEAD_DAYS = 10;
 
 export const baseSkuFor = (lidSku) => (BASE_TYPES[skuInfo(lidSku).base] || BASE_TYPES["White"]).sku;
 const iso = (d) => { const p = (n) => String(n).padStart(2, "0"); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`; };
 const parse = (s) => { const p = String(s).split("-").map(Number); return new Date(p[0], p[1] - 1, p[2]); };
 export const slotKey = (date, market, sku, kind) => `${date}|${market}|${sku}|${kind}`;
+const minusDays = (isoStr, n) => { const d = parse(isoStr); d.setDate(d.getDate() - n); return iso(d); };
 const upBox = (n, box) => (n <= 0 ? 0 : Math.ceil(n / box) * box);
 const dnBox = (n, box) => (n <= 0 ? 0 : Math.floor(n / box) * box);
 
@@ -208,6 +214,7 @@ export function buildApplySchedule({ mw, grid, actuals, today, startDate,
 
   // ── APPLICATION pass — capacity-bound, pulled as early as base stock allows
   const applyDone = {};                              // pk → { units, date }
+  const partial = new Set();          // pk of lines split to cover a near due date
   const work = groups.filter((g) => g.baseNeed > 0 && !pinKeys.has(g.market + "|" + g.sku + "|BASE"));
   for (const date of dates) {
     let capLeft = capacity - (byDate[date] ? byDate[date].applied : 0);
@@ -228,14 +235,24 @@ export function buildApplySchedule({ mw, grid, actuals, today, startDate,
                        dnBox(free, BASE_BOX), dnBox(pre, BASE_BOX) + dnBox(capLeft, BASE_BOX));
       } else {
         const want = upBox(g.baseNeed, BASE_BOX);
-        if (dnBox(free, BASE_BOX) < want) continue;          // material not all here yet
+        const availB = dnBox(free, BASE_BOX);
         const fromCap = Math.max(0, want - dnBox(pre, BASE_BOX));
         // A requirement larger than a whole day can never fit one; give it the
         // earliest day it has material for and let that day run over, which the
-        // capacity bar already shows in red.
-        if (fromCap > capacity) { if (byDate[date] && byDate[date].applied > 0) continue; }
-        else if (fromCap > capLeft) continue;                // wait for a day with room
-        qty = want;
+        // capacity bar shows in red.
+        const capOk = fromCap > capacity
+          ? !(byDate[date] && byDate[date].applied > 0)
+          : fromCap <= capLeft;
+        if (availB >= want && capOk) {
+          qty = want;                                        // clean single run
+        } else if (date >= minusDays(g.due, PARTIAL_LEAD_DAYS)) {
+          // Near or past the market's need date: run what we can rather than
+          // leaving them short waiting for the rest of the material.
+          qty = Math.min(want, availB, dnBox(pre, BASE_BOX) + dnBox(capLeft, BASE_BOX));
+          if (qty > 0) partial.add(g.pk);
+        } else {
+          continue;                                          // hold for one clean run
+        }
       }
       if (qty < BASE_BOX) continue;
       const fromPre = Math.min(qty, pre);
@@ -246,7 +263,8 @@ export function buildApplySchedule({ mw, grid, actuals, today, startDate,
       const d = D(date);
       put(d.apply, { key: slotKey(date, g.market, g.sku, "BASE"), market: g.market, sku: g.sku,
         name: g.name, kind: "BASE", baseColor: g.baseColor, units: qty, boxes: qty / BASE_BOX,
-        done: false, edited: ov != null, preApplied: fromPre > 0, due: g.due, late: g.due < date }, BASE_BOX);
+        done: false, edited: ov != null, preApplied: fromPre > 0, due: g.due, late: g.due < date,
+        partial: g.baseNeed > 0 }, BASE_BOX);
       d.applied += (qty - fromPre);
       const a = applyDone[g.pk] || (applyDone[g.pk] = { units: 0, date });
       a.units += qty; a.date = date;

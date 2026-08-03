@@ -833,6 +833,7 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
         const badge = (l) => (
           <>
             {l.pinned && <span title="Agreed by the team — kept exactly as entered" style={{ marginLeft: 4, fontSize: 7.5, color: T.AC, border: "1px solid " + T.AC + "66", borderRadius: 3, padding: "0 3px" }}>pinned</span>}
+            {l.partial && <span title="Split to cover this market's need date — the rest of this flavour runs on a later day" style={{ marginLeft: 4, fontSize: 7.5, color: "#92400e", border: "1px solid " + T.AM, borderRadius: 3, padding: "0 3px" }}>part run</span>}
             {l.preApplied && <span title="Already applied — no capacity used" style={{ marginLeft: 4, fontSize: 7.5, color: T.GR, border: "1px solid " + T.GR + "66", borderRadius: 3, padding: "0 3px" }}>pre</span>}
           </>
         );
@@ -930,6 +931,15 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
                           <span style={{ marginLeft: 8, fontWeight: 400, fontFamily: "'JetBrains Mono',monospace", color: showBase ? (over ? "#991b1b" : T.T2) : T.T2 }}>
                             {showBase ? `${fm(applied)} / ${fm(aps.capacity)} (${Math.round((applied / aps.capacity) * 100)}%)`
                               : `${fm(rows.reduce((a, l) => a + l.units, 0))} units`}
+                          </span>
+                          {showBase && over && (
+                            <span title="A single flavour's run cannot be split, so this day holds more than the line can physically do. Add a shift or raise capacity."
+                              style={{ marginLeft: 6, fontSize: 8, fontWeight: 700, color: "#991b1b",
+                                background: "#fee2e2", border: "1px solid #dc2626", borderRadius: 3, padding: "0 4px" }}>
+                              ⚠ {fm(applied - aps.capacity)} over · {(applied / aps.capacity).toFixed(1)} days of line time
+                            </span>
+                          )}
+                          <span style={{ display: "none" }}>
                           </span>
                         </td>
                       </tr>,
