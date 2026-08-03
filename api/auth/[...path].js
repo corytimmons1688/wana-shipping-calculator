@@ -36,6 +36,13 @@ export default async function handler(req, res) {
     const qs = req.url.includes("?") ? req.url.slice(req.url.indexOf("?")) : "";
     const target = `${UPSTREAM}/${segs.join("/")}${qs}`;
 
+    // Temporary: prove what this function actually computes. No secrets, no
+    // header values — just routing facts.
+    if (req.query.__diag === "1")
+      return res.status(200).json({ upstream: UPSTREAM, origin: ORIGIN, segs, url: req.url, target,
+        probe: await fetch(target, { headers: { Origin: ORIGIN, Referer: ORIGIN + "/" } })
+          .then((r) => ({ status: r.status, body: (r.headers.get("content-type") || "") })).catch((e) => String(e.message)) });
+
     const headers = {};
     for (const [k, v] of Object.entries(req.headers)) {
       const lk = k.toLowerCase();
