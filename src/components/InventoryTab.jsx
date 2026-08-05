@@ -567,6 +567,18 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
         }
         const stickyName = { position: "sticky", left: 0, background: T.S1, zIndex: 1, minWidth: 196, maxWidth: 220, borderRight: "1px solid " + T.BD };
         const numCell = { ...td, textAlign: "right", fontFamily: "'JetBrains Mono',monospace", fontSize: 10.5, minWidth: 52, padding: "3px 6px" };
+        // This week has to read as one continuous column the whole way down.
+        // Tinting the header and the on-hand row alone lost it the moment the
+        // table scrolled past a screen, which is where it is needed most. A
+        // meaningful fill — a projected shortage — still wins over it.
+        //
+        // `inv.todayIdx` is where the projection is anchored (May 25 2026, the
+        // week NJ demand begins), not the week we are in — the table starts
+        // there, so testing against it just tints the leftmost column. The week
+        // we are actually in is the last Monday on or before today.
+        const nowKey = todayISO();
+        const nowIdx = grid.reduce((acc, g) => (g.key <= nowKey ? g.idx : acc), -1);
+        const nowCol = (g) => (g.idx === nowIdx ? T.AC + "12" : undefined);
         return (
           <div style={{ background: T.S1, border: "1px solid " + T.BD, borderRadius: 6 }}>
             <div style={{ padding: "8px 12px", display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
@@ -588,7 +600,8 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
                   <tr>
                     <th style={{ ...th, ...stickyName, top: 29, zIndex: 3 }}>SKU / week</th>
                     {mrpCols.map((g) => (
-                      <th key={g.idx} style={{ ...th, top: 29, textAlign: "right", minWidth: 52, background: g.idx === inv.todayIdx ? T.AC + "14" : T.S1 }}>
+                      <th key={g.idx} style={{ ...th, top: 29, textAlign: "right", minWidth: 52, background: g.idx === nowIdx ? T.AC + "24" : T.S1,
+                        color: g.idx === nowIdx ? T.AC : undefined, fontWeight: g.idx === nowIdx ? 700 : undefined }}>
                         {g.label}<br /><span style={{ fontWeight: 400, color: T.T2 }}>wk {g.idx + 11}</span>
                       </th>
                     ))}
@@ -615,7 +628,7 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
                             {mrpCols.map((g) => {
                               const v = r.proj[g.idx];
                               const neg = v != null && v < 0;
-                              return <td key={g.idx} style={{ ...numCell, fontWeight: 700, color: neg ? "#991b1b" : T.TX, background: neg ? "#fee2e2" : g.idx === inv.todayIdx ? T.AC + "0A" : undefined }}>{v == null ? "—" : fm(Math.round(v))}</td>;
+                              return <td key={g.idx} style={{ ...numCell, fontWeight: 700, color: neg ? "#991b1b" : T.TX, background: neg ? "#fee2e2" : nowCol(g) }}>{v == null ? "—" : fm(Math.round(v))}</td>;
                             })}
                           </tr>,
                         ];
@@ -624,14 +637,14 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
                             out.push(
                               <tr key={r.key + mname}>
                                 <td style={{ ...td, ...stickyName, padding: "2px 8px 2px 22px", fontSize: 9.5, color: T.T2 }}>↳ {mname} demand</td>
-                                {mrpCols.map((g) => { const v = dm[mname][g.idx]; return <td key={g.idx} style={{ ...numCell, color: v > 0 ? T.TX : T.BD }}>{v > 0 ? fm(Math.round(v)) : "—"}</td>; })}
+                                {mrpCols.map((g) => { const v = dm[mname][g.idx]; return <td key={g.idx} style={{ ...numCell, color: v > 0 ? T.TX : T.BD, background: nowCol(g) }}>{v > 0 ? fm(Math.round(v)) : "—"}</td>; })}
                               </tr>
                             );
                           }
                           out.push(
                             <tr key={r.key + "tot"}>
                               <td style={{ ...td, ...stickyName, padding: "2px 8px 2px 22px", fontSize: 9.5, fontWeight: 700, color: T.T2 }}>Total demand</td>
-                              {mrpCols.map((g) => { const v = r.demand[g.idx]; return <td key={g.idx} style={{ ...numCell, fontWeight: 600, color: v > 0 ? T.TX : T.BD, background: T.S2 + "44" }}>{v > 0 ? fm(Math.round(v)) : "—"}</td>; })}
+                              {mrpCols.map((g) => { const v = r.demand[g.idx]; return <td key={g.idx} style={{ ...numCell, fontWeight: 600, color: v > 0 ? T.TX : T.BD, background: nowCol(g) || T.S2 + "44" }}>{v > 0 ? fm(Math.round(v)) : "—"}</td>; })}
                             </tr>,
                             <tr key={r.key + "rcv"}>
                               <td style={{ ...td, ...stickyName, padding: "2px 8px 2px 22px", fontSize: 9.5, color: T.GR }}>Receipts (in transit)</td>
@@ -639,7 +652,7 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
                                 const v = r.arrivals[g.idx];
                                 const refs = (r.arrivalRefs && r.arrivalRefs[g.idx]) || [];
                                 const tip = refs.map((a) => `${a.ref}: ${fm(a.qty)}`).join("\n");
-                                return <td key={g.idx} title={v > 0 ? tip : undefined} style={{ ...numCell, color: v > 0 ? T.GR : T.BD, fontWeight: v > 0 ? 700 : 400, cursor: v > 0 ? "help" : "default" }}>{v > 0 ? "+" + fm(Math.round(v)) : "—"}</td>;
+                                return <td key={g.idx} title={v > 0 ? tip : undefined} style={{ ...numCell, color: v > 0 ? T.GR : T.BD, fontWeight: v > 0 ? 700 : 400, cursor: v > 0 ? "help" : "default", background: nowCol(g) }}>{v > 0 ? "+" + fm(Math.round(v)) : "—"}</td>;
                               })}
                             </tr>
                           );
