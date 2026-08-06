@@ -137,10 +137,21 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
       }
     });
   }, [nsRcpt, actuals.inbound]); // eslint-disable-line
-  // Inventory model "as of" date — anchored to the last week of May (May 25,
-  // 2026, a Monday on the week grid) since NJ's demand begins that week.
-  // Nothing has shipped/been consumed before this, so the projection starts here.
-  const today = new Date(2026, 4, 25);
+  // Inventory model "as of" date. This was pinned to May 25 2026 — the week NJ
+  // demand begins — on the reasoning that nothing had shipped or been consumed
+  // before it, so the projection could start there. That held while the app was
+  // being built and stopped holding the moment stock started moving.
+  //
+  // The anchor is where actuals stop and forecast takes over, and `shippedOut`
+  // only counts outbound up to it. Pinned to May, every shipment since fell
+  // outside — 215,258 units subtracted nowhere — so on hand read 443,072 when
+  // 227,814 was on the floor, eight SKUs showed stock while sitting at zero,
+  // and stockout dates ran months late. Demand and Item Forecast always used
+  // the real week; this brings Inventory into line with them.
+  //
+  // Note this must stay "now", not a fixed date: it decides which actuals are
+  // history and which weeks the projection covers.
+  const today = new Date();
 
   const fc = useMemo(() => calcSkuWeeklyForecast(sc.markets), [sc.markets]);
   const inv = useMemo(() => calcSkuInventory(actuals, fc, today), [actuals, fc]); // eslint-disable-line
@@ -571,13 +582,7 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
         // Tinting the header and the on-hand row alone lost it the moment the
         // table scrolled past a screen, which is where it is needed most. A
         // meaningful fill — a projected shortage — still wins over it.
-        //
-        // `inv.todayIdx` is where the projection is anchored (May 25 2026, the
-        // week NJ demand begins), not the week we are in — the table starts
-        // there, so testing against it just tints the leftmost column. The week
-        // we are actually in is the last Monday on or before today.
-        const nowKey = todayISO();
-        const nowIdx = grid.reduce((acc, g) => (g.key <= nowKey ? g.idx : acc), -1);
+        const nowIdx = inv.todayIdx;
         const nowCol = (g) => (g.idx === nowIdx ? T.AC + "12" : undefined);
         return (
           <div style={{ background: T.S1, border: "1px solid " + T.BD, borderRadius: 6 }}>
@@ -672,9 +677,12 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
       })()}
 
       {view === "factory" && (() => {
-        const startIdx = 21; // week 32 = Aug 3, 2026
+        // Start from the week we are in. This was pinned to 21 with the note
+        // "week 32 = Aug 3, 2026" — right the day it was written and wrong every
+        // week after, which is the same trap the model anchor fell into.
+        const startIdx = inv.todayIdx;
         // Net requirements (lot-for-lot): per SKU, walk from the projected on-hand
-        // entering week 32, netting each week's demand against available stock +
+        // entering that week, netting each week's demand against available stock +
         // scheduled inbound receipts. Only the shortfall the factory must produce
         // is listed. Excludes open POs not yet shipped (see Open POs tab).
         const rows = [];
