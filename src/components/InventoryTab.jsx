@@ -775,7 +775,7 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
           mw, grid, actuals, today: new Date(), startDate: aps.startDate || undefined,
           capacity: aps.capacity, log: aps.log, overrides: aps.overrides,
           preApplied: aps.preApplied || {}, marketStock: actuals.marketStock || {},
-          pinned: aps.pinned || [], numDays: 40, market: "All",
+          pinned: aps.pinned || [], defer: aps.defer || [], numDays: 40, market: "All",
         });
         // Which order each shipment is booked against. Allocated over the whole
         // plan, never the filtered view — the order a line draws on must not

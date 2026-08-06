@@ -99,7 +99,7 @@ function availability(actuals) {
 export function buildApplySchedule({ mw, grid, actuals, today, startDate,
   capacity = DEFAULT_CAPACITY, log = [], overrides = {}, preApplied = {},
   marketStock = {}, pinned = [], numDays = 30, dueWindowDays = DUE_WINDOW_DAYS,
-  coverageDays = COVERAGE_DAYS, market = "All" }) {
+  coverageDays = COVERAGE_DAYS, defer = [], market = "All" }) {
 
   const todayStr = iso(today);
   const start = startDate || nextBusinessDay(today);
@@ -327,7 +327,28 @@ export function buildApplySchedule({ mw, grid, actuals, today, startDate,
   // after they're applied. Everything else waits for its lids to land, then
   // ships the following business day.
   const shipQueue = [];
-  for (const g of groups) {
+  // A market can be told to stand back so another can be filled. This is an
+  // exception the planner is handed, not one it works out: the run still
+  // appears and still shows how late it is, it just stops claiming stock ahead
+  // of the market it is yielding to. Entered for Dreamberry in Aug 2026 —
+  // New York waits for its container so Colorado's 10,000 lands before Aug 17,
+  // which the floor cannot do both of (12,840 lids against 14,742 asked for).
+  const deferOf = (g) => defer.find((d) => d.market === g.market && d.sku === g.sku
+    && (!d.from || g.due >= d.from) && (!d.to || g.due <= d.to));
+  const yields = (g) => !!deferOf(g);
+  // A yielding run stands back only as far as the exception says. It sorts as
+  // though it were due at the end of the window, so it loses the floor to the
+  // market being filled but still takes the next container in its turn —
+  // sending it to the very back of the queue instead cost New York the Aug 27
+  // boat and dropped it behind runs not due until mid-September.
+  const shipOrder = [...groups].sort((a, b) => {
+    const da = deferOf(a), db = deferOf(b);
+    const ka = da ? (da.to || a.due) : a.due, kb = db ? (db.to || b.due) : b.due;
+    return ka.localeCompare(kb) || (da ? 1 : 0) - (db ? 1 : 0);
+  });
+  for (const g of shipOrder) {
+    const yielded = yields(g);
+    const why = (txt) => (yielded ? `${txt} · held back by exception` : txt);
     const a = applyDone[g.rk];
     if (a && a.units > 0) {
       // Runs are walked in due order, so the earliest one gets first claim on
@@ -340,8 +361,8 @@ export function buildApplySchedule({ mw, grid, actuals, today, startDate,
         if (lr) {
           const lidsBind = lr.date > a.date && !lr.fromStock;
           shipQueue.push({ g, kind: "BASE", units: rest, date: nextBizStr(lidsBind ? lr.date : a.date),
-            reason: lidsBind ? `waits for ${lr.ref || "lids"} · ${shortDate(lr.date)}`
-                             : `application completes ${shortDate(a.date)}` });
+            reason: why(lidsBind ? `waits for ${lr.ref || "lids"} · ${shortDate(lr.date)}`
+                                 : `application completes ${shortDate(a.date)}`) });
         }
       }
     }
@@ -353,8 +374,8 @@ export function buildApplySchedule({ mw, grid, actuals, today, startDate,
         const lidsBind = lr.date > applyD && !lr.fromStock;
         usedLid[g.sku] = (usedLid[g.sku] || 0) + need;
         shipQueue.push({ g, kind: "LID", units: need, date: nextBizStr(lidsBind ? lr.date : applyD),
-          reason: lidsBind ? `waits for ${lr.ref || "lids"} · ${shortDate(lr.date)}`
-                           : (applyDone[g.rk] ? "with its bases" : "lids in stock") });
+          reason: why(lidsBind ? `waits for ${lr.ref || "lids"} · ${shortDate(lr.date)}`
+                               : (applyDone[g.rk] ? "with its bases" : "lids in stock")) });
       }
     }
   }
