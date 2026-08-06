@@ -35,6 +35,9 @@ function migrate(d) {
   if (!d.applySchedule.preApplied || typeof d.applySchedule.preApplied !== "object") d.applySchedule.preApplied = {};
   // days the team has agreed — rendered verbatim, planned around
   if (!Array.isArray(d.applySchedule.pinned)) d.applySchedule.pinned = [];
+  // markets told to stand back on a flavour so another can be filled first:
+  // { market, sku, from, to } matched against a run's need date
+  if (!Array.isArray(d.applySchedule.defer)) d.applySchedule.defer = [];
   // components each market currently holds: { market: { lidSku: {lid, base} } }
   if (!d.marketStock || typeof d.marketStock !== "object") d.marketStock = {};
   for (const sh of d.inbound) {
