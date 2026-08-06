@@ -89,6 +89,7 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
   const [outMkt, setOutMkt] = useState("All");
   const [adjVal, setAdjVal] = useState("");
   const [mrpCollapsed, setMrpCollapsed] = useState(() => new Set());
+  const [mrpCol, setMrpCol] = useState(null);   // week column picked out by a click
   const [applyMkt, setApplyMkt] = useState("All");
   // Live NetSuite on-hand, refreshed by the sync cron into shipment_log.
   const [nsInv, setNsInv] = useState({ loading: true, rows: [], at: null, err: null });
@@ -578,7 +579,20 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
         // we are actually in is the last Monday on or before today.
         const nowKey = todayISO();
         const nowIdx = grid.reduce((acc, g) => (g.key <= nowKey ? g.idx : acc), -1);
-        const nowCol = (g) => (g.idx === nowIdx ? T.AC + "12" : undefined);
+        // One highlight per column. The week we are in keeps its light blue; a
+        // column picked out by a click reads stronger and carries a rule down
+        // each side, so it can be followed across a table far wider than the
+        // screen. Returned as a style fragment because callers layer it against
+        // fills of their own — a projected shortage still wins the background.
+        const colHi = (g) => {
+          if (g.idx === mrpCol) return { background: T.AC + "1E", boxShadow: `inset 1px 0 0 ${T.AC}, inset -1px 0 0 ${T.AC}` };
+          return g.idx === nowIdx ? { background: T.AC + "12" } : null;
+        };
+        // A sticky header must be fully opaque or the rows scroll through it.
+        // A bare `T.AC + "24"` here is 14% alpha over nothing, which is why the
+        // numbers showed through "AUG 3 · WK 32" — so the tint goes on as a
+        // gradient layer over solid surface instead.
+        const hdrBg = (tint) => `linear-gradient(${tint}, ${tint}), ${T.S1}`;
         return (
           <div style={{ background: T.S1, border: "1px solid " + T.BD, borderRadius: 6 }}>
             <div style={{ padding: "8px 12px", display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
@@ -600,8 +614,12 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
                   <tr>
                     <th style={{ ...th, ...stickyName, top: 29, zIndex: 3 }}>SKU / week</th>
                     {mrpCols.map((g) => (
-                      <th key={g.idx} style={{ ...th, top: 29, textAlign: "right", minWidth: 52, background: g.idx === nowIdx ? T.AC + "24" : T.S1,
-                        color: g.idx === nowIdx ? T.AC : undefined, fontWeight: g.idx === nowIdx ? 700 : undefined }}>
+                      <th key={g.idx} onClick={() => setMrpCol(g.idx === mrpCol ? null : g.idx)}
+                        title={g.idx === mrpCol ? "Click to clear this highlight" : "Highlight this week down the whole table"}
+                        style={{ ...th, top: 29, textAlign: "right", minWidth: 52, cursor: "pointer",
+                          background: hdrBg(g.idx === mrpCol ? T.AC + "30" : g.idx === nowIdx ? T.AC + "24" : "#00000000"),
+                          color: g.idx === nowIdx ? T.AC : undefined, fontWeight: g.idx === nowIdx ? 700 : undefined,
+                          ...(g.idx === mrpCol ? { boxShadow: `inset 1px 0 0 ${T.AC}, inset -1px 0 0 ${T.AC}` } : null) }}>
                         {g.label}<br /><span style={{ fontWeight: 400, color: T.T2 }}>wk {g.idx + 11}</span>
                       </th>
                     ))}
@@ -628,7 +646,8 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
                             {mrpCols.map((g) => {
                               const v = r.proj[g.idx];
                               const neg = v != null && v < 0;
-                              return <td key={g.idx} style={{ ...numCell, fontWeight: 700, color: neg ? "#991b1b" : T.TX, background: neg ? "#fee2e2" : nowCol(g) }}>{v == null ? "—" : fm(Math.round(v))}</td>;
+                              return <td key={g.idx} style={{ ...numCell, fontWeight: 700, color: neg ? "#991b1b" : T.TX,
+                                ...(colHi(g) || {}), ...(neg ? { background: "#fee2e2" } : {}) }}>{v == null ? "—" : fm(Math.round(v))}</td>;
                             })}
                           </tr>,
                         ];
@@ -637,14 +656,14 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
                             out.push(
                               <tr key={r.key + mname}>
                                 <td style={{ ...td, ...stickyName, padding: "2px 8px 2px 22px", fontSize: 9.5, color: T.T2 }}>↳ {mname} demand</td>
-                                {mrpCols.map((g) => { const v = dm[mname][g.idx]; return <td key={g.idx} style={{ ...numCell, color: v > 0 ? T.TX : T.BD, background: nowCol(g) }}>{v > 0 ? fm(Math.round(v)) : "—"}</td>; })}
+                                {mrpCols.map((g) => { const v = dm[mname][g.idx]; return <td key={g.idx} style={{ ...numCell, color: v > 0 ? T.TX : T.BD, ...(colHi(g) || {}) }}>{v > 0 ? fm(Math.round(v)) : "—"}</td>; })}
                               </tr>
                             );
                           }
                           out.push(
                             <tr key={r.key + "tot"}>
                               <td style={{ ...td, ...stickyName, padding: "2px 8px 2px 22px", fontSize: 9.5, fontWeight: 700, color: T.T2 }}>Total demand</td>
-                              {mrpCols.map((g) => { const v = r.demand[g.idx]; return <td key={g.idx} style={{ ...numCell, fontWeight: 600, color: v > 0 ? T.TX : T.BD, background: nowCol(g) || T.S2 + "44" }}>{v > 0 ? fm(Math.round(v)) : "—"}</td>; })}
+                              {mrpCols.map((g) => { const v = r.demand[g.idx]; return <td key={g.idx} style={{ ...numCell, fontWeight: 600, color: v > 0 ? T.TX : T.BD, background: T.S2 + "44", ...(colHi(g) || {}) }}>{v > 0 ? fm(Math.round(v)) : "—"}</td>; })}
                             </tr>,
                             <tr key={r.key + "rcv"}>
                               <td style={{ ...td, ...stickyName, padding: "2px 8px 2px 22px", fontSize: 9.5, color: T.GR }}>Receipts (in transit)</td>
@@ -652,7 +671,7 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
                                 const v = r.arrivals[g.idx];
                                 const refs = (r.arrivalRefs && r.arrivalRefs[g.idx]) || [];
                                 const tip = refs.map((a) => `${a.ref}: ${fm(a.qty)}`).join("\n");
-                                return <td key={g.idx} title={v > 0 ? tip : undefined} style={{ ...numCell, color: v > 0 ? T.GR : T.BD, fontWeight: v > 0 ? 700 : 400, cursor: v > 0 ? "help" : "default", background: nowCol(g) }}>{v > 0 ? "+" + fm(Math.round(v)) : "—"}</td>;
+                                return <td key={g.idx} title={v > 0 ? tip : undefined} style={{ ...numCell, color: v > 0 ? T.GR : T.BD, fontWeight: v > 0 ? 700 : 400, cursor: v > 0 ? "help" : "default", ...(colHi(g) || {}) }}>{v > 0 ? "+" + fm(Math.round(v)) : "—"}</td>;
                               })}
                             </tr>
                           );
@@ -855,7 +874,10 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
             if (!a.parts.length) return "no open SO";
             return a.parts.map((p) => p.so).join(" · ") + (a.short > 0 ? " · needs a new SO" : "");
           };
-          mk("Shipping", sched.days.flatMap((d) => d.ship.map((l) => [dF2(d.date), l.market, `${l.name} – ${l.kind}`, l.kind === "BASE" ? l.baseColor : "", l.units, l.boxes, l.due || "", soText(l)])));
+          // Grouped by market within the day, matching the on-screen order.
+          mk("Shipping", sched.days.flatMap((d) => [...d.ship]
+            .sort((a, b) => a.market.localeCompare(b.market))
+            .map((l) => [dF2(d.date), l.market, `${l.name} – ${l.kind}`, l.kind === "BASE" ? l.baseColor : "", l.units, l.boxes, l.due || "", soText(l)])));
           const buf = await wb.xlsx.writeBuffer();
           const a = document.createElement("a");
           a.href = URL.createObjectURL(new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
@@ -972,7 +994,13 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
                   {sched.days.every((d) => pick(d).length === 0) &&
                     <tr><td colSpan={showBase ? 6 : 5} style={{ ...td, textAlign: "center", color: T.T2, padding: 16 }}>Nothing scheduled.</td></tr>}
                   {sched.days.map((d) => {
-                    const rows = pick(d);
+                    // A day's shipping lines arrive in the order the planner
+                    // queued them, which interleaves markets — a truck is loaded
+                    // per market, so read them that way. Sorting on market alone
+                    // is deliberate: the sort is stable, so each market keeps the
+                    // order the planner gave it.
+                    const rows = showBase ? pick(d)
+                      : [...pick(d)].sort((a, b) => a.market.localeCompare(b.market));
                     if (!rows.length) return null;
                     // reconcile only the shipping pane against NetSuite actuals
                     const stat = {};
@@ -1002,7 +1030,18 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
                           </span>
                         </td>
                       </tr>,
-                      ...rows.map((l) => lineRow(l, d.date, showBase, stat[l.key])),
+                      // A hairline and a little air where the market changes, so
+                      // one truck's worth of lines reads as a block.
+                      ...rows.flatMap((l, i) => {
+                        const row = lineRow(l, d.date, showBase, stat[l.key]);
+                        if (showBase || i === 0 || rows[i - 1].market === l.market) return [row];
+                        return [
+                          <tr key={"gap" + l.key} aria-hidden="true">
+                            <td colSpan={5} style={{ padding: 0, height: 7, borderTop: "1px solid " + T.BD, borderBottom: "none" }} />
+                          </tr>,
+                          row,
+                        ];
+                      }),
                     ];
                   })}
                 </tbody>
