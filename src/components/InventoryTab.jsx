@@ -871,9 +871,12 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
           const soText = (l) => {
             const a = soAlloc[l.key];
             if (!a || a.confirmed) return "";
-            if (!a.parts.length && !a.onOrder.length) return "no open SO";
-            if (!a.parts.length) return a.onOrder.join(" · ") + " · over ordered qty";
-            return a.parts.map((p) => p.so).join(" · ") + (a.short > 0 ? " · over ordered qty" : "");
+            // Name the order line, not just the order — a base row matches the
+            // shared PB- line rather than the flavour on the row.
+            const on = l.kind === "BASE" ? ` (${String(l.baseColor || "").toLowerCase()} base)` : "";
+            if (!a.parts.length && !a.onOrder.length) return "no open SO" + on;
+            if (!a.parts.length) return a.onOrder.join(" · ") + on + " · over ordered qty";
+            return a.parts.map((p) => p.so).join(" · ") + on + (a.short > 0 ? " · over ordered qty" : "");
           };
           // Grouped by market within the day, matching the on-screen order.
           mk("Shipping", sched.days.flatMap((d) => [...d.ship]
@@ -924,10 +927,18 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
           const box = { marginLeft: 4, fontSize: 7.5, fontWeight: 700, borderRadius: 3,
             padding: "0 3px", whiteSpace: "nowrap", fontFamily: "'JetBrains Mono',monospace" };
           const amber = { ...box, color: "#92400e", border: "1px solid " + T.AM, background: "#fffbeb" };
+          // Which line on the order this row is actually matched to. A base row
+          // matches the shared PB- line, NOT the flavour — the order carries no
+          // Blissful Blueberry base line, it carries white base. With the badge
+          // sitting beside the flavour name, a bare "SO15298" read as "Blissful
+          // Blueberry is on SO15298", which is not what the order says, and it
+          // made a flavour look ordered on its base row and unordered on its
+          // lid row. Naming the line removes the ambiguity.
+          const onLine = l.kind === "BASE" ? ` · ${String(l.baseColor || "").toLowerCase()} base` : "";
           // Nothing on order for this market and item — the order line is missing.
           if (!a.parts.length && !a.onOrder.length) return (
             <span title={`No sales order covers ${a.item} for ${l.market} — raise one in NetSuite before this ships`}
-              style={amber}>no open SO</span>
+              style={amber}>no open SO{onLine}</span>
           );
           // On order, but the quantity ordered is used up. Bases make this the
           // common case: one shared PB- line serves every flavour of a colour,
@@ -937,7 +948,7 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
           if (!a.parts.length) return (
             <span title={`${a.onOrder.join(", ")} covers ${a.item} for ${l.market}, but its ordered quantity is used up.\n`
                 + `These ${fm(l.units)} units have nothing left to ship against — the order needs increasing.`}
-              style={amber}>{a.onOrder.join(" · ")} · over qty</span>
+              style={amber}>{a.onOrder.join(" · ")}{onLine} · over qty</span>
           );
           const detail = a.parts.map((p) => `${p.so}${p.custPo ? ` · PO ${p.custPo}` : ""} — ${fm(p.units)} units`).join("\n");
           return (
@@ -945,7 +956,7 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
                 ? `\n\n⚠ ${fm(a.short)} units are past the quantity ordered — the order needs increasing`
                 : "")}
               style={{ ...box, color: T.PU, border: "1px solid " + T.PU + "66", background: T.PU + "0F" }}>
-              {a.parts.map((p) => p.so).join(" · ")}{a.short > 0 ? " ⚠" : ""}
+              {a.parts.map((p) => p.so).join(" · ")}{onLine}{a.short > 0 ? " ⚠" : ""}
             </span>
           );
         };
