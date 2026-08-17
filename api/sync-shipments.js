@@ -148,7 +148,9 @@ export default async function handler(req, res) {
       JOIN transactionline tl ON tl.transaction = t.id
       JOIN item i ON i.id = tl.item
       WHERE t.type = 'SalesOrd' AND tl.mainline = 'F'
-        AND (i.itemid LIKE 'PL-WCB-%' OR i.itemid LIKE 'PB-WCB-%')`, env).catch(() => []);
+        AND (i.itemid LIKE 'PL-WCB-%' OR i.itemid LIKE 'PB-WCB-%'
+             OR ((i.itemid LIKE 'WANA-%' OR UPPER(i.itemid) LIKE '%APPL FEE%')
+                 AND t.status NOT IN ('C','G','H')))`, env).catch(() => []);
     const stateOf = (name) => {
       const m = String(name || "").match(/\(([A-Z]{2})\)/);
       if (m) return m[1];
