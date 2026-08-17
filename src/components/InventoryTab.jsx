@@ -5,7 +5,7 @@
 // open POs, and targets. Actuals are shared across scenarios (Supabase `actuals`).
 
 import { useState, useMemo, useEffect } from "react";
-import { calcSkuWeeklyForecast, calcSkuInventory, calcSkuMarketWeekly, shipmentEta, buildWeekGrid, skuInfo } from "../utils/inventory";
+import { calcSkuWeeklyForecast, calcSkuInventory, calcSkuMarketWeekly, shipmentEta, buildWeekGrid, skuInfo, ASSORTED_SKU } from "../utils/inventory";
 import { buildApplySchedule, slotKey, baseSkuFor, LID_BOX, BASE_BOX, CAP_MIN, CAP_MAX } from "../utils/applySchedule";
 import { allocateSalesOrders } from "../utils/salesOrderMatch";
 import { parseLocalDate } from "../utils/calc";
@@ -953,6 +953,28 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
           );
         };
 
+        // Which assorted this actually is. Six variants share one lid, so an
+        // "Assorted" row alone does not say which base label the floor puts on.
+        // The mix is taken from the week the row is covering.
+        const assortedMix = (l) => {
+          if (l.sku !== ASSORTED_SKU || !l.due) return null;
+          const v = ((mw.assorted || {})[l.market] || {})[l.due];
+          return v && v.length ? v : null;
+        };
+        const assortedTag = (l) => {
+          const mix = assortedMix(l);
+          if (!mix) return null;
+          const label = mix.map((v) => v.name.replace(/\s*assorted\s*/i, "").trim() || v.name).join(" · ");
+          return (
+            <span title={`Week of ${dF2(l.due)} — this lid covers:\n`
+                + mix.map((v) => `${v.name}${v.cat ? ` (${v.cat})` : ""} — ${fm(Math.round(v.units))}`).join("\n")}
+              style={{ marginLeft: 4, fontSize: 7.5, fontWeight: 700, borderRadius: 3, padding: "0 3px",
+                whiteSpace: "nowrap", color: T.PU, border: "1px solid " + T.PU + "66", background: T.PU + "0F" }}>
+              {label}
+            </span>
+          );
+        };
+
         // The order the floor books this shipment against. A market and SKU can
         // sit on more than one open order — New Jersey runs two, Colorado three
         // — so a line that outruns the oldest one names every order it spans.
@@ -1004,6 +1026,7 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
             <td style={{ ...td, fontSize: 9.5, textDecoration: l.done ? "line-through" : undefined }}>
               {l.name} <span style={{ fontWeight: 700 }}>– {l.kind}</span>{badge(l)}
               {!showBase && demandTag(l, date)}
+              {!showBase && assortedTag(l)}
               {!showBase && locTag(l)}
               {!showBase && soTag(l)}
               {st && st.shipped && <span title={`Confirmed in NetSuite${st.a.tracking ? " — " + st.a.tracking : ""}${st.a.date ? ` — shipped ${st.a.date}` : ""}`} style={{ marginLeft: 4, fontSize: 7.5, color: T.GR, border: "1px solid " + T.GR, borderRadius: 3, padding: "0 3px", fontWeight: 700 }}>
