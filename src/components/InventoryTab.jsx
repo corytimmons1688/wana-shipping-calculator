@@ -918,6 +918,41 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
           );
         };
 
+        // Where a shipment is going. A market can serve more than one customer
+        // — New York ships to Acreage and to Urban — and nothing in the demand
+        // model tells them apart, so the only handle is the order a row books
+        // against. Rows with no order behind them get no location, because
+        // there is genuinely nothing to derive one from.
+        const shortCust = (s) => String(s || "").split(":")[0].split("(")[0].trim();
+        const shipLoc = (l) => {
+          const a = soAlloc[l.key];
+          if (!a || a.confirmed) return "";
+          const names = a.parts.length
+            ? [...new Set(a.parts.map((p) => p.customer).filter(Boolean))]
+            : a.customers;
+          // A row drawing on two customers' orders is named for both rather
+          // than left blank. A shipment physically goes to one address, so that
+          // is a row that wants splitting — better to show it than hide it.
+          return names.map(shortCust).join(" · ");
+        };
+        const locTag = (l) => {
+          const loc = shipLoc(l);
+          if (!loc) return null;
+          const split = loc.includes(" · ");
+          return (
+            <span title={split
+                ? `This line draws on orders for ${loc}. A shipment goes to one address, so it needs splitting between them.`
+                : `Ships to ${loc} — taken from the sales order this line books against`}
+              style={{ marginLeft: 4, fontSize: 7.5, fontWeight: 700, borderRadius: 3, padding: "0 3px",
+                whiteSpace: "nowrap",
+                color: split ? "#92400e" : T.TX,
+                border: "1px solid " + (split ? T.AM : T.BD),
+                background: split ? "#fffbeb" : T.S2 }}>
+              {loc}{split ? " ⚠" : ""}
+            </span>
+          );
+        };
+
         // The order the floor books this shipment against. A market and SKU can
         // sit on more than one open order — New Jersey runs two, Colorado three
         // — so a line that outruns the oldest one names every order it spans.
@@ -969,6 +1004,7 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
             <td style={{ ...td, fontSize: 9.5, textDecoration: l.done ? "line-through" : undefined }}>
               {l.name} <span style={{ fontWeight: 700 }}>– {l.kind}</span>{badge(l)}
               {!showBase && demandTag(l, date)}
+              {!showBase && locTag(l)}
               {!showBase && soTag(l)}
               {st && st.shipped && <span title={`Confirmed in NetSuite${st.a.tracking ? " — " + st.a.tracking : ""}${st.a.date ? ` — shipped ${st.a.date}` : ""}`} style={{ marginLeft: 4, fontSize: 7.5, color: T.GR, border: "1px solid " + T.GR, borderRadius: 3, padding: "0 3px", fontWeight: 700 }}>
                 ✓ shipped {fm(st.a.qty)}{st.a.drift ? ` · ${Math.abs(st.a.drift)}d ${st.a.drift < 0 ? "early" : "late"}` : ""}
@@ -1022,7 +1058,8 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
                     // is deliberate: the sort is stable, so each market keeps the
                     // order the planner gave it.
                     const rows = showBase ? pick(d)
-                      : [...pick(d)].sort((a, b) => a.market.localeCompare(b.market));
+                      : [...pick(d)].sort((a, b) => a.market.localeCompare(b.market)
+                          || shipLoc(a).localeCompare(shipLoc(b)));
                     if (!rows.length) return null;
                     // reconcile only the shipping pane against NetSuite actuals
                     const stat = {};
@@ -1054,12 +1091,23 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
                       </tr>,
                       // A hairline and a little air where the market changes, so
                       // one truck's worth of lines reads as a block.
+                      // A break where the state changes, and a lighter one where
+                      // the destination changes inside a state — one truck's
+                      // worth of lines reads as a block either way.
                       ...rows.flatMap((l, i) => {
                         const row = lineRow(l, d.date, showBase, stat[l.key]);
-                        if (showBase || i === 0 || rows[i - 1].market === l.market) return [row];
+                        if (showBase || i === 0) return [row];
+                        const newMarket = rows[i - 1].market !== l.market;
+                        // Only break between two KNOWN destinations. A row with
+                        // no order behind it has no location, and "unknown next
+                        // to Acreage" is missing data, not a different truck.
+                        const prevLoc = shipLoc(rows[i - 1]), curLoc = shipLoc(l);
+                        const newLoc = !newMarket && !!prevLoc && !!curLoc && prevLoc !== curLoc;
+                        if (!newMarket && !newLoc) return [row];
                         return [
                           <tr key={"gap" + l.key} aria-hidden="true">
-                            <td colSpan={5} style={{ padding: 0, height: 7, borderTop: "1px solid " + T.BD, borderBottom: "none" }} />
+                            <td colSpan={5} style={{ padding: 0, height: newMarket ? 7 : 4,
+                              borderTop: "1px solid " + (newMarket ? T.BD : T.BD + "80"), borderBottom: "none" }} />
                           </tr>,
                           row,
                         ];
