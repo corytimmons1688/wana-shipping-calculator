@@ -18,7 +18,18 @@ export const LID_BOX = 1134;
 export const BASE_BOX = 378;
 export const CAP_MIN = 10000, CAP_MAX = 15000;
 export const DEFAULT_CAPACITY = 12474;
-export const DUE_WINDOW_DAYS = 45;
+// How far ahead demand is pulled into the plan. Six months rather than the 45
+// days this started at: at 45 the plan showed six business days of forward work
+// and hid the rest, which is not a schedule anyone can order material against.
+export const DUE_WINDOW_DAYS = 180;
+// How far past TODAY the day grid must reach, whatever its start date is.
+//
+// The grid used to be `numDays` business days counted from `startDate`, so the
+// forward view shrank by a day for every day that passed. With a Jul 1 start
+// and 40 days it ran out on Aug 25 — by Aug 17 that left six business days of
+// plan, and 396,900 units had no day to land on. Measuring from today instead
+// means the horizon cannot rot: the grid always reaches this far ahead.
+export const HORIZON_DAYS = 180;
 // How much demand a single run covers, and how early it is allowed to start.
 // A run serves one week of a market's demand from the first week it has to
 // cover, and it does not take line time until it is within a week of that week.
@@ -50,9 +61,17 @@ const plusDays = (isoStr, n) => { const d = parse(isoStr); d.setDate(d.getDate()
 const upBox = (n, box) => (n <= 0 ? 0 : Math.ceil(n / box) * box);
 const dnBox = (n, box) => (n <= 0 ? 0 : Math.floor(n / box) * box);
 
-function businessDays(from, n) {
+// At least `n` business days from `from`, and never stopping before `until`.
+// The `until` half is what keeps the horizon measured from today rather than
+// from the plan's start date, so a start date left in the past cannot eat the
+// forward view. The cap is a guard against a bad date, not a planning limit.
+function businessDays(from, n, until) {
   const out = [], d = new Date(from.getFullYear(), from.getMonth(), from.getDate());
-  while (out.length < n) { const w = d.getDay(); if (w !== 0 && w !== 6) out.push(iso(d)); d.setDate(d.getDate() + 1); }
+  while (out.length < n || (until && out.length && out[out.length - 1] < until)) {
+    const w = d.getDay(); if (w !== 0 && w !== 6) out.push(iso(d));
+    d.setDate(d.getDate() + 1);
+    if (out.length > 1000) break;
+  }
   return out;
 }
 export function nextBusinessDay(from) {
@@ -99,6 +118,7 @@ function availability(actuals) {
 export function buildApplySchedule({ mw, grid, actuals, today, startDate,
   capacity = DEFAULT_CAPACITY, log = [], overrides = {}, preApplied = {},
   marketStock = {}, pinned = [], numDays = 30, dueWindowDays = DUE_WINDOW_DAYS,
+  horizonDays = HORIZON_DAYS,
   coverageDays = COVERAGE_DAYS, defer = [], market = "All" }) {
 
   const todayStr = iso(today);
@@ -170,7 +190,7 @@ export function buildApplySchedule({ mw, grid, actuals, today, startDate,
     }
   };
 
-  const dates = businessDays(parse(start), numDays);
+  const dates = businessDays(parse(start), numDays, plusDays(todayStr, horizonDays));
   const usedBase = {}, usedLid = {};
   const preLeft = { ...preApplied };
   const byDate = {};
