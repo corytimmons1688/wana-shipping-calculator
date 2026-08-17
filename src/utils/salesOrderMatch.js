@@ -19,21 +19,33 @@ const orderRank = (r) => {
   return m ? `${m[3]}-${m[1].padStart(2, "0")}-${m[2].padStart(2, "0")}` : "9999-99-99";
 };
 
-// Open balance per market + item, oldest order first.
+// Open balance per market + item, oldest order first — plus which orders carry
+// that item at all, balance or no balance.
+//
+// The two are not the same question and a row has to say which one it failed.
+// Bases are the case that forces it: every flavour of a colour draws on one
+// shared PB- line, so New York can plan 66,150 white base against a single
+// 56,200 line and run it dry. The rows past that point are not unordered —
+// they are over the quantity ordered, which is a different thing to fix.
 function openPools(salesOrders) {
-  const pools = {};
+  const pools = {}, onOrder = {}, customers = {};
   for (const r of salesOrders || []) {
     if (CLOSED.has(String(r.status || "").trim().toUpperCase())) continue;
-    const left = (Number(r.ordered) || 0) - (Number(r.shipped) || 0);
-    if (left <= 0 || !r.market || !r.sku) continue;
+    if (!r.market || !r.sku) continue;
     const k = r.market + "|" + r.sku;
-    (pools[k] = pools[k] || []).push({ so: r.so, custPo: r.custPo, orderDate: r.orderDate,
-      status: r.status, ordered: Number(r.ordered) || 0, left });
+    (onOrder[k] = onOrder[k] || []).push(r.so);
+    if (r.customer) (customers[k] = customers[k] || []).push(r.customer);
+    const left = (Number(r.ordered) || 0) - (Number(r.shipped) || 0);
+    if (left <= 0) continue;
+    (pools[k] = pools[k] || []).push({ so: r.so, custPo: r.custPo, customer: r.customer,
+      orderDate: r.orderDate, status: r.status, ordered: Number(r.ordered) || 0, left });
   }
   for (const k of Object.keys(pools))
     pools[k].sort((a, b) => orderRank(a).localeCompare(orderRank(b)) ||
       String(a.so).localeCompare(String(b.so), undefined, { numeric: true }));
-  return pools;
+  for (const k of Object.keys(onOrder)) onOrder[k] = [...new Set(onOrder[k])].sort();
+  for (const k of Object.keys(customers)) customers[k] = [...new Set(customers[k])].sort();
+  return { pools, onOrder, customers };
 }
 
 // days        the whole plan, every market — allocation must not depend on
@@ -44,13 +56,20 @@ function openPools(salesOrders) {
 // isShipped   already confirmed gone in NetSuite, so its units are counted in
 //             the order's `shipped` figure and must not be drawn down twice
 export function allocateSalesOrders({ days = [], salesOrders = [], marketCode, itemSku, isShipped }) {
-  const pools = openPools(salesOrders);
+  const { pools, onOrder, customers } = openPools(salesOrders);
   const out = {};
   for (const d of days) {
     for (const l of d.ship || []) {
       const item = itemSku(l);
       const key = (marketCode(l.market) || l.market) + "|" + item;
-      const entry = { item, parts: [], short: 0, confirmed: false };
+      // `onOrder` is every order carrying this item, so a row that draws
+      // nothing can still name the order it belongs to and say the quantity is
+      // exceeded, rather than claiming the item was never ordered.
+      // `customers` is who the orders behind this item belong to. A market can
+      // ship to more than one — New York runs Acreage and Urban — and the only
+      // thing that tells them apart is the order a row books against.
+      const entry = { item, parts: [], short: 0, confirmed: false,
+        onOrder: onOrder[key] || [], customers: customers[key] || [] };
       out[l.key] = entry;
       if (isShipped && isShipped(l, d.date)) { entry.confirmed = true; continue; }
       let need = l.units;
@@ -59,9 +78,9 @@ export function allocateSalesOrders({ days = [], salesOrders = [], marketCode, i
         if (p.left <= 0) continue;
         const take = Math.min(need, p.left);
         p.left -= take; need -= take;
-        entry.parts.push({ so: p.so, custPo: p.custPo, units: take });
+        entry.parts.push({ so: p.so, custPo: p.custPo, customer: p.customer, units: take });
       }
-      entry.short = need;                 // beyond every open order for this item
+      entry.short = need;                 // beyond the open balance on those orders
     }
   }
   return out;

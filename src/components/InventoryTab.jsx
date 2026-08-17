@@ -871,8 +871,12 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
           const soText = (l) => {
             const a = soAlloc[l.key];
             if (!a || a.confirmed) return "";
-            if (!a.parts.length) return "no open SO";
-            return a.parts.map((p) => p.so).join(" · ") + (a.short > 0 ? " · needs a new SO" : "");
+            // Name the order line, not just the order — a base row matches the
+            // shared PB- line rather than the flavour on the row.
+            const on = l.kind === "BASE" ? ` (${String(l.baseColor || "").toLowerCase()} base)` : "";
+            if (!a.parts.length && !a.onOrder.length) return "no open SO" + on;
+            if (!a.parts.length) return a.onOrder.join(" · ") + on + " · over ordered qty";
+            return a.parts.map((p) => p.so).join(" · ") + on + (a.short > 0 ? " · over ordered qty" : "");
           };
           // Grouped by market within the day, matching the on-screen order.
           mk("Shipping", sched.days.flatMap((d) => [...d.ship]
@@ -914,6 +918,41 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
           );
         };
 
+        // Where a shipment is going. A market can serve more than one customer
+        // — New York ships to Acreage and to Urban — and nothing in the demand
+        // model tells them apart, so the only handle is the order a row books
+        // against. Rows with no order behind them get no location, because
+        // there is genuinely nothing to derive one from.
+        const shortCust = (s) => String(s || "").split(":")[0].split("(")[0].trim();
+        const shipLoc = (l) => {
+          const a = soAlloc[l.key];
+          if (!a || a.confirmed) return "";
+          const names = a.parts.length
+            ? [...new Set(a.parts.map((p) => p.customer).filter(Boolean))]
+            : a.customers;
+          // A row drawing on two customers' orders is named for both rather
+          // than left blank. A shipment physically goes to one address, so that
+          // is a row that wants splitting — better to show it than hide it.
+          return names.map(shortCust).join(" · ");
+        };
+        const locTag = (l) => {
+          const loc = shipLoc(l);
+          if (!loc) return null;
+          const split = loc.includes(" · ");
+          return (
+            <span title={split
+                ? `This line draws on orders for ${loc}. A shipment goes to one address, so it needs splitting between them.`
+                : `Ships to ${loc} — taken from the sales order this line books against`}
+              style={{ marginLeft: 4, fontSize: 7.5, fontWeight: 700, borderRadius: 3, padding: "0 3px",
+                whiteSpace: "nowrap",
+                color: split ? "#92400e" : T.TX,
+                border: "1px solid " + (split ? T.AM : T.BD),
+                background: split ? "#fffbeb" : T.S2 }}>
+              {loc}{split ? " ⚠" : ""}
+            </span>
+          );
+        };
+
         // The order the floor books this shipment against. A market and SKU can
         // sit on more than one open order — New Jersey runs two, Colorado three
         // — so a line that outruns the oldest one names every order it spans.
@@ -922,19 +961,37 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
           if (!a || a.confirmed) return null;      // already gone; the ✓ says so
           const box = { marginLeft: 4, fontSize: 7.5, fontWeight: 700, borderRadius: 3,
             padding: "0 3px", whiteSpace: "nowrap", fontFamily: "'JetBrains Mono',monospace" };
+          const amber = { ...box, color: "#92400e", border: "1px solid " + T.AM, background: "#fffbeb" };
+          // Which line on the order this row is actually matched to. A base row
+          // matches the shared PB- line, NOT the flavour — the order carries no
+          // Blissful Blueberry base line, it carries white base. With the badge
+          // sitting beside the flavour name, a bare "SO15298" read as "Blissful
+          // Blueberry is on SO15298", which is not what the order says, and it
+          // made a flavour look ordered on its base row and unordered on its
+          // lid row. Naming the line removes the ambiguity.
+          const onLine = l.kind === "BASE" ? ` · ${String(l.baseColor || "").toLowerCase()} base` : "";
+          // Nothing on order for this market and item — the order line is missing.
+          if (!a.parts.length && !a.onOrder.length) return (
+            <span title={`No sales order covers ${a.item} for ${l.market} — raise one in NetSuite before this ships`}
+              style={amber}>no open SO{onLine}</span>
+          );
+          // On order, but the quantity ordered is used up. Bases make this the
+          // common case: one shared PB- line serves every flavour of a colour,
+          // so the row is over the quantity ordered rather than unordered.
+          // Saying "no open SO" here reads as a missing order and sends someone
+          // hunting for a line that is sitting right in front of them.
           if (!a.parts.length) return (
-            <span title={`No open sales order covers ${a.item} for ${l.market} — raise one in NetSuite before this ships`}
-              style={{ ...box, color: "#92400e", border: "1px solid " + T.AM, background: "#fffbeb" }}>
-              no open SO
-            </span>
+            <span title={`${a.onOrder.join(", ")} covers ${a.item} for ${l.market}, but its ordered quantity is used up.\n`
+                + `These ${fm(l.units)} units have nothing left to ship against — the order needs increasing.`}
+              style={amber}>{a.onOrder.join(" · ")}{onLine} · over qty</span>
           );
           const detail = a.parts.map((p) => `${p.so}${p.custPo ? ` · PO ${p.custPo}` : ""} — ${fm(p.units)} units`).join("\n");
           return (
             <span title={`Ship against ${a.item}\n${detail}` + (a.short > 0
-                ? `\n\n⚠ ${fm(a.short)} units are beyond every open order — needs a new SO`
+                ? `\n\n⚠ ${fm(a.short)} units are past the quantity ordered — the order needs increasing`
                 : "")}
               style={{ ...box, color: T.PU, border: "1px solid " + T.PU + "66", background: T.PU + "0F" }}>
-              {a.parts.map((p) => p.so).join(" · ")}{a.short > 0 ? " ⚠" : ""}
+              {a.parts.map((p) => p.so).join(" · ")}{onLine}{a.short > 0 ? " ⚠" : ""}
             </span>
           );
         };
@@ -947,6 +1004,7 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
             <td style={{ ...td, fontSize: 9.5, textDecoration: l.done ? "line-through" : undefined }}>
               {l.name} <span style={{ fontWeight: 700 }}>– {l.kind}</span>{badge(l)}
               {!showBase && demandTag(l, date)}
+              {!showBase && locTag(l)}
               {!showBase && soTag(l)}
               {st && st.shipped && <span title={`Confirmed in NetSuite${st.a.tracking ? " — " + st.a.tracking : ""}${st.a.date ? ` — shipped ${st.a.date}` : ""}`} style={{ marginLeft: 4, fontSize: 7.5, color: T.GR, border: "1px solid " + T.GR, borderRadius: 3, padding: "0 3px", fontWeight: 700 }}>
                 ✓ shipped {fm(st.a.qty)}{st.a.drift ? ` · ${Math.abs(st.a.drift)}d ${st.a.drift < 0 ? "early" : "late"}` : ""}
@@ -1000,7 +1058,8 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
                     // is deliberate: the sort is stable, so each market keeps the
                     // order the planner gave it.
                     const rows = showBase ? pick(d)
-                      : [...pick(d)].sort((a, b) => a.market.localeCompare(b.market));
+                      : [...pick(d)].sort((a, b) => a.market.localeCompare(b.market)
+                          || shipLoc(a).localeCompare(shipLoc(b)));
                     if (!rows.length) return null;
                     // reconcile only the shipping pane against NetSuite actuals
                     const stat = {};
@@ -1032,12 +1091,23 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
                       </tr>,
                       // A hairline and a little air where the market changes, so
                       // one truck's worth of lines reads as a block.
+                      // A break where the state changes, and a lighter one where
+                      // the destination changes inside a state — one truck's
+                      // worth of lines reads as a block either way.
                       ...rows.flatMap((l, i) => {
                         const row = lineRow(l, d.date, showBase, stat[l.key]);
-                        if (showBase || i === 0 || rows[i - 1].market === l.market) return [row];
+                        if (showBase || i === 0) return [row];
+                        const newMarket = rows[i - 1].market !== l.market;
+                        // Only break between two KNOWN destinations. A row with
+                        // no order behind it has no location, and "unknown next
+                        // to Acreage" is missing data, not a different truck.
+                        const prevLoc = shipLoc(rows[i - 1]), curLoc = shipLoc(l);
+                        const newLoc = !newMarket && !!prevLoc && !!curLoc && prevLoc !== curLoc;
+                        if (!newMarket && !newLoc) return [row];
                         return [
                           <tr key={"gap" + l.key} aria-hidden="true">
-                            <td colSpan={5} style={{ padding: 0, height: 7, borderTop: "1px solid " + T.BD, borderBottom: "none" }} />
+                            <td colSpan={5} style={{ padding: 0, height: newMarket ? 7 : 4,
+                              borderTop: "1px solid " + (newMarket ? T.BD : T.BD + "80"), borderBottom: "none" }} />
                           </tr>,
                           row,
                         ];
