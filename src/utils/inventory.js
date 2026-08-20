@@ -166,10 +166,27 @@ export function shipmentEta(sh) {
 export function calcSkuMarketWeekly(mkts) {
   const byKey = {};
   const markets = [];
+  // Every assorted variant ships on the same lid — Hybrid, Indica, Sativa and
+  // the three Med mixes all resolve to PL-WCB-490-00 — but each carries its own
+  // base label, so a run for "Assorted" is not one job on the floor. Collapsing
+  // them to one SKU is right for lid planning and loses the only thing that
+  // says which label goes on, so the split is kept alongside it, per market and
+  // per week, gated the same way the demand feeding the plan is.
+  const assorted = {};
   for (const mk of mkts) {
     if (!mk.skuDetail || !mk.skuDetail.skus || !mk.skuDetail.skus.length) continue;
     markets.push(mk.name);
     const fc = calcSkuWeeklyForecast(mkts, { market: mk.name });
+    for (const r of fc.rows) {
+      if (r.key !== ASSORTED_SKU || !isAssorted(r.name)) continue;
+      for (let i = 0; i < r.weekly.length; i++) {
+        const q = r.gated[i] ? 0 : (Number(r.weekly[i]) || 0);
+        if (q <= 0) continue;
+        const wk = weekKey(i);
+        const byWeek = (assorted[mk.name] = assorted[mk.name] || {});
+        (byWeek[wk] = byWeek[wk] || []).push({ name: r.name, cat: r.cat || "", units: q });
+      }
+    }
     const merged = { ...fc.bySku };
     const baseD = calcBaseWeeklyDemand(fc.bySku);
     for (const bs of Object.keys(baseD)) merged[bs] = baseD[bs];
@@ -179,7 +196,9 @@ export function calcSkuMarketWeekly(mkts) {
       byKey[key][mk.name] = merged[key];
     }
   }
-  return { markets, byKey };
+  for (const m of Object.keys(assorted))
+    for (const wk of Object.keys(assorted[m])) assorted[m][wk].sort((a, b) => b.units - a.units);
+  return { markets, byKey, assorted };
 }
 
 // Core inventory state per SKU from actual flows + forecast projection.
