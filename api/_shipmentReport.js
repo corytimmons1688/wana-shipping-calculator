@@ -19,6 +19,24 @@ const feeText = (r) => (typeof r === "string" ? r : `${(r && r.itemid) || ""} ${
 export const IS_APPL_FEE = (r) => /wana\s*cube.*label\s*appl\s*fee/i.test(feeText(r));
 export const APPL_COLOR = (r) => (/black/i.test(feeText(r)) ? "PB-WCB-221-00" : "PB-WCB-002-00");
 
+// A shipment's market is read off its label prefix (WANA-<ST>-*). A fulfilment
+// carrying only lids and bases has no label line to read it from, so fall back
+// to the customer — the name carries the state, "Acreage Holdings:  New Jersey
+// (NJ)". Without the fallback those shipments landed with a null market and
+// could never reconcile against the plan, which keys on market|sku|kind: the
+// Aug 10 New Jersey truck went out on the day it was planned and the schedule
+// had no way to know. 7 of 21 shipments were in that state.
+export const stateFromCustomer = (name) => {
+  const m = String(name || "").match(/\(([A-Z]{2})\)/);
+  if (m) return m[1];
+  const n = String(name || "").toLowerCase();
+  for (const [k, v] of Object.entries({ "new jersey": "NJ", "new york": "NY", colorado: "CO",
+    massachusetts: "MA", arizona: "AZ", illinois: "IL", michigan: "MI", missouri: "MO",
+    montana: "MT", "new mexico": "NM", ohio: "OH", oklahoma: "OK", connecticut: "CT",
+    maryland: "MD" })) if (n.includes(k)) return v;
+  return null;
+};
+
 // §9.3 — carrier names are free-form; map explicitly, pass unknowns through.
 const CARRIER = { FEDEX: "FedEx", "FEDEX FREIGHT": "FedEx Freight", ESTES: "Estes",
   "FORWARD AIR": "Forward Air", "LTL BEST WAY": "LTL Best Way", UPS: "UPS" };
@@ -114,7 +132,7 @@ export function buildShipmentReport(rows, meta = {}) {
     const bases = raw.filter((r) => IS_BASE(r.itemid));
 
     const st = labels.length ? (labels[0].itemid.match(LABEL_RE) || [])[1] : null;
-    g.market = st || null;
+    g.market = st || stateFromCustomer(g.customer_name) || null;
 
     // §5.4 LID rows
     for (const r of lids) {
