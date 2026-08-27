@@ -210,7 +210,13 @@ export function buildApplySchedule({ mw, grid, actuals, today, startDate,
   };
 
   // completed + pinned first — they consume capacity and material
-  const pinKeys = new Set();
+  // The exact slots a pin owns, as (date, market, sku, kind). This used to be
+  // keyed on market|sku|kind with no date, which meant pinning one agreed day
+  // froze every OTHER run of that flavour too. New Jersey pinned its Aug 5 Go
+  // Go Mango run and the next 16,610 units — out to December — silently stopped
+  // being scheduled, while 218,862 white bases sat on the floor. A pin is an
+  // agreement about one day, not a hold on the flavour.
+  const pinSlots = new Set();
   // Applying a base and shipping it are two jobs on two days. A log entry now
   // says which one it completed, so ticking a line on the application side no
   // longer marks it shipped as well. Entries written before this carry no
@@ -256,7 +262,7 @@ export function buildApplySchedule({ mw, grid, actuals, today, startDate,
     // only the side the tick has NOT completed. Counting both is what doubled
     // Mellow Melon to 13,608 and pushed Colorado off the day.
     const done = doneSlots.get(k);
-    pinKeys.add(p.market + "|" + p.sku + "|" + p.kind);
+    pinSlots.add(k);
     if (done && done.applied && done.shipped) continue;
     const info = skuInfo(p.sku), isBase = p.kind === "BASE";
     const ov = overrides[k];
@@ -277,7 +283,9 @@ export function buildApplySchedule({ mw, grid, actuals, today, startDate,
 
   // ── APPLICATION pass — capacity-bound, pulled as early as base stock allows
   const applyDone = {};                              // rk → { units, date }
-  const work = groups.filter((g) => g.baseNeed > 0 && !pinKeys.has(g.market + "|" + g.sku + "|BASE"));
+  // Pinned units are already off the books — retire() subtracted them from the
+  // earliest runs — so what is left here is genuinely outstanding work.
+  const work = groups.filter((g) => g.baseNeed > 0);
   for (const date of dates) {
     let capLeft = capacity - (byDate[date] ? byDate[date].applied : 0);
     if (capLeft <= 0) continue;
@@ -292,6 +300,9 @@ export function buildApplySchedule({ mw, grid, actuals, today, startDate,
       // one day share a slot key, merge into a single row, and rebuild exactly
       // the oversized batch the runs were split to avoid.
       if (started.has(g.pk)) continue;
+      // Never plan into a day a pin already owns: both would land on the same
+      // slot key, merge, and quietly inflate the quantity the team agreed.
+      if (pinSlots.has(slotKey(date, g.market, g.sku, "BASE"))) continue;
       const free = Math.max(0, av.at(g.baseSku, date) - (usedBase[g.baseSku] || 0));
       const pre = Math.max(0, Number(preLeft[g.pk]) || 0);
       const ov = overrides[slotKey(date, g.market, g.sku, "BASE")];
@@ -386,7 +397,7 @@ export function buildApplySchedule({ mw, grid, actuals, today, startDate,
         }
       }
     }
-    if (g.lidNeed > 0 && !pinKeys.has(g.market + "|" + g.sku + "|LID")) {
+    if (g.lidNeed > 0) {
       const need = g.lidNeed;
       const lr = av.readyBy(g.sku, need + (usedLid[g.sku] || 0), start);
       if (lr) {
