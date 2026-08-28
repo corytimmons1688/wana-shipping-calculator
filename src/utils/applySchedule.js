@@ -126,11 +126,19 @@ export function buildApplySchedule({ mw, grid, actuals, today, startDate,
   const windowEndStr = iso(new Date(today.getFullYear(), today.getMonth(), today.getDate() + dueWindowDays));
   const av = availability(actuals);
 
-  const shippedSince = {};
-  for (const e of log) shippedSince[e.market + "|" + e.sku + "|" + e.kind] = (shippedSince[e.market + "|" + e.sku + "|" + e.kind] || 0) + (Number(e.units) || 0);
+  // What a market physically holds. Completed work is deliberately NOT added
+  // here: retire() already takes those units off the outstanding need further
+  // down, and adding them to the market's pool as well deducted every finished
+  // line twice — once by satisfying demand at source, once by retiring it.
+  //
+  // New Jersey is how it surfaced. Mellow Melon carries 15,608 of demand and
+  // one completed 6,804 line; the plan subtracted 13,608 and left 2,000, so
+  // their September and November weeks simply were not there. Same arithmetic
+  // on Bubbly Peach and Balanced Berry Guava. The market saw "NONE" against a
+  // need the plan believed was already met.
   const held = (mk, sku, kind) => {
     const ms = (marketStock[mk] || {})[sku] || {};
-    return (Number(kind === "LID" ? ms.lid : ms.base) || 0) + (shippedSince[mk + "|" + sku + "|" + kind] || 0);
+    return Number(kind === "LID" ? ms.lid : ms.base) || 0;
   };
 
   // ── time-phased requirement per market + flavour ──────────────────────────
