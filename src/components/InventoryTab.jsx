@@ -984,24 +984,25 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
           const box = { marginLeft: 4, fontSize: 7.5, fontWeight: 700, borderRadius: 3,
             padding: "0 3px", whiteSpace: "nowrap", fontFamily: "'JetBrains Mono',monospace" };
           const amber = { ...box, color: "#92400e", border: "1px solid " + T.AM, background: "#fffbeb" };
-          // Which line on the order this row is actually matched to. A base row
-          // matches the shared PB- line, NOT the flavour — the order carries no
-          // Blissful Blueberry base line, it carries white base. With the badge
-          // sitting beside the flavour name, a bare "SO15298" read as "Blissful
-          // Blueberry is on SO15298", which is not what the order says, and it
-          // made a flavour look ordered on its base row and unordered on its
-          // lid row. Naming the line removes the ambiguity.
+          // Which base the floor pulls for this row. The order behind a base row
+          // is now matched on that flavour's base label rather than the shared
+          // PB- line (see salesOrderMatch), so the SO named here really does
+          // cover this flavour — but what physically ships is still generic
+          // white or black stock, and the colour is what someone picking it
+          // needs to know.
           const onLine = l.kind === "BASE" ? ` · ${String(l.baseColor || "").toLowerCase()} base` : "";
-          // Nothing on order for this market and item — the order line is missing.
+          // Nothing on order for this market and flavour — the order line is
+          // missing. For a base that means no base label and no application fee
+          // for this flavour on any open order, which is the honest answer: the
+          // market has not bought it, whatever white base is left elsewhere.
           if (!a.parts.length && !a.onOrder.length) return (
-            <span title={`No sales order covers ${a.item} for ${l.market} — raise one in NetSuite before this ships`}
+            <span title={`No open sales order covers ${l.name} for ${l.market}`
+                + (l.kind === "BASE" ? ` — no base label or application line for it. Ships as ${a.item}.` : "")
+                + `\nRaise one in NetSuite before this ships`}
               style={amber}>no open SO{onLine}</span>
           );
-          // On order, but the quantity ordered is used up. Bases make this the
-          // common case: one shared PB- line serves every flavour of a colour,
-          // so the row is over the quantity ordered rather than unordered.
-          // Saying "no open SO" here reads as a missing order and sends someone
-          // hunting for a line that is sitting right in front of them.
+          // On the order, but the quantity ordered is used up — the flavour is
+          // bought, this run just runs past what is left on it.
           if (!a.parts.length) return (
             <span title={`${a.onOrder.join(", ")} covers ${a.item} for ${l.market}, but its ordered quantity is used up.\n`
                 + `These ${fm(l.units)} units have nothing left to ship against — the order needs increasing.`}
