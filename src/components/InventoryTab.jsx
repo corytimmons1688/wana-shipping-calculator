@@ -1033,6 +1033,12 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
                 ✓ shipped {fm(st.a.qty)}{st.a.drift ? ` · ${Math.abs(st.a.drift)}d ${st.a.drift < 0 ? "early" : "late"}` : ""}
               </span>}
               {st && st.missed && <span title="Other lines on this day shipped, this one did not" style={{ marginLeft: 4, fontSize: 7.5, color: "#92400e", border: "1px solid " + T.AM, borderRadius: 3, padding: "0 3px", fontWeight: 700 }}>⚠ not shipped</span>}
+              {/* Ticked on the floor, and NetSuite has nothing for this day at
+                  all — so there is nothing to confirm it against. Left unlabelled
+                  it was the only state with no badge, which read as the most
+                  finished of the three when it is the least verified: a struck
+                  line nobody has checked. Say so instead. */}
+              {!showBase && l.done && !st && <span title="Ticked off here, but no NetSuite fulfilment has been matched to this day yet — nothing has confirmed it went out" style={{ marginLeft: 4, fontSize: 7.5, color: T.T2, border: "1px dashed " + T.BD, borderRadius: 3, padding: "0 3px", fontWeight: 700 }}>ticked · unconfirmed</span>}
               {l.reason && <div style={{ fontSize: 8, color: T.T2 }}>{l.reason}</div>}
             </td>
             {showBase && <td style={{ ...td, textAlign: "center" }}>
