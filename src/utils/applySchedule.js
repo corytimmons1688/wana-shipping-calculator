@@ -16,6 +16,18 @@ import { skuInfo } from "./inventory";
 
 export const LID_BOX = 1134;
 export const BASE_BOX = 378;
+// A run is sized in whole lid boxes, and its bases follow at three base boxes to
+// the lid box — 3 × 378 is exactly one lid box, so both halves of a run leave in
+// matched quantities.
+//
+// Sizing the two sides on their own grids is what made shipments uneven. The lid
+// box is 3× coarser than the base box, so rounding each up separately overshot
+// 3× harder on lids: New York's 1,200 units of Good Time Clementine became 1,512
+// bases (4 × 378) against 2,268 lids (2 × 1,134), leaving 756 lids with no base
+// under them. Across every market that came to 96,768 bare lids between Sep 2026
+// and Jan 2027, New York carrying 29,106 — part of why New York kept reporting
+// they had received lids and nothing else.
+export const RUN_BOX = 3 * BASE_BOX;
 export const CAP_MIN = 10000, CAP_MAX = 15000;
 export const DEFAULT_CAPACITY = 12474;
 // How far ahead demand is pulled into the plan. Six months rather than the 45
@@ -141,6 +153,32 @@ export function buildApplySchedule({ mw, grid, actuals, today, startDate,
     return Number(kind === "LID" ? ms.lid : ms.base) || 0;
   };
 
+  // Completed units per market + flavour + kind, collapsed one record per slot
+  // exactly as doneSlots does below — a line ticked on both sides writes two
+  // entries against the same physical units.
+  const doneUnits = {};
+  {
+    const perSlot = new Map();
+    for (const e of log) {
+      if (market !== "All" && e.market !== market) continue;
+      const k = slotKey(e.date, e.market, e.sku, e.kind);
+      perSlot.set(k, Math.max(perSlot.get(k) || 0, Number(e.units) || 0));
+    }
+    for (const [k, u] of perSlot) {
+      const p = k.split("|");
+      const kk = `${p[1]}|${p[2]}|${p[3]}`;
+      doneUnits[kk] = (doneUnits[kk] || 0) + u;
+    }
+  }
+  // The pool that meets demand, with completed work netted off. A market counts
+  // a shipment into `marketStock` the moment it lands, and the same units are
+  // sitting in `log` as work retire() has finished — so a raw pool subtracts one
+  // truck twice. New York is the case: 2,592 Swift Recovery lids shipped Aug 14
+  // and logged, and the raw pool cut a further 2,268 off the lid requirement for
+  // units that were already accounted for.
+  const heldNet = (mk, sku, kind) =>
+    Math.max(0, held(mk, sku, kind) - (doneUnits[`${mk}|${sku}|${kind}`] || 0));
+
   // ── time-phased requirement per market + flavour ──────────────────────────
   // Demand is cut into runs rather than collected into one. A run opens on the
   // first week it has to cover and takes the weeks that fall within
@@ -157,9 +195,14 @@ export function buildApplySchedule({ mw, grid, actuals, today, startDate,
     if (sku.startsWith("PB-")) continue;
     for (const [mk, weekly] of Object.entries(mw.byKey[sku] || {})) {
       if (market !== "All" && mk !== market) continue;
-      let lidPool = held(mk, sku, "LID"), basePool = held(mk, sku, "BASE");
+      let lidPool = heldNet(mk, sku, "LID"), basePool = heldNet(mk, sku, "BASE");
       const pk = mk + "|" + sku;
-      bareLid[pk] = Math.max(0, lidPool - basePool);
+      // bareLid reads the RAW physical position, not the netted pool. It decides
+      // only WHEN bases ship — a base run pairs with lids already on the
+      // market's floor the day after it is applied, instead of waiting on a lid
+      // container that market does not need. Netting completed work out of it
+      // would hide exactly the lids that are sitting there waiting for a base.
+      bareLid[pk] = Math.max(0, held(mk, sku, "LID") - held(mk, sku, "BASE"));
       const runs = [];
       let run = null;
       for (let w = 0; w < weekly.length; w++) {
@@ -177,7 +220,7 @@ export function buildApplySchedule({ mw, grid, actuals, today, startDate,
       for (let i = 0; i < runs.length; i++)
         groups.push({ pk, rk: pk + "|" + i, market: mk, sku, name: info.name,
           baseSku: baseSkuFor(sku), baseColor: info.base === "Black Sparkle" ? "Black" : "White",
-          baseNeed: upBox(runs[i].base, BASE_BOX), lidNeed: upBox(runs[i].lid, LID_BOX),
+          baseNeed: upBox(runs[i].base, RUN_BOX), lidNeed: upBox(runs[i].lid, RUN_BOX),
           due: runs[i].due });
     }
   }
