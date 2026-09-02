@@ -10,7 +10,7 @@
 // Source is the same NetSuite `shipment_log` row the Market Orders tab reads.
 
 import { MASTER_SKUS } from "../data/skuMaster";
-import { isAssorted, ASSORTED_SKU } from "./inventory";
+import { isAssorted, ASSORTED_SKU, flavourKey } from "./inventory";
 
 // SuiteQL status codes that mean nothing further will ship on the order.
 const CLOSED = new Set(["C", "G", "H"]);
@@ -27,17 +27,7 @@ const CLOSED = new Set(["C", "G", "H"]);
 // both drew a confident "SO15298 · white base" off that order's shared 56,200
 // white base line. The screen claimed an order that does not cover them, and
 // the same flavour read as ordered on its base row and unordered on its lid.
-const labelName = (v) => String(v || "").toLowerCase()
-  .replace(/\b\d+:\d+(:\d+)?\b/g, " ")            // potency suffixes — "Serene Yuzu 2:1"
-  .replace(/\bbounce back\b/g, " ")
-  .replace(/rasberry/g, "raspberry").replace(/guave/g, "guava")
-  .replace(/\bbalance\b/g, "balanced")
-  // A market brands its sunrise for itself — Arizona Sunrise, Colorado Sunrise,
-  // New York Sunrise are one lid.
-  .replace(/\b(arizona|colorado|new york|new jersey|illinois|michigan|montana|new mexico|massachusetts|maryland|connecticut|ohio|oklahoma|missouri|mississippi)\b/g, " ")
-  .replace(/[^a-z]/g, "");
-
-const MASTER = MASTER_SKUS.map((s) => ({ sku: s.sku, n: labelName(s.name) }));
+const MASTER = MASTER_SKUS.map((s) => ({ sku: s.sku, n: flavourKey(s.name) }));
 // Flavours whose label reads nothing like the master name.
 // Arizona's high-dose raspberry is labelled "Vibrant Raspberry Limeade" and
 // ordered as PL-WCB-445-00 "Robust Raspberry Limeade" — three names, one lid,
@@ -55,7 +45,7 @@ export function baseLabelFlavour(name) {
   // Tropical Trio say "Assorted"; Hybrid, Indica and Sativa say "Mixed".
   if (isAssorted(raw) || /\bmixed\b\s*-\s*(hybrid|indica|sativa)/i.test(raw)) return ASSORTED_SKU;
   const tail = raw.split(/\s+-\s+/).pop();
-  const n = labelName(tail);
+  const n = flavourKey(tail);
   if (!n) return null;
   if (ALIAS[n]) return ALIAS[n];
   const exact = MASTER.find((m) => m.n === n);

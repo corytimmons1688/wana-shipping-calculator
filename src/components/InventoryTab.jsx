@@ -5,7 +5,7 @@
 // open POs, and targets. Actuals are shared across scenarios (Supabase `actuals`).
 
 import { useState, useMemo, useEffect } from "react";
-import { calcSkuWeeklyForecast, calcSkuInventory, calcSkuMarketWeekly, shipmentEta, buildWeekGrid, skuInfo, ASSORTED_SKU } from "../utils/inventory";
+import { calcSkuWeeklyForecast, calcSkuInventory, calcSkuMarketWeekly, shipmentEta, buildWeekGrid, skuInfo, flavourKey, ASSORTED_SKU } from "../utils/inventory";
 import { buildApplySchedule, slotKey, baseSkuFor, LID_BOX, BASE_BOX, CAP_MIN, CAP_MAX } from "../utils/applySchedule";
 import { allocateSalesOrders } from "../utils/salesOrderMatch";
 import { parseLocalDate } from "../utils/calc";
@@ -156,13 +156,9 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
   const MKT_CODE = { "New Jersey": "NJ", "New York": "NY", Colorado: "CO", Massachusetts: "MA",
     Arizona: "AZ", Illinois: "IL", Michigan: "MI", Missouri: "MO", Montana: "MT",
     "New Mexico": "NM", Ohio: "OH", Oklahoma: "OK", Connecticut: "CT", Maryland: "MD" };
-  // strip state prefixes and known naming drift so "New Jersey Sunrise" and
-  // "Sunrise", or "Swift Recovery Bounce Back Cherry Cola" and "Swift Recovery
-  // Cherry Cola", resolve to the same flavour
-  const normName = (v) => String(v || "").toLowerCase()
-    .replace(/^(new jersey|new york|colorado|arizona|illinois|michigan|montana|ohio|oklahoma|missouri|new mexico|connecticut|maryland|massachusetts)\s+/, "")
-    .replace(/bounce back /g, "").replace(/rasberry/g, "raspberry")
-    .replace(/[^a-z]/g, "");
+  // One shared normaliser, so a spelling this screen has not seen before cannot
+  // quietly come out as "never shipped" — see flavourKey.
+  const normName = flavourKey;
   const actualIdx = useMemo(() => {
     const ix = {};
     for (const sh of nsShip || []) {

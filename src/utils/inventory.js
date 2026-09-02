@@ -45,6 +45,31 @@ export function isAssorted(name) {
   return /assort/i.test(name || "");
 }
 
+// One flavour, spelled every way our systems spell it, reduced to a single key.
+//
+// The same flavour arrives as a master name, a NetSuite fulfilment's flavour
+// field, a sales-order description and a label line, and no two agree: "Balance
+// Berry Guave" against "Balanced Berry Guava", "Relaxed Rasberry" against
+// "Relaxed Raspberry", "Swift Recovery Bounce Back Cherry Cola" against "Swift
+// Recovery Cherry Cola", "Arizona Sunrise" against "Sunrise".
+//
+// This lives here because there used to be two of these — one in the sales-order
+// matcher, one inside InventoryTab — and only the first ever learned about
+// "Balance Berry Guave". So Colorado's Balanced Berry Guava bases could not
+// match a fulfilment at all: 7,182 units shipped Aug 7 on IF19023 and read as
+// never shipped, for nothing but a missing "d" and a swapped vowel. Two
+// normalisers is one too many; a flavour has one key.
+export function flavourKey(v) {
+  return String(v || "").toLowerCase()
+    .replace(/\b\d+:\d+(:\d+)?\b/g, " ")               // potency — "Serene Yuzu 2:1"
+    .replace(/\bbounce back\b/g, " ")
+    .replace(/rasberry/g, "raspberry").replace(/guave/g, "guava")
+    .replace(/\bbalance\b/g, "balanced")
+    // A market brands its sunrise for itself; they are all one lid.
+    .replace(/\b(new jersey|new york|colorado|arizona|illinois|michigan|montana|ohio|oklahoma|missouri|new mexico|connecticut|maryland|massachusetts|mississippi)\b/g, " ")
+    .replace(/[^a-z]/g, "");
+}
+
 export function resolveSkuKey(skuField, name) {
   const s = (skuField || "").trim();
   if (s && s !== "#N/A") return s;
