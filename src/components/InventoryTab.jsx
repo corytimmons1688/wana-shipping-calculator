@@ -13,6 +13,7 @@ import { MASTER_SKUS, BASE_TYPES } from "../data/skuMaster";
 import { Ed } from "./Shared";
 import InventoryReconcile, { buildReconciliation, inventoryFlag } from "./InventoryReconcile";
 import { matchReceipts } from "../utils/receiptMatch";
+import { matchFulfilments } from "../utils/fulfilmentMatch";
 import { fm, dF } from "../utils/format";
 import { T, tbl, th, td } from "../utils/theme";
 
@@ -175,30 +176,24 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
           ? l.sku
           : normName(String(l.flavor || "").replace(/\s*-\s*(BASE|LID)\s*$/i, ""));
         const k = `${sh.market}|${key}|${l.component_type}`;
-        (ix[k] = ix[k] || []).push({ date: iso, qty: l.quantity_shipped, tracking: sh.tracking_display });
+        // The id is what stops one truck from explaining several runs: the
+        // matcher spends each shipped line exactly once. It has to carry the
+        // flavour, not the SKU — one truck's Peaceful Pear and Sunrise bases are
+        // both PB-WCB-002-00, and keying on that made them one line, so
+        // whichever matched first silently blocked the other.
+        const bucket = (ix[k] = ix[k] || []);
+        bucket.push({ id: `${sh.shipment_key}|${k}|${bucket.length}`,
+          date: iso, qty: l.quantity_shipped, tracking: sh.tracking_display,
+          ifs: (sh.fulfillment_tranids || []).join(", ") });
       }
     }
     return ix;
   }, [nsShip]);
-  // a scheduled line counts as shipped if the same market+sku+kind moved within
-  // four days of the planned date — carriers slip, the intent still matches
-  const actualFor = (market, sku, kind, date, name) => {
-    const key = kind === "LID" ? sku : normName(name);
-    const hits = actualIdx[`${MKT_CODE[market] || market}|${key}|${kind}`] || [];
-    let best = null;
-    for (const h of hits) {
-      if (!h.date) continue;
-      const signed = Math.round((parseLocalDate(h.date) - parseLocalDate(date)) / 86400000);
-      const diff = Math.abs(signed);
-      // A ±4 day window was too tight: 2,592 Swift Recovery shipped Jul 31
-      // against an Aug 5 plan line — five days — so it read as never shipped
-      // while every other line on that truck reconciled. Teams ship ahead when
-      // a truck is going anyway, so allow a fortnight either side and show the
-      // drift rather than silently dropping the match.
-      if (diff <= 14 && (!best || diff < best.diff)) best = { ...h, diff, drift: signed };
-    }
-    return best;
-  };
+  // Where a plan row's market + flavour + component lives in that index.
+  // A LID row's sku is the PL- code and matches directly; a BASE row's sku is
+  // the shared PB- base, so it ties back to a flavour only by name.
+  const idxKeyFor = (l) =>
+    `${MKT_CODE[l.market] || l.market}|${l.kind === "LID" ? l.sku : normName(l.name)}|${l.kind}`;
 
   // ── shared mutation helpers ────────────────────────────────────────────────
   const updIn = (id, fn) => updActuals((a) => { const sh = a.inbound.find((s) => s.id === id); if (sh) fn(sh); });
@@ -796,6 +791,15 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
           preApplied: aps.preApplied || {}, marketStock: actuals.marketStock || {},
           pinned: aps.pinned || [], defer: aps.defer || [], numDays: 40, market: "All",
         });
+        // Which fulfilment each row actually went out on. Resolved across the
+        // whole plan at once and one-to-one, so a truck settles on the run it
+        // carried instead of being counted again by every run near it in the
+        // calendar.
+        const shipMatch = matchFulfilments({
+          days: full.days, index: actualIdx, keyOf: idxKeyFor, slotKey,
+        });
+        const actualFor = (market, sku, kind, date, name) =>            // eslint-disable-line no-unused-vars
+          shipMatch.get(slotKey(date, market, sku, kind)) || null;
         // Which order each shipment is booked against. Allocated over the whole
         // plan, never the filtered view — the order a line draws on must not
         // depend on which market the screen happens to be showing.
