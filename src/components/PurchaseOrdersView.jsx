@@ -9,6 +9,7 @@ import { useState, useMemo } from "react";
 import { fm } from "../utils/format";
 import { T, tbl, th, td } from "../utils/theme";
 import { trackingUrl } from "../utils/tracking";
+import { cubeOrdersOnly } from "../utils/salesOrderMatch";
 
 const MARKET_NAME = { NJ: "New Jersey", NY: "New York", CO: "Colorado", MA: "Massachusetts",
   AZ: "Arizona", IL: "Illinois", MI: "Michigan", MO: "Missouri", MT: "Montana", NM: "New Mexico",
@@ -59,15 +60,21 @@ export default function PurchaseOrdersView({ salesOrders = [], shipments = [], s
   const [openOnly, setOpenOnly] = useState(true);
   const [sel, setSel] = useState(null);      // customer-PO key of the open order
 
+  // Wana Cube only. The sync pulls every open order NetSuite has, so the label
+  // lines can be found wherever a market chooses to file them — which also drags
+  // in the jar business: Curaleaf, Temple Hill, Stash House, 24-k Labs and a
+  // dozen more. 22 of 36 orders on this screen had nothing to do with cubes.
+  const cubeOrders = useMemo(() => cubeOrdersOnly(salesOrders), [salesOrders]);
+
   const markets = useMemo(() =>
-    [...new Set(salesOrders.map((r) => r.market).filter(Boolean))].sort(), [salesOrders]);
+    [...new Set(cubeOrders.map((r) => r.market).filter(Boolean))].sort(), [cubeOrders]);
 
   // One card per sales order. The customer PO is the label, but two SOs can
   // legitimately carry the same PO (lids and labels bill separately), so the
   // sales order number stays the key.
   const orders = useMemo(() => {
     const by = {};
-    for (const r of salesOrders) {
+    for (const r of cubeOrders) {
       const o = by[r.so] || (by[r.so] = { so: r.so, po: r.custPo, customer: r.customer, market: r.market,
         status: r.status, orderDate: r.orderDate, dueDate: r.dueDate, memo: r.memo,
         terms: r.terms, shipMethod: r.shipMethod, lines: [], ordered: 0, shipped: 0 });
@@ -77,7 +84,7 @@ export default function PurchaseOrdersView({ salesOrders = [], shipments = [], s
       .map((o) => ({ ...o, pct: o.ordered ? Math.round((o.shipped / o.ordered) * 100) : 0,
         open: !isClosed(o.status) && o.shipped < o.ordered }))
       .sort((a, b) => String(b.so).localeCompare(String(a.so), undefined, { numeric: true }));
-  }, [salesOrders]);
+  }, [cubeOrders]);
 
   const list = useMemo(() => orders.filter((o) => {
     if (mkt !== "All" && o.market !== mkt) return false;
@@ -154,7 +161,7 @@ export default function PurchaseOrdersView({ salesOrders = [], shipments = [], s
 
       {!list.length && (
         <div style={{ padding: 22, textAlign: "center", fontSize: 11, color: T.T2 }}>
-          {salesOrders.length ? "No orders match these filters." : "No sales orders yet — the sync writes these at 6am and noon."}
+          {cubeOrders.length ? "No orders match these filters." : "No Wana Cube orders yet — the sync writes these at 6am and noon."}
         </div>
       )}
 
