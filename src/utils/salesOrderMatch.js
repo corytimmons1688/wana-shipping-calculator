@@ -54,17 +54,45 @@ export function baseLabelFlavour(name) {
   return part ? part.sku : null;
 }
 
-// A cube base label, as opposed to the tamper and blank stock every order runs
-// — and as opposed to the 25D and 45D jar labels, which are a different product
-// on the same WANA- prefix. "Wana Cube" in the description is what separates
-// them: it appears on every label line in Arizona, Colorado, New Jersey and New
-// York, and on none in Illinois, Massachusetts, Oklahoma, Mississippi, Missouri
-// or urbanXtracts, who are not on cubes. Without that guard the flavour match
-// falls through to a substring and Curaleaf's "Wana IL 25D lid label - Mango"
-// answers for Go Go Mango, putting a jar order behind a cube shipment.
-const isBaseLabel = (r) => /^WANA-/i.test(String(r.sku || ""))
-  && !/TAMP|BLANK/i.test(String(r.sku || ""))
-  && /wana\s+cube/i.test(String(r.name || ""));
+// A cube label, as opposed to the tamper and blank stock every order runs — and
+// as opposed to the 25D and 45D jar labels, which are a different product on the
+// same WANA- prefix. The cube's own product codes in the item id are what
+// separate them: 1941 and 2040. Cory's rule, and it beats reading the
+// description because an item id is not retyped per order.
+//
+// It matters that this is exact. Without the guard the flavour match falls
+// through to a substring and Curaleaf's "Wana IL 25D lid label - Mango" answers
+// for Go Go Mango, putting a jar order behind a cube shipment.
+export const isCubeLabel = (sku) => /^WANA-/i.test(String(sku || ""))
+  && /(?:^|[^0-9])(?:1941|2040)(?:[^0-9]|$)/.test(String(sku || ""));
+
+// The cube itself: a lid or a base, in any flavour or colour.
+export const isCubeSku = (sku) => /^P[LB]-WCB-/i.test(String(sku || ""));
+
+// Applying a cube label is billed as its own line, and a market that orders
+// nothing but the application still belongs on this list.
+export const isCubeApplFee = (r) =>
+  /wana\s+cube.*appl\s*fee/i.test(`${r && r.sku} ${r && r.name}`);
+
+// Is this sales order a Wana Cube order at all?
+//
+// Any one of the three signals is enough, because a market can split them
+// across orders: New Jersey files cubes on SO14616 and their labels on SO15035,
+// so neither order alone carries both. Requiring labels would have dropped
+// SO15164 (Colorado, 890,000) and SO14616 (New Jersey, 787,200) — real cube
+// orders whose labels live elsewhere.
+export const isCubeOrderLine = (r) =>
+  isCubeSku(r && r.sku) || isCubeLabel(r && r.sku) || isCubeApplFee(r);
+
+/** Keep only the sales-order rows belonging to Wana Cube orders. */
+export function cubeOrdersOnly(salesOrders = []) {
+  const cube = new Set();
+  for (const r of salesOrders) if (isCubeOrderLine(r)) cube.add(r.so);
+  return salesOrders.filter((r) => cube.has(r.so));
+}
+
+const isBaseLabel = (r) => isCubeLabel(r && r.sku)
+  && !/TAMP|BLANK/i.test(String((r && r.sku) || ""));
 
 // NetSuite gives order dates as M/D/YYYY. Sort on a comparable form, and push
 // anything undated to the back so a missing date never jumps the queue.
