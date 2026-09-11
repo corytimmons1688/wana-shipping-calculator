@@ -3,6 +3,7 @@ import { MASTER_SKUS, BASE_TYPES } from "../data/skuMaster";
 import { calcSkuDemand, calcGLD } from "../utils/calc";
 import { fm, dF } from "../utils/format";
 import { T, tbl, th, td } from "../utils/theme";
+import { catLabel } from "../utils/inventory";
 
 var GROUPS = ["Black Sparkle", "White"];
 var GROUP_COLORS = { "Black Sparkle": { hd: "#334155", tx: "#fff" }, "White": { hd: "#94a3b8", tx: "#fff" } };
@@ -381,7 +382,7 @@ export default function ShipScheduleTab({ sc, ships, prod, gld }) {
                         <span style={{ color: T.TX }}>{row.name}</span>
                         <span style={{ marginLeft: 6, fontSize: 9, color: T.T2 + "90" }}>{row.sku !== "_unmapped" ? row.sku : ""}</span>
                       </td>
-                      <td style={{ ...td, textAlign: "center", fontSize: 9, color: T.T2 }}>{row.cat}</td>
+                      <td style={{ ...td, textAlign: "center", fontSize: 9, color: T.T2 }}>{catLabel(row.name, row.cat)}</td>
                       {skuWeekly.map(function(v, wi5) {
                         var hasVal = v > 0;
                         return <td key={wi5} style={{ ...td, textAlign: "right", color: hasVal ? weekMC[wi5] : T.T2 + "30", fontWeight: hasVal ? 600 : 400, fontSize: 11, background: hasVal ? weekMC[wi5] + "10" : undefined }}>{hasVal ? fm(Math.round(v)) : ""}</td>;

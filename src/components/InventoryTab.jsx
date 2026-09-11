@@ -5,7 +5,7 @@
 // open POs, and targets. Actuals are shared across scenarios (Supabase `actuals`).
 
 import { useState, useMemo, useEffect } from "react";
-import { calcSkuWeeklyForecast, calcSkuInventory, calcSkuMarketWeekly, shipmentEta, buildWeekGrid, skuInfo, flavourKey, ASSORTED_SKU } from "../utils/inventory";
+import { calcSkuWeeklyForecast, calcSkuInventory, calcSkuMarketWeekly, shipmentEta, buildWeekGrid, skuInfo, flavourKey, catLabel, ASSORTED_SKU } from "../utils/inventory";
 import { buildApplySchedule, slotKey, baseSkuFor, LID_BOX, BASE_BOX, CAP_MIN, CAP_MAX } from "../utils/applySchedule";
 import { allocateSalesOrders } from "../utils/salesOrderMatch";
 import { parseLocalDate } from "../utils/calc";
@@ -98,6 +98,9 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
   const [nsRcpt, setNsRcpt] = useState([]);
   const [nsSO, setNsSO] = useState([]);       // open orders, to book shipments against
   const [recon, setRecon] = useState(null);   // SKU whose reconciliation is open
+  // The application pane is off by default: the floor works to the shipping
+  // schedule, and two panes side by side halved the width of the one they read.
+  const [showApply, setShowApply] = useState(false);
   const [flagOnly, setFlagOnly] = useState(false);
   // what the last receipt sweep marked received, and what it only suspects
   const [autoRcv, setAutoRcv] = useState({ applied: [], possible: [] });
@@ -763,7 +766,7 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
                         <td style={{ ...td, fontFamily: "'JetBrains Mono',monospace", fontWeight: newWk ? 700 : 400, color: newWk ? T.TX : T.T2 }}>{r.label}<span style={{ fontSize: 9, color: T.T2 }}> · wk {r.wk}</span></td>
                         <td style={{ ...td, fontFamily: "'JetBrains Mono',monospace", fontSize: 10 }}>{r.key.startsWith("~") ? "—" : r.key}</td>
                         <td style={{ ...td, fontWeight: 500 }}>{r.name}</td>
-                        <td style={{ ...td }}><span style={{ fontSize: 9.5, color: r.isBase ? "#334155" : T.T2, background: T.S2, borderRadius: 3, padding: "1px 6px" }}>{r.isBase ? "Base" : r.cat}</span></td>
+                        <td style={{ ...td }}><span style={{ fontSize: 9.5, color: r.isBase ? "#334155" : T.T2, background: T.S2, borderRadius: 3, padding: "1px 6px" }}>{r.isBase ? "Base" : catLabel(r.name, r.cat)}</span></td>
                         <td style={{ ...td, textAlign: "right", fontWeight: 700, fontFamily: "'JetBrains Mono',monospace" }}>{fm(r.qty)}</td>
                       </tr>
                     );
@@ -1024,7 +1027,8 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
                   {i === parts.length - 1 ? "└" : "├"}
                 </span>
                 {p.name.replace(/\s*assorted\s*/i, "").trim() || p.name}
-                {p.cat && <span style={{ marginLeft: 5, fontSize: 7.5, color: T.T2 }}>{p.cat}</span>}
+                {/* No category here: every line under an Assorted run is an
+                    assorted, and the Med/Rec split already reads in the name. */}
               </td>
               {showBase && <td style={cell} />}
               <td style={{ ...cellN, ...cell, fontSize: 9.5, color: T.T2 }}>{fm(p.qty)}</td>
@@ -1261,9 +1265,23 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
               ))}
             </div>
 
+            {/* The floor works to the shipping schedule; application is the
+                upstream half that produces it and is hidden unless asked for.
+                It still runs — the plan is built from both — this only decides
+                whether the pane is on screen. */}
             <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-start" }}>
-              {pane("① APPLICATION — Calyx floor", "labels onto bases · the bottleneck", T.PU, (d) => d.apply, true)}
-              {pane("② SHIPPING — to market", "leaves the day after its lids land", T.AC, (d) => d.ship, false)}
+              {showApply && pane("① APPLICATION — Calyx floor", "labels onto bases · the bottleneck", T.PU, (d) => d.apply, true)}
+              {pane(showApply ? "② SHIPPING — to market" : "SHIPPING — to market", "leaves the day after its lids land", T.AC, (d) => d.ship, false)}
+            </div>
+
+            <div style={{ marginTop: 8, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+              <button onClick={() => setShowApply((v) => !v)}
+                title={showApply ? "Hide the application pane and show shipping on its own"
+                                 : "Show the application pane alongside shipping"}
+                style={{ padding: "3px 10px", borderRadius: 4, border: "1px solid " + T.BD,
+                  background: "transparent", color: T.T2, cursor: "pointer", fontSize: 10 }}>
+                {showApply ? "Hide application schedule" : "Show application schedule"}
+              </button>
             </div>
 
             <div style={{ marginTop: 8, fontSize: 9, color: T.T2 }}>

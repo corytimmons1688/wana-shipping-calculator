@@ -45,6 +45,18 @@ export function isAssorted(name) {
   return /assort/i.test(name || "");
 }
 
+// What to show in a category column beside a flavour's name.
+//
+// Colorado files Hybrid, Indica and Sativa Assorted under "Classic" — they are
+// Rec rather than Med, and Classic is where the scenario puts them. Printed next
+// to the name it reads "Hybrid ... Classic", which is not a thing; the row is an
+// assorted. The category earns its place by saying what the row IS, so an
+// assorted says Assorted and the Med/Rec split stays where it already lives, in
+// the name: "(Med) Berry Patch Assorted".
+export function catLabel(name, cat) {
+  return isAssorted(name) ? "Assorted" : (cat || "—");
+}
+
 // One flavour, spelled every way our systems spell it, reduced to a single key.
 //
 // The same flavour arrives as a master name, a NetSuite fulfilment's flavour
