@@ -53,6 +53,36 @@ export function normFlavor(s) {
 export function flavorFromLabel(displayname) { const p = String(displayname || "").split(" - "); return normFlavor(p[p.length - 1]); }
 export function flavorFromLid(displayname) { return normFlavor(String(displayname || "").split(":")[0]); }
 
+// A flavour name reduced to one key, so the master's spelling and NetSuite's
+// reach the same entry — "Balance Berry Guave" and "Balanced Berry Guava",
+// "Relaxed Rasberry" and "Relaxed Raspberry", "New Jersey Sunrise" and
+// "Sunrise". Mirrors flavourKey in src/utils/inventory.js; kept local because
+// the api bundle does not reach into src.
+export function flavourSlug(v) { return String(v || "").toLowerCase()
+  .replace(/\b\d+:\d+(:\d+)?\b/g, " ")
+  .replace(/\bbounce back\b/g, " ")
+  .replace(/rasberry/g, "raspberry").replace(/guave/g, "guava")
+  .replace(/\bbalance\b/g, "balanced")
+  .replace(/\b(new jersey|new york|colorado|arizona|illinois|michigan|montana|ohio|oklahoma|missouri|new mexico|connecticut|maryland|massachusetts|mississippi)\b/g, " ")
+  .replace(/[^a-z]/g, ""); }
+
+// Which base each flavour rides on. The five Optimals are the black-base line;
+// every other flavour is white. Mirrors MASTER_SKUS in src/data/skuMaster.js.
+export const COLOR_BY_FLAVOUR = Object.fromEntries([
+  ["Good Time Clementine", "PB-WCB-221-00"], ["Stay Asleep Dreamberry", "PB-WCB-221-00"],
+  ["Swift Recovery Cherry Cola", "PB-WCB-221-00"], ["Fast Asleep Grape", "PB-WCB-221-00"],
+  ["Keep Calm Blissberry", "PB-WCB-221-00"],
+  ["Bubbly Peach", "PB-WCB-002-00"], ["Sunrise", "PB-WCB-002-00"], ["Paradise POG", "PB-WCB-002-00"],
+  ["Bright Berry Lime", "PB-WCB-002-00"], ["Peaceful Pear", "PB-WCB-002-00"],
+  ["Relaxed Raspberry", "PB-WCB-002-00"], ["Chill Black Cherry", "PB-WCB-002-00"],
+  ["Go Go Mango", "PB-WCB-002-00"], ["Serene Yuzu", "PB-WCB-002-00"],
+  ["Blissful Blueberry", "PB-WCB-002-00"], ["Passion Pineapple", "PB-WCB-002-00"],
+  ["Mellow Melon", "PB-WCB-002-00"], ["Balanced Berry Guava", "PB-WCB-002-00"],
+  ["Breezy Pineapple", "PB-WCB-002-00"], ["Robust Raspberry", "PB-WCB-002-00"],
+  ["Mighty Green Apple", "PB-WCB-002-00"], ["Bold Blood Orange", "PB-WCB-002-00"],
+  ["Assorted (Med & Rec)", "PB-WCB-002-00"], ["High Dose Assorted", "PB-WCB-002-00"],
+].map(([n, c]) => [flavourSlug(n), c]));
+
 // NetSuite returns dates as M/D/YYYY, which does NOT sort chronologically as a
 // string ("7/6/2026" > "7/31/2026"). Normalise before any date comparison.
 export function toISO(d) {
@@ -76,8 +106,21 @@ export function buildShipmentReport(rows, meta = {}) {
 
   // §5.1 dedup — collapse identical (fid, item, qty). Same item at DIFFERENT
   // quantities is legitimate (one per flavour) and must survive.
+  //
+  // Application fees are the exception, and they break the rule the other way.
+  // Every flavour on a fulfillment bills its own fee line and all of them share
+  // ONE item id, so two flavours charged the same quantity are identical on
+  // (fid, item, qty) while being two real charges. NetSuite also does not repeat
+  // fee lines the way it repeats item lines — they arrive once each, not as a
+  // ±q group — so there is nothing here to collapse in the first place.
+  //
+  // IF19334 bills eight White fees totalling 32,130: four flavours at 3,402,
+  // two at 4,536, one at 2,268 and one at 7,182. This kept one of each quantity
+  // and reported 17,388, which read as 14,742 units of base shipped with no
+  // label on them, and left a truncated fee list for the colour lookup below.
   const seen = new Set(), lines = [];
   for (const r of rows) {
+    if (IS_APPL_FEE(r)) { lines.push(r); continue; }
     const k = `${r.fid}|${r.item_id}|${r.qty}`;
     if (seen.has(k)) continue;
     seen.add(k); lines.push(r);
@@ -149,6 +192,17 @@ export function buildShipmentReport(rows, meta = {}) {
     for (const r of labels) {
       const q = Number(r.qty) || 0;
       const fee = appl.find((a) => Number(a.qty) === q);
+      // Which base the flavour actually uses. The fee line above only proves
+      // the application was billed; it cannot say WHICH application, because
+      // every colour shares one item id and the only thing linking a fee to a
+      // label is a matching quantity. On IF19327 two flavours shipped 4,536
+      // each — Paradise POG on white, Keep Calm Blissberry on black — so both
+      // matched the first 4,536 fee and Blissberry came out white. The SKU
+      // master knows every flavour's base; read it there and the coincidence
+      // stops mattering.
+      const known = COLOR_BY_FLAVOUR[flavourSlug(flavorFromLabel(r.displayname))];
+      if (!known) warnings.push({ code: "UNKNOWN_FLAVOUR", severity: "warn", label_sku: r.itemid,
+        message: `Label ${r.itemid} names a flavour not in the SKU master — base colour taken from the appl-fee line.` });
       // No appl-fee line means this is a legacy label, not a Wana Cube base
       // application — emitting a PB-WCB row here would invent a shipment that
       // never happened, so skip it and say so.
@@ -157,7 +211,7 @@ export function buildShipmentReport(rows, meta = {}) {
           message: `Label ${r.itemid} qty ${q} has no matching appl-fee line — not a Wana Cube base application; row omitted.` });
         continue;
       }
-      out.push({ shipment: g, sku: APPL_COLOR(fee),
+      out.push({ shipment: g, sku: known || APPL_COLOR(fee),
         flavor: `${flavorFromLabel(r.displayname)} - BASE`, component_type: "BASE", quantity_shipped: q,
         total_shipped_on_po: cumulative(r.item_id, r.createdfrom, g.ship_date) || q,
         po_quantity: orderedQty(r.item_id, r.createdfrom),

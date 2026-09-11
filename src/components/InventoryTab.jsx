@@ -180,7 +180,13 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
         const bucket = (ix[k] = ix[k] || []);
         bucket.push({ id: `${sh.shipment_key}|${k}|${bucket.length}`,
           date: iso, qty: l.quantity_shipped, tracking: sh.tracking_display,
-          ifs: (sh.fulfillment_tranids || []).join(", ") });
+          ifs: (sh.fulfillment_tranids || []).join(", "),
+          // Labels billed against bases actually carried. The sync checks this
+          // per colour, and it only ever showed on the Shipment Log — so a truck
+          // that applied more labels than it had bases passed silently into the
+          // plan. IF19333 billed 11,718 black applications against 4,914 black
+          // bases, and the schedule credited New York with the whole 11,718.
+          recon: (sh.reconciliation || []).filter((r) => r.status === "mismatch") });
       }
     }
     return ix;
@@ -1085,6 +1091,17 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
               {!showBase && soTag(l)}
               {st && st.shipped && <span title={`Confirmed in NetSuite${st.a.tracking ? " — " + st.a.tracking : ""}${st.a.date ? ` — shipped ${st.a.date}` : ""}`} style={{ marginLeft: 4, fontSize: 7.5, color: T.GR, border: "1px solid " + T.GR, borderRadius: 3, padding: "0 3px", fontWeight: 700 }}>
                 ✓ shipped {fm(st.a.qty)}{st.a.drift ? ` · ${Math.abs(st.a.drift)}d ${st.a.drift < 0 ? "early" : "late"}` : ""}
+              </span>}
+              {st && st.shipped && (st.a.recon || []).length > 0 && <span
+                title={"This fulfilment's label applications and its bases do not agree:\n"
+                  + st.a.recon.map((r) => `${r.base_sku}: ${fm(r.appl_fee_total)} applied vs ${fm(r.base_qty_shipped)} shipped`
+                      + ` — ${r.appl_fee_total > r.base_qty_shipped
+                          ? `${fm(r.appl_fee_total - r.base_qty_shipped)} more labels than bases`
+                          : `${fm(r.base_qty_shipped - r.appl_fee_total)} bases with no label`}`).join("\n")
+                  + "\n\nBase quantities here come from the label lines, so check the fulfilment before trusting them."}
+                style={{ marginLeft: 4, fontSize: 7.5, fontWeight: 700, borderRadius: 3, padding: "0 3px",
+                  color: "#92400e", border: "1px solid " + T.AM, background: "#fffbeb", cursor: "help" }}>
+                ⚠ base ≠ labels
               </span>}
               {st && st.missed && <span title="Other lines on this day shipped, this one did not" style={{ marginLeft: 4, fontSize: 7.5, color: "#92400e", border: "1px solid " + T.AM, borderRadius: 3, padding: "0 3px", fontWeight: 700 }}>⚠ not shipped</span>}
               {/* Ticked on the floor, and NetSuite has nothing for this day at
