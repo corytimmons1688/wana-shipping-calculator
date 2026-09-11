@@ -101,6 +101,8 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
   // The application pane is off by default: the floor works to the shipping
   // schedule, and two panes side by side halved the width of the one they read.
   const [showApply, setShowApply] = useState(false);
+  // "all" | "open" — the floor mostly wants what has not gone yet.
+  const [shipFilter, setShipFilter] = useState("all");
   const [flagOnly, setFlagOnly] = useState(false);
   // what the last receipt sweep marked received, and what it only suspects
   const [autoRcv, setAutoRcv] = useState({ applied: [], possible: [] });
@@ -1158,8 +1160,15 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
                   <th style={{ ...th, textAlign: "center", minWidth: 34 }}>✓</th>
                 </tr></thead>
                 <tbody>
+                  {/* Two empty states, because they mean different things: no
+                      plan at all, versus a plan whose lines have all shipped. */}
                   {sched.days.every((d) => pick(d).length === 0) &&
                     <tr><td colSpan={showBase ? 6 : 5} style={{ ...td, textAlign: "center", color: T.T2, padding: 16 }}>Nothing scheduled.</td></tr>}
+                  {!showBase && shipFilter === "open" && sched.days.some((d) => pick(d).length > 0)
+                    && sched.days.every((d) => pick(d).every((l) => l.done || (actualFor(l.market, l.sku, l.kind, d.date, l.name)))) &&
+                    <tr><td colSpan={5} style={{ ...td, textAlign: "center", color: T.GR, padding: 16 }}>
+                      Everything on this schedule has shipped.
+                    </td></tr>}
                   {sched.days.map((d) => {
                     // A day's shipping lines arrive in the order the planner
                     // queued them, which interleaves markets — a truck is loaded
@@ -1177,6 +1186,14 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
                       for (const l of rows) { const a = actualFor(l.market, l.sku, l.kind, d.date, l.name); if (a) { stat[l.key] = { shipped: true, a }; any = true; } }
                       if (any) for (const l of rows) if (!stat[l.key]) stat[l.key] = { missed: true };
                     }
+                    // "Not shipped" hides what is already gone. The status is
+                    // worked out over every row on the day first, because a row
+                    // only counts as missed when something else on that day did
+                    // ship — filtering before that would change the verdict.
+                    const shown = (shipFilter === "open" && !showBase)
+                      ? rows.filter((l) => !l.done && !(stat[l.key] && stat[l.key].shipped))
+                      : rows;
+                    if (!shown.length) return null;
                     const applied = d.apply.reduce((a, l) => a + (l.preApplied ? 0 : l.units), 0);
                     const over = applied > aps.capacity;
                     return [
@@ -1185,7 +1202,7 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
                           {showBase ? "Apply " : "Ship "}{dF2(d.date)}
                           <span style={{ marginLeft: 8, fontWeight: 400, fontFamily: "'JetBrains Mono',monospace", color: showBase ? (over ? "#991b1b" : T.T2) : T.T2 }}>
                             {showBase ? `${fm(applied)} / ${fm(aps.capacity)} (${Math.round((applied / aps.capacity) * 100)}%)`
-                              : `${fm(rows.reduce((a, l) => a + l.units, 0))} units`}
+                              : `${fm(shown.reduce((a, l) => a + l.units, 0))} units`}
                           </span>
                           {showBase && over && (
                             <span title="A single flavour's run cannot be split, so this day holds more than the line can physically do. Add a shift or raise capacity."
@@ -1203,17 +1220,17 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
                       // A break where the state changes, and a lighter one where
                       // the destination changes inside a state — one truck's
                       // worth of lines reads as a block either way.
-                      ...rows.flatMap((l, i) => {
+                      ...shown.flatMap((l, i) => {
                         const row = lineRow(l, d.date, showBase, stat[l.key]);
                         // An assorted run carries several mixes; each gets its
                         // own line under the run so the quantities are readable.
                         const mix = assortedRows(l, showBase, stat[l.key]);
                         if (showBase || i === 0) return [row, ...mix];
-                        const newMarket = rows[i - 1].market !== l.market;
+                        const newMarket = shown[i - 1].market !== l.market;
                         // Only break between two KNOWN destinations. A row with
                         // no order behind it has no location, and "unknown next
                         // to Acreage" is missing data, not a different truck.
-                        const prevLoc = shipLoc(rows[i - 1]), curLoc = shipLoc(l);
+                        const prevLoc = shipLoc(shown[i - 1]), curLoc = shipLoc(l);
                         const newLoc = !newMarket && !!prevLoc && !!curLoc && prevLoc !== curLoc;
                         if (!newMarket && !newLoc) return [row, ...mix];
                         return [
@@ -1295,6 +1312,15 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
             </div>
 
             <div style={{ marginTop: 8, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+              <label style={{ fontSize: 10, color: T.T2, display: "flex", alignItems: "center", gap: 4 }}>
+                Show
+                <select value={shipFilter} onChange={(e) => setShipFilter(e.target.value)}
+                  style={{ background: T.S2, border: "1px solid " + T.BD, color: T.AC, borderRadius: 3,
+                    padding: "2px 6px", fontSize: 11, fontFamily: "inherit" }}>
+                  <option value="all">All lines</option>
+                  <option value="open">Not shipped</option>
+                </select>
+              </label>
               <button onClick={() => setShowApply((v) => !v)}
                 title={showApply ? "Hide the application pane and show shipping on its own"
                                  : "Show the application pane alongside shipping"}
