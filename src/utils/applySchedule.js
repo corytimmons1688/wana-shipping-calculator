@@ -452,7 +452,19 @@ export function buildApplySchedule({ mw, grid, actuals, today, startDate,
       const need = g.lidNeed;
       const lr = av.readyBy(g.sku, need + (usedLid[g.sku] || 0), start);
       if (lr) {
-        const applyD = applyDone[g.rk] ? applyDone[g.rk].date : start;
+        // A run whose bases are already at the market has no application of its
+        // own to date its lids from, and `start` dated them to the first day of
+        // the grid. So a New Jersey run needed Aug 17 showed as shipping Jul 2,
+        // and a New Mexico run not needed until Nov 2 showed the same day —
+        // both read as stale rows nobody trusted, when the Aug 17 one was live
+        // work and the market was 4,986 lids short.
+        //
+        // Anchor it to the week the market needs it instead. A run keeps the day
+        // it was supposed to go and stays open until it goes, so a late run
+        // sits where someone would look for it and reads as late, rather than
+        // claiming a July ship date it never had.
+        const wanted = g.due > start ? g.due : start;
+        const applyD = applyDone[g.rk] ? applyDone[g.rk].date : wanted;
         const lidsBind = lr.date > applyD && !lr.fromStock;
         usedLid[g.sku] = (usedLid[g.sku] || 0) + need;
         shipQueue.push({ g, kind: "LID", units: need, date: nextBizStr(lidsBind ? lr.date : applyD),

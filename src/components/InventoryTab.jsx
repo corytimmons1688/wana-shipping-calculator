@@ -1137,7 +1137,12 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
         );
 
         const pane = (title, sub, colour, pick, showBase) => (
-          <div style={{ flex: 1, minWidth: 380, background: T.S1, border: "1px solid " + T.BD, borderRadius: 6, overflow: "hidden" }}>
+          // On its own the shipping pane does not want the whole monitor: past
+          // about 1,100px the eye has to travel from the flavour to its numbers
+          // across empty middle. Capped and centred when it is alone; when the
+          // application pane is up they share the width as before.
+          <div style={{ flex: 1, minWidth: 380, maxWidth: showApply ? undefined : 1120,
+            background: T.S1, border: "1px solid " + T.BD, borderRadius: 6, overflow: "hidden" }}>
             <div style={{ padding: "6px 10px", background: colour + "12", borderBottom: "1px solid " + T.BD }}>
               <span style={{ fontSize: 11, fontWeight: 700, color: colour }}>{title}</span>
               <span style={{ marginLeft: 8, fontSize: 9, color: T.T2 }}>{sub}</span>
@@ -1283,7 +1288,8 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
                 upstream half that produces it and is hidden unless asked for.
                 It still runs — the plan is built from both — this only decides
                 whether the pane is on screen. */}
-            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-start" }}>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "flex-start",
+              justifyContent: showApply ? "flex-start" : "center" }}>
               {showApply && pane("① APPLICATION — Calyx floor", "labels onto bases · the bottleneck", T.PU, (d) => d.apply, true)}
               {pane(showApply ? "② SHIPPING — to market" : "SHIPPING — to market", "leaves the day after its lids land", T.AC, (d) => d.ship, false)}
             </div>
