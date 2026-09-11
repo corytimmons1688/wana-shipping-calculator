@@ -101,6 +101,18 @@ const orderRank = (r) => {
   return m ? `${m[3]}-${m[1].padStart(2, "0")}-${m[2].padStart(2, "0")}` : "9999-99-99";
 };
 
+// An order nobody has approved yet does not get to jump the queue. It is still
+// on the books and still named on a row that runs past what is ordered, but
+// approved work is filled first.
+//
+// New Jersey is the case. SO15510 is 2,376,360 units of bareware sitting at
+// Pending approval, dated ahead of SO15605 — the approved Wana Rebrand Optimal
+// order — so on order date alone it swallowed the whole flavour and the rebrand
+// drew 13,840 units out of its 220,000. The order was in the sheet the whole
+// time; it simply never got booked against, which reads exactly the same from
+// the outside.
+const unapproved = (r) => (String(r.status || "").trim().toUpperCase() === "A" ? 1 : 0);
+
 // Open balance per market + item, oldest order first — plus which orders carry
 // that item at all, balance or no balance.
 //
@@ -132,7 +144,8 @@ function openPools(salesOrders) {
       orderDate: r.orderDate, status: r.status, ordered: Number(r.ordered) || 0, left });
   }
   for (const k of Object.keys(pools))
-    pools[k].sort((a, b) => orderRank(a).localeCompare(orderRank(b)) ||
+    pools[k].sort((a, b) => unapproved(a) - unapproved(b) ||
+      orderRank(a).localeCompare(orderRank(b)) ||
       String(a.so).localeCompare(String(b.so), undefined, { numeric: true }));
   for (const k of Object.keys(onOrder)) onOrder[k] = [...new Set(onOrder[k])].sort();
   for (const k of Object.keys(customers)) customers[k] = [...new Set(customers[k])].sort();
@@ -149,8 +162,24 @@ function openPools(salesOrders) {
 export function allocateSalesOrders({ days = [], salesOrders = [], marketCode, itemSku, isShipped }) {
   const { pools, onOrder, customers } = openPools(salesOrders);
   const out = {};
-  for (const d of days) {
-    for (const l of d.ship || []) {
+  // Orders are drawn down in the sequence the Market Demand forecast needs
+  // them, not the sequence the floor happens to ship them in. The date that
+  // matters is the run's `due` — the week the market has to have the stock —
+  // because that is the date the order exists to hit. Walking ship dates
+  // instead let a run that leaves early but is not needed until November take
+  // balance from a run due in September, and the September market then read as
+  // over its ordered quantity while the order it needed still had room.
+  //
+  // Sales orders themselves carry no due date in NetSuite — not one of the ten
+  // open cube orders has one — so the forecast is the only thing that knows
+  // when stock is actually wanted.
+  const queue = [];
+  for (const d of days) for (const l of d.ship || []) queue.push({ d, l });
+  queue.sort((a, b) => String(a.l.due || a.d.date).localeCompare(String(b.l.due || b.d.date))
+    || String(a.d.date).localeCompare(String(b.d.date))
+    || String(a.l.market).localeCompare(String(b.l.market)));
+  {
+    for (const { d, l } of queue) {
       const item = itemSku(l);
       // Both halves key on the flavour's lid SKU: the lid because that is its
       // own order line, the base because its label line is filed under the same

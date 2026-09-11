@@ -975,6 +975,59 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
           );
         };
 
+        // The mix, split out a line per variant with its own quantity.
+        //
+        // The chip names which assorted a run covers but not how much of each,
+        // and "Hybrid · (Med) Berry Patch · (Med) Lemonade Stand" against one
+        // 49,896 figure tells the floor nothing it can pick or label to. The run
+        // stays one row — one lid SKU, one day, one tick, one editable quantity
+        // — and the mix reads underneath it.
+        //
+        // A run's quantity is rarely the week's raw demand: it is rounded up to
+        // whole lid boxes, and an earlier run may already have retired part of
+        // it. So each variant takes its share of THIS row pro-rata and the odd
+        // units land on the largest remainders, which makes the lines sum to the
+        // row rather than to the forecast.
+        const assortedSplit = (l) => {
+          const mix = assortedMix(l);
+          if (!mix || mix.length < 2) return null;
+          const total = mix.reduce((a, v) => a + (Number(v.units) || 0), 0);
+          if (total <= 0) return null;
+          const parts = mix.map((v) => {
+            const share = ((Number(v.units) || 0) / total) * l.units;
+            return { name: v.name, cat: v.cat, share, qty: Math.floor(share) };
+          });
+          let left = l.units - parts.reduce((a, v) => a + v.qty, 0);
+          [...parts]
+            .sort((a, b) => (b.share - b.qty) - (a.share - a.qty))
+            .forEach((p) => { if (left > 0) { p.qty += 1; left -= 1; } });
+          return parts.filter((p) => p.qty > 0).sort((a, b) => b.qty - a.qty);
+        };
+
+        const assortedRows = (l, showBase, st) => {
+          const parts = assortedSplit(l);
+          if (!parts || !parts.length) return [];
+          const tint = st && st.shipped ? "#dcfce7" : st && st.missed ? "#fef3c7"
+            : (l.done ? T.S2 + "AA" : undefined);
+          const cell = { ...td, borderTop: "none", paddingTop: 1, paddingBottom: 1 };
+          return parts.map((p, i) => (
+            <tr key={l.key + "|mix" + i} style={{ background: tint, opacity: (l.done && !st) ? 0.5 : 1 }}>
+              <td style={cell} />
+              <td style={{ ...cell, fontSize: 9, color: T.T2, paddingLeft: 20 }}>
+                <span style={{ color: T.BD, marginRight: 6, fontFamily: "'JetBrains Mono',monospace" }}>
+                  {i === parts.length - 1 ? "└" : "├"}
+                </span>
+                {p.name.replace(/\s*assorted\s*/i, "").trim() || p.name}
+                {p.cat && <span style={{ marginLeft: 5, fontSize: 7.5, color: T.T2 }}>{p.cat}</span>}
+              </td>
+              {showBase && <td style={cell} />}
+              <td style={{ ...cellN, ...cell, fontSize: 9.5, color: T.T2 }}>{fm(p.qty)}</td>
+              <td style={cell} />
+              <td style={cell} />
+            </tr>
+          ));
+        };
+
         // The order the floor books this shipment against. A market and SKU can
         // sit on more than one open order — New Jersey runs two, Colorado three
         // — so a line that outruns the oldest one names every order it spans.
@@ -1126,20 +1179,24 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
                       // worth of lines reads as a block either way.
                       ...rows.flatMap((l, i) => {
                         const row = lineRow(l, d.date, showBase, stat[l.key]);
-                        if (showBase || i === 0) return [row];
+                        // An assorted run carries several mixes; each gets its
+                        // own line under the run so the quantities are readable.
+                        const mix = assortedRows(l, showBase, stat[l.key]);
+                        if (showBase || i === 0) return [row, ...mix];
                         const newMarket = rows[i - 1].market !== l.market;
                         // Only break between two KNOWN destinations. A row with
                         // no order behind it has no location, and "unknown next
                         // to Acreage" is missing data, not a different truck.
                         const prevLoc = shipLoc(rows[i - 1]), curLoc = shipLoc(l);
                         const newLoc = !newMarket && !!prevLoc && !!curLoc && prevLoc !== curLoc;
-                        if (!newMarket && !newLoc) return [row];
+                        if (!newMarket && !newLoc) return [row, ...mix];
                         return [
                           <tr key={"gap" + l.key} aria-hidden="true">
                             <td colSpan={5} style={{ padding: 0, height: newMarket ? 7 : 4,
                               borderTop: "1px solid " + (newMarket ? T.BD : T.BD + "80"), borderBottom: "none" }} />
                           </tr>,
                           row,
+                          ...mix,
                         ];
                       }),
                     ];
