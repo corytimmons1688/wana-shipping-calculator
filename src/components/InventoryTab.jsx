@@ -1020,7 +1020,7 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
             : (l.done ? T.S2 + "AA" : undefined);
           const cell = { ...td, borderTop: "none", paddingTop: 1, paddingBottom: 1 };
           return parts.map((p, i) => (
-            <tr key={l.key + "|mix" + i} style={{ background: tint, opacity: (l.done && !st) ? 0.5 : 1 }}>
+            <tr key={l.key + "|mix" + i} className="shiprow" style={{ background: tint, opacity: (l.done && !st) ? 0.5 : 1 }}>
               <td style={cell} />
               <td style={{ ...cell, fontSize: 9, color: T.T2, paddingLeft: 20 }}>
                 <span style={{ color: T.BD, marginRight: 6, fontFamily: "'JetBrains Mono',monospace" }}>
@@ -1083,7 +1083,7 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
         };
 
         const lineRow = (l, date, showBase, st) => (
-          <tr key={l.key} style={{
+          <tr key={l.key} className="shiprow" style={{
             background: st && st.shipped ? "#dcfce7" : st && st.missed ? "#fef3c7" : (l.done ? T.S2 + "AA" : undefined),
             opacity: (l.done && !st) ? 0.5 : 1 }}>
             <td style={{ ...td, fontSize: 9.5, fontWeight: 600, textDecoration: l.done ? "line-through" : undefined }}>{l.market}</td>
@@ -1264,6 +1264,20 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
                 </div>
               ))}
             </div>
+
+            {/* Rows run wide — market, item, badges, quantity, boxes, tick —
+                and the eye loses the line between the flavour and its numbers.
+                An inset shadow tints each cell over whatever background the row
+                already has, so a shipped row stays green and a missed row stays
+                amber while still lifting under the cursor. A background rule
+                could not do that: the row's colour is set inline as the
+                `background` shorthand, which a stylesheet cannot layer onto. */}
+            <style>{`
+              .shiprow > td { transition: box-shadow .08s ease-out; }
+              .shiprow:hover > td { box-shadow: inset 0 0 0 9999px rgba(37,99,235,.085); }
+              .shiprow:hover > td:first-child { box-shadow: inset 3px 0 0 0 ${T.AC}, inset 0 0 0 9999px rgba(37,99,235,.085); }
+              @media (prefers-reduced-motion: reduce) { .shiprow > td { transition: none; } }
+            `}</style>
 
             {/* The floor works to the shipping schedule; application is the
                 upstream half that produces it and is hidden unless asked for.
