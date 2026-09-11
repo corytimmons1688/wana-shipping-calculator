@@ -4,7 +4,7 @@
 // pre-go-live cells, editable when the market stores weekly detail.
 
 import { useState, useMemo } from "react";
-import { calcSkuWeeklyForecast, weekIdxOf } from "../utils/inventory";
+import { calcSkuWeeklyForecast, weekIdxOf , catLabel } from "../utils/inventory";
 import { parseLocalDate } from "../utils/calc";
 import { Ed } from "./Shared";
 import { fm } from "../utils/format";
@@ -52,7 +52,7 @@ export default function ItemForecastTab({ sc, upd }) {
 
   const groups = useMemo(() => {
     const by = {};
-    for (const r of fc.rows) { const c = r.cat || "—"; (by[c] = by[c] || []).push(r); }
+    for (const r of fc.rows) { const c = catLabel(r.name, r.cat); (by[c] = by[c] || []).push(r); }
     const names = Object.keys(by).sort((a, b) => {
       const ia = CAT_ORDER.indexOf(a), ib = CAT_ORDER.indexOf(b);
       return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib) || a.localeCompare(b);

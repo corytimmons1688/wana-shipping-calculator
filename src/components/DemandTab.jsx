@@ -1,7 +1,7 @@
 import { useState, useMemo } from "react";
 import { MO } from "../data/defaults";
 import { marketMonthlyDemand, parseLocalDate, marketActiveFrom } from "../utils/calc";
-import { buildWeekGrid, weekIdxOf, NUM_WEEKS } from "../utils/inventory";
+import { buildWeekGrid, weekIdxOf, NUM_WEEKS , catLabel } from "../utils/inventory";
 import { fm } from "../utils/format";
 import { T, tbl, th, td } from "../utils/theme";
 import { Ed } from "./Shared";
@@ -267,7 +267,7 @@ export default function DemandTab({ sc, gld, annD, upd }) {
                       {sku.name}
                       {sku.sku && <span style={{ marginLeft: 4, fontSize: 9, color: T.T2+"90" }}>{sku.sku}</span>}
                     </td>
-                    <td style={{ ...td, textAlign: "center", fontSize: 9, color: T.T2, borderLeft: "3px solid "+T.AC+"40" }}>{sku.cat}</td>
+                    <td style={{ ...td, textAlign: "center", fontSize: 9, color: T.T2, borderLeft: "3px solid "+T.AC+"40" }}>{catLabel(sku.name, sku.cat)}</td>
                     {skuMonthly.map(function(v, smi2) {
                       var isStart = smi2 === startMo;
                       return <td key={smi2} style={{ ...td, textAlign: "right", fontSize: 10, color: v > 0 ? T.T2 : T.T2+"30", fontStyle: "italic", background: isStart ? "#bbf7d0" : undefined, borderLeft: smi2 === 0 ? "1px solid " + T.BD : undefined }}>{v > 0 ? fm(Math.round(v)) : ""}</td>;
@@ -366,7 +366,7 @@ export default function DemandTab({ sc, gld, annD, upd }) {
                 {sr.name}
                 {sr.sku && <span style={{ marginLeft: 4, fontSize: 9, color: T.T2 + "90", fontFamily: "'JetBrains Mono',monospace" }}>{sr.sku}</span>}
               </td>
-              <td style={{ ...td, textAlign: "center", fontSize: 9, color: T.T2 }}>{sr.cat}</td>
+              <td style={{ ...td, textAlign: "center", fontSize: 9, color: T.T2 }}>{catLabel(sr.name, sr.cat)}</td>
               {cols.map((g) => {
                 const i = g.idx;
                 if (row.gated[i]) return blankCell(i); // before go-live / active start — hidden
