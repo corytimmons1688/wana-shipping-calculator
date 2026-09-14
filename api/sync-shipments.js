@@ -18,6 +18,7 @@
 
 import crypto from "node:crypto";
 import { buildShipmentReport } from "./_shipmentReport.js";
+import { requireAccess } from "./_auth.js";
 
 const SUPABASE_URL = "https://fxdyiurjioesdmedmgzu.supabase.co";
 const ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZ4ZHlpdXJqaW9lc2RtZWRtZ3p1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzI3MzIzOTYsImV4cCI6MjA4ODMwODM5Nn0.5ueK5iXQ35oThb02ClX3iErPwYR4tPih9GtBAmhDQYk";
@@ -71,6 +72,24 @@ async function suiteql(q, env, { pageSize = 1000 } = {}) {
   return rows;
 }
 
+// A manual sync may run at most this often. Two minutes is long enough to stop
+// a button being leaned on and short enough that someone waiting on a receipt
+// is not sitting idle.
+const MANUAL_COOLDOWN_MS = 2 * 60 * 1000;
+
+// How long since the snapshot was last written, from the row itself — no extra
+// state to keep, and it is the thing a caller actually wants to know.
+async function msSinceLastSync() {
+  try {
+    const r = await fetch(`${SUPABASE_URL}/rest/v1/shipment_log?id=eq.1&select=updated_at`,
+      { headers: { apikey: ANON, Authorization: `Bearer ${ANON}` } });
+    if (!r.ok) return null;
+    const [row] = await r.json();
+    const t = row && Date.parse(row.updated_at);
+    return Number.isFinite(t) ? Date.now() - t : null;
+  } catch { return null; }
+}
+
 export default async function handler(req, res) {
   const env = process.env;
   // Vercel sends `Authorization: Bearer <CRON_SECRET>` on cron invocations.
@@ -80,11 +99,30 @@ export default async function handler(req, res) {
   const expected = String(env.CRON_SECRET || "").trim();
   const NS_KEYS = ["NS_ACCOUNT", "NS_CONSUMER_KEY", "NS_CONSUMER_SECRET", "NS_TOKEN_ID", "NS_TOKEN_SECRET"];
 
+  // Two callers, one endpoint. Vercel's cron presents CRON_SECRET as a Bearer
+  // token; a person pressing "Sync now" in the app presents nothing, because
+  // the browser must never hold that secret — handing it to the client would
+  // publish the key that protects NetSuite.
+  //
+  // So a request that is not the cron has to be a signed-in, approved user of
+  // this app, and is additionally rate-limited. The limit is not belt and
+  // braces: sign-in is currently switched off (REQUIRE_AUTH defaults to false),
+  // so without it a refresh button would be an open door onto NetSuite.
+  let isCron = false;
   if (expected) {
     const got = String(req.headers.authorization || "").trim().replace(/^Bearer\s+/i, "").trim();
     const a = Buffer.from(got), b = Buffer.from(expected);
-    const ok = a.length === b.length && crypto.timingSafeEqual(a, b);
-    if (!ok) return res.status(401).json({ error: "unauthorized", hint: "Authorization header did not match CRON_SECRET" });
+    isCron = a.length === b.length && crypto.timingSafeEqual(a, b);
+  }
+  if (!isCron) {
+    const gate = await requireAccess(req, res);
+    if (!gate) return;                       // requireAccess has already replied
+    const waited = await msSinceLastSync();
+    if (waited != null && waited < MANUAL_COOLDOWN_MS) {
+      const wait = Math.ceil((MANUAL_COOLDOWN_MS - waited) / 1000);
+      return res.status(429).json({ error: "too_soon", retry_after_s: wait,
+        hint: `Last sync was ${Math.round(waited / 1000)}s ago. NetSuite is rate-limited; try again in ${wait}s.` });
+    }
   }
   const missing = NS_KEYS.filter((k) => !env[k]);
   if (missing.length) return res.status(503).json({ error: "NetSuite credentials not configured", missing });
