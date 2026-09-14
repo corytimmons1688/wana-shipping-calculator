@@ -9,7 +9,8 @@ import { useState, useMemo } from "react";
 import { fm } from "../utils/format";
 import { T, tbl, th, td } from "../utils/theme";
 import { trackingUrl } from "../utils/tracking";
-import { cubeOrdersOnly } from "../utils/salesOrderMatch";
+import { cubeOrdersOnly, isCubeSku, isCubeLabel, isCubeApplFee } from "../utils/salesOrderMatch";
+import { skuInfo } from "../utils/inventory";
 
 const MARKET_NAME = { NJ: "New Jersey", NY: "New York", CO: "Colorado", MA: "Massachusetts",
   AZ: "Arizona", IL: "Illinois", MI: "Michigan", MO: "Missouri", MT: "Montana", NM: "New Mexico",
@@ -80,18 +81,58 @@ export default function PurchaseOrdersView({ salesOrders = [], shipments = [], s
         terms: r.terms, shipMethod: r.shipMethod, lines: [], ordered: 0, shipped: 0 });
       o.lines.push(r); o.ordered += r.ordered; o.shipped += r.shipped;
     }
+
+    // Orders that ship together are one order to everyone who works with them.
+    // New Jersey files the cubes on PO 1 and PO 2 / 9245 and the labels that go
+    // on them on SP02377 — seven trucks have carried both. Colorado runs three
+    // at once across 11599, 11600 and 11626 and fills them off the same pallets.
+    // Two or three cards made the floor read a fraction of an order at a time.
+    //
+    // The link is the shipping record rather than anything on the orders
+    // themselves: no field ties them, and the customer PO differs on every one.
+    // Grouping is transitive — Colorado's three arrive as three overlapping
+    // pairs, never all on one truck — so this walks the connected components of
+    // "has shipped alongside". An order nothing has shipped against yet stands
+    // on its own, which is right: SO15605 is not part of anything until it is.
+    const parent = {};
+    const find = (x) => { while (parent[x] && parent[x] !== x) x = parent[x] = parent[parent[x]] || parent[x]; return x; };
+    const union = (a, b) => { const ra = find(a), rb = find(b); if (ra !== rb) parent[ra] = rb; };
+    for (const k of Object.keys(by)) parent[k] = k;
+    for (const s of shipments) {
+      const sos = [...new Set((s.lines || []).map((l) => l.sales_order).filter((x) => x && by[x]))];
+      for (let i = 1; i < sos.length; i++) union(sos[0], sos[i]);
+    }
+    const members = {};
+    for (const k of Object.keys(by)) (members[find(k)] = members[find(k)] || []).push(k);
+    for (const group of Object.values(members)) {
+      if (group.length < 2) continue;
+      // The oldest order anchors the card — it is the one the programme started
+      // on, and the one people name when they mean the whole thing.
+      const sorted = group.slice().sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true }));
+      const host = by[sorted[0]];
+      for (const k of sorted.slice(1)) {
+        const o = by[k];
+        host.lines.push(...o.lines);
+        host.ordered += o.ordered; host.shipped += o.shipped;
+        host.alsoSo = [...(host.alsoSo || []), o.so];
+        host.alsoPo = [...(host.alsoPo || []), o.po].filter(Boolean);
+        delete by[k];
+      }
+    }
+
     return Object.values(by)
       .map((o) => ({ ...o, pct: o.ordered ? Math.round((o.shipped / o.ordered) * 100) : 0,
         open: !isClosed(o.status) && o.shipped < o.ordered }))
       .sort((a, b) => String(b.so).localeCompare(String(a.so), undefined, { numeric: true }));
-  }, [cubeOrders]);
+  }, [cubeOrders, shipments]);
 
   const list = useMemo(() => orders.filter((o) => {
     if (mkt !== "All" && o.market !== mkt) return false;
     if (openOnly && !o.open) return false;
     if (!q.trim()) return true;
     const s = q.trim().toLowerCase();
-    return [o.po, o.so, o.customer].some((v) => String(v || "").toLowerCase().includes(s));
+    return [o.po, o.so, o.customer, ...(o.alsoSo || []), ...(o.alsoPo || [])]
+      .some((v) => String(v || "").toLowerCase().includes(s));
   }), [orders, mkt, openOnly, q]);
 
   const cur = useMemo(() => list.find((o) => o.so === sel) || null, [list, sel]);
@@ -103,9 +144,11 @@ export default function PurchaseOrdersView({ salesOrders = [], shipments = [], s
     if (!cur) return [];
     return shipments
       .map((s) => {
+        const sos = [cur.so, ...(cur.alsoSo || [])];
+        const pos = [cur.po, ...(cur.alsoPo || [])].filter(Boolean);
         const lines = (s.lines || []).filter((l) =>
-          (l.sales_order && l.sales_order === cur.so) ||
-          (!l.sales_order && cur.po && l.customer_po === cur.po));
+          (l.sales_order && sos.includes(l.sales_order)) ||
+          (!l.sales_order && pos.includes(l.customer_po)));
         return lines.length ? { ...s, lines } : null;
       })
       .filter(Boolean);
@@ -115,6 +158,39 @@ export default function PurchaseOrdersView({ salesOrders = [], shipments = [], s
   // tells an empty shipment list apart from a log that simply cannot link yet.
   const stamped = useMemo(() =>
     shipments.some((s) => (s.lines || []).some((l) => l.sales_order)), [shipments]);
+
+  // The base side of an order arrives as three lines per flavour — the generic
+  // PB- cube, that flavour's label, and the fee for applying it — all at the
+  // same quantity and all describing one thing. Read line by line that is twenty
+  // rows saying what six flavours and a base pool say in seven. Pool the base
+  // side into one row; list the lids flavour by flavour, which is how the floor
+  // picks them. Anything that is neither — blank and tamper label stock — keeps
+  // its own row rather than being folded into a total it has no part in.
+  const grouped = useMemo(() => {
+    if (!cur) return [];
+    const pool = { sku: "—", name: "Bases, labels & application", pooled: true,
+      ordered: 0, shipped: 0, parts: [] };
+    const lids = [], other = [];
+    for (const l of cur.lines) {
+      const sku = String(l.sku || "");
+      if (/^PL-WCB-/i.test(sku)) { lids.push(l); continue; }
+      if (/^PB-WCB-/i.test(sku) || isCubeLabel(sku) || isCubeApplFee(l)) {
+        pool.ordered += l.ordered || 0;
+        pool.shipped += l.shipped || 0;
+        pool.parts.push(`${sku} — ${fm(l.ordered)} ordered, ${fm(l.shipped)} shipped`);
+        continue;
+      }
+      other.push(l);
+    }
+    const out = [];
+    if (pool.parts.length) out.push({ ...pool,
+      title: `${pool.parts.length} lines pooled into this row:\n\n` + pool.parts.join("\n") });
+    out.push(...lids
+      .map((l) => ({ ...l, name: skuInfo(l.sku).name, title: l.name }))
+      .sort((a, b) => a.name.localeCompare(b.name)));
+    out.push(...other.map((l) => ({ ...l, title: l.name })));
+    return out;
+  }, [cur]);
 
   const tOrd = list.reduce((a, o) => a + o.ordered, 0);
   const tShp = list.reduce((a, o) => a + o.shipped, 0);
@@ -187,8 +263,18 @@ export default function PurchaseOrdersView({ salesOrders = [], shipments = [], s
                     <tr key={o.so} onClick={() => setSel(on ? null : o.so)}
                       style={{ cursor: "pointer", background: on ? T.AC + "18" : "transparent",
                         borderLeft: "3px solid " + (on ? T.AC : "transparent") }}>
-                      <td style={{ ...td, ...mono, color: T.AC, fontWeight: 700 }}>{o.po || "— none —"}</td>
-                      <td style={{ ...td, ...mono, fontSize: 10 }}>{o.so}</td>
+                      <td style={{ ...td, ...mono, color: T.AC, fontWeight: 700 }}>
+                        {o.po || "— none —"}
+                        {(o.alsoPo || []).map((x) => (
+                          <span key={x} style={{ display: "block", fontSize: 9.5, fontWeight: 400, color: T.T2 }}>+ {x}</span>
+                        ))}
+                      </td>
+                      <td style={{ ...td, ...mono, fontSize: 10 }}>
+                        {o.so}
+                        {(o.alsoSo || []).map((x) => (
+                          <span key={x} style={{ display: "block", fontSize: 9.5, color: T.T2 }}>+ {x}</span>
+                        ))}
+                      </td>
                       <td style={{ ...td, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 190 }} title={o.customer}>{o.customer}</td>
                       {!cur && <td style={{ ...td, color: T.T2, fontSize: 10 }}>{o.orderDate || "—"}</td>}
                       <td style={num}>{fm(o.ordered)}</td>
@@ -216,7 +302,7 @@ export default function PurchaseOrdersView({ salesOrders = [], shipments = [], s
                     style={{ marginLeft: "auto", border: "1px solid " + T.BD, background: "transparent", color: T.T2, borderRadius: 4, cursor: "pointer", fontSize: 11, padding: "1px 7px" }}>✕</button>
                 </div>
                 <div style={{ display: "flex", gap: 16, flexWrap: "wrap", marginTop: 8 }}>
-                  {field("Calyx sales order", <span style={mono}>{cur.so}</span>)}
+                  {field("Calyx sales order", <span style={mono}>{[cur.so, ...(cur.alsoSo || [])].join(" + ")}</span>)}
                   {field("Customer", cur.customer)}
                   {field("Status", statusText(cur.status))}
                   {field("Ordered on", cur.orderDate)}
@@ -228,8 +314,14 @@ export default function PurchaseOrdersView({ salesOrders = [], shipments = [], s
                 {cur.memo && <div style={{ marginTop: 7, fontSize: 10, color: T.T2, fontStyle: "italic" }}>{cur.memo}</div>}
               </div>
 
+              {/* An order's base side arrives as three lines per flavour — the
+                  generic PB- cube, the flavour's label, and the fee for applying
+                  it — all at the same quantity and all describing one thing. Read
+                  line by line that is twenty rows saying what six flavours and a
+                  base pool say in seven. Pool the base side into one row and list
+                  the lids flavour by flavour, which is how the floor picks them. */}
               <div style={{ padding: "9px 14px 4px", fontSize: 10, fontWeight: 700, color: T.T2, textTransform: "uppercase", letterSpacing: .4 }}>
-                Line items ({cur.lines.length})
+                Line items ({grouped.length})
               </div>
               <table style={{ ...tbl, fontSize: 10.5 }}>
                 <thead><tr>
@@ -241,12 +333,13 @@ export default function PurchaseOrdersView({ salesOrders = [], shipments = [], s
                   <th style={{ ...th, textAlign: "right", minWidth: 80 }}>%</th>
                 </tr></thead>
                 <tbody>
-                  {cur.lines.slice().sort((a, b) => a.sku.localeCompare(b.sku)).map((l, i) => {
+                  {grouped.map((l, i) => {
                     const p = l.ordered ? Math.round((l.shipped / l.ordered) * 100) : 0;
                     return (
-                      <tr key={i}>
-                        <td style={{ ...td, ...mono, fontSize: 10 }}>{l.sku}</td>
-                        <td style={{ ...td, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 230 }} title={l.name}>{l.name}</td>
+                      <tr key={i} style={l.pooled ? { background: T.S2 + "70" } : undefined}>
+                        <td style={{ ...td, ...mono, fontSize: 10, color: l.pooled ? T.T2 : undefined }}>{l.sku}</td>
+                        <td style={{ ...td, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 230,
+                          fontWeight: l.pooled ? 600 : 400 }} title={l.title}>{l.name}</td>
                         <td style={num}>{fm(l.ordered)}</td>
                         <td style={{ ...num, color: T.GR }}>{fm(l.shipped)}</td>
                         <td style={{ ...num, color: l.ordered - l.shipped > 0 ? T.AM : T.T2 }}>{fm(l.ordered - l.shipped)}</td>
