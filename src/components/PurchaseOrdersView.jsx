@@ -12,6 +12,7 @@ import { trackingUrl } from "../utils/tracking";
 import { cubeOrdersOnly, isCubeLabel, isCubeApplFee, baseLabelFlavour } from "../utils/salesOrderMatch";
 import { skuInfo } from "../utils/inventory";
 import { baseSkuFor } from "../utils/applySchedule";
+import SyncNowButton from "./SyncNowButton";
 
 const MARKET_NAME = { NJ: "New Jersey", NY: "New York", CO: "Colorado", MA: "Massachusetts",
   AZ: "Arizona", IL: "Illinois", MI: "Michigan", MO: "Missouri", MT: "Montana", NM: "New Mexico",
@@ -56,7 +57,7 @@ const statusText = (s) => SO_STATUS[String(s || "").trim().toUpperCase()] || s |
 const CLOSED = new Set(["C", "G", "H"]);
 const isClosed = (s) => CLOSED.has(String(s || "").trim().toUpperCase());
 
-export default function PurchaseOrdersView({ salesOrders = [], shipments = [], syncedAt, onRefresh, loading }) {
+export default function PurchaseOrdersView({ salesOrders = [], shipments = [], syncedAt, onRefresh, loading, onSynced }) {
   const [mkt, setMkt] = useState("All");
   const [q, setQ] = useState("");
   const [openOnly, setOpenOnly] = useState(true);
@@ -329,6 +330,7 @@ export default function PurchaseOrdersView({ salesOrders = [], shipments = [], s
           <input type="checkbox" checked={openOnly} onChange={(e) => setOpenOnly(e.target.checked)} /> Open only
         </label>
         <button onClick={onRefresh} style={{ padding: "3px 10px", borderRadius: 4, border: "1px solid " + T.BD, background: "transparent", color: T.T2, cursor: "pointer", fontSize: 10 }}>↻ Refresh</button>
+        {onSynced && <SyncNowButton onDone={onSynced} />}
         {card("Orders", fm(list.length), T.AC)}
         {card("Ordered", fm(tOrd), T.TX)}
         {card("Shipped", fm(tShp), T.GR)}

@@ -16,6 +16,7 @@ import { matchReceipts } from "../utils/receiptMatch";
 import { matchFulfilments } from "../utils/fulfilmentMatch";
 import { fm, dF } from "../utils/format";
 import { T, tbl, th, td } from "../utils/theme";
+import SyncNowButton from "./SyncNowButton";
 
 const todayISO = () => {
   const d = new Date(), p = (n) => String(n).padStart(2, "0");
@@ -1164,10 +1165,10 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
                       plan at all, versus a plan whose lines have all shipped. */}
                   {sched.days.every((d) => pick(d).length === 0) &&
                     <tr><td colSpan={showBase ? 6 : 5} style={{ ...td, textAlign: "center", color: T.T2, padding: 16 }}>Nothing scheduled.</td></tr>}
-                  {!showBase && shipFilter === "open" && sched.days.some((d) => pick(d).length > 0)
-                    && sched.days.every((d) => pick(d).every((l) => l.done || (actualFor(l.market, l.sku, l.kind, d.date, l.name)))) &&
-                    <tr><td colSpan={5} style={{ ...td, textAlign: "center", color: T.GR, padding: 16 }}>
-                      Everything on this schedule has shipped.
+                  {shipFilter === "open" && sched.days.some((d) => pick(d).length > 0)
+                    && sched.days.every((d) => pick(d).every((l) => l.done || (!showBase && actualFor(l.market, l.sku, l.kind, d.date, l.name)))) &&
+                    <tr><td colSpan={showBase ? 6 : 5} style={{ ...td, textAlign: "center", color: T.GR, padding: 16 }}>
+                      {showBase ? "Everything on this schedule is applied." : "Everything on this schedule has shipped."}
                     </td></tr>}
                   {sched.days.map((d) => {
                     // A day's shipping lines arrive in the order the planner
@@ -1190,7 +1191,7 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
                     // worked out over every row on the day first, because a row
                     // only counts as missed when something else on that day did
                     // ship — filtering before that would change the verdict.
-                    const shown = (shipFilter === "open" && !showBase)
+                    const shown = shipFilter === "open"
                       ? rows.filter((l) => !l.done && !(stat[l.key] && stat[l.key].shipped))
                       : rows;
                     if (!shown.length) return null;
@@ -1271,10 +1272,24 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
               <label style={{ fontSize: 10, color: T.T2, display: "flex", alignItems: "center", gap: 4 }}>
                 Starts <DateEd value={aps.startDate || firstDay} onChange={(v) => updSched((s) => { s.startDate = v || ""; })} />
               </label>
+              <label style={{ fontSize: 10, color: T.T2, display: "flex", alignItems: "center", gap: 4 }}>
+                Show
+                <select value={shipFilter} onChange={(e) => setShipFilter(e.target.value)}
+                  title="Hides lines without touching them — nothing is cleared and they come back with All lines"
+                  style={{ background: T.S2, border: "1px solid " + T.BD, color: T.AC, borderRadius: 3, padding: "2px 5px", fontSize: 11, fontFamily: "inherit" }}>
+                  <option value="all">All lines</option>
+                  <option value="open">Hide completed</option>
+                </select>
+              </label>
               <button onClick={exportApply} style={{ padding: "3px 11px", borderRadius: 4, border: "1px solid " + T.GR, background: T.GR + "10", color: T.GR, cursor: "pointer", fontSize: 10, fontWeight: 700 }}>⬇ Excel</button>
+              {/* This erases the completed record for good — it is not a filter.
+                  The name and the dialog now say so, because it sits a few
+                  pixels from Show → Hide completed, which is what people
+                  actually want when a shipped line is in the way. */}
               {aps.log.length > 0 && (
-                <button onClick={() => { if (window.confirm(`Clear all ${aps.log.length} completed lines?`)) updSched((s) => { s.log = []; }); }}
-                  style={{ padding: "3px 9px", borderRadius: 4, border: "1px solid " + T.BD, background: "transparent", color: T.T2, cursor: "pointer", fontSize: 10 }}>Reset completed</button>
+                <button onClick={() => { if (window.confirm(`Erase the record of all ${aps.log.length} completed lines? They go back to unshipped and have to be ticked again. To just get them out of the way, use Show → Hide completed instead.`)) updSched((s) => { s.log = []; }); }}
+                  title="Erases the completed record — this is not a filter. Use Show → Hide completed to only hide them."
+                  style={{ padding: "3px 9px", borderRadius: 4, border: "1px solid " + T.BD, background: "transparent", color: T.T2, cursor: "pointer", fontSize: 10, opacity: 0.7 }}>Erase completed record</button>
               )}
               {[["To apply", fm(Math.round(sched.totals.toApply)), T.PU],
                 ["To ship", fm(Math.round(sched.totals.toShip)), T.AC],
@@ -1312,15 +1327,6 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
             </div>
 
             <div style={{ marginTop: 8, display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-              <label style={{ fontSize: 10, color: T.T2, display: "flex", alignItems: "center", gap: 4 }}>
-                Show
-                <select value={shipFilter} onChange={(e) => setShipFilter(e.target.value)}
-                  style={{ background: T.S2, border: "1px solid " + T.BD, color: T.AC, borderRadius: 3,
-                    padding: "2px 6px", fontSize: 11, fontFamily: "inherit" }}>
-                  <option value="all">All lines</option>
-                  <option value="open">Not shipped</option>
-                </select>
-              </label>
               <button onClick={() => setShowApply((v) => !v)}
                 title={showApply ? "Hide the application pane and show shipping on its own"
                                  : "Show the application pane alongside shipping"}
@@ -1354,6 +1360,7 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
             <div style={{ padding: "8px 12px", display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
               <span style={{ fontSize: 11, fontWeight: 700 }}>Live inventory — NetSuite</span>
               <button onClick={loadNsInv} style={{ padding: "3px 10px", borderRadius: 4, border: "1px solid " + T.BD, background: "transparent", color: T.T2, cursor: "pointer", fontSize: 10 }}>↻ Refresh</button>
+              <SyncNowButton onDone={loadNsInv} />
               <label style={{ fontSize: 10, color: T.T2, display: "flex", alignItems: "center", gap: 4, cursor: "pointer" }}>
                 <input type="checkbox" checked={flagOnly} onChange={(e) => setFlagOnly(e.target.checked)} /> Flagged only
               </label>
@@ -1425,6 +1432,7 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
         <div style={{ background: T.S1, border: "1px solid " + T.BD, borderRadius: 6, overflowX: "auto" }}>
           <div style={{ padding: "8px 12px", display: "flex", alignItems: "center", gap: 10 }}>
             <button onClick={addInbound} style={{ padding: "4px 12px", borderRadius: 5, border: "1px solid " + T.GR, background: T.GR + "10", color: T.GR, cursor: "pointer", fontSize: 11, fontWeight: 700 }}>+ Add inbound shipment</button>
+            <SyncNowButton onDone={loadNsInv} label="Sync receipts" />
             <span style={{ fontSize: 10, color: T.T2 }}>Set ETA directly, or it derives from the latest leg date. Click a row to edit line items.</span>
           </div>
           <table style={{ ...tbl, fontSize: 11 }}>

@@ -59,7 +59,7 @@ export default function MarketOrdersTab() {
 
       {view === "pos" && (
         <PurchaseOrdersView salesOrders={ns.salesOrders} shipments={ns.shipments}
-          syncedAt={ns.at} onRefresh={load} loading={ns.loading} />
+          syncedAt={ns.at} onRefresh={load} loading={ns.loading} onSynced={load} />
       )}
       {view === "shiplog" && <ShipmentLogTab embedded />}
     </div>
