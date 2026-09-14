@@ -190,8 +190,10 @@ export default function PurchaseOrdersView({ salesOrders = [], shipments = [], s
       if (isCubeLabel(sku)) {
         const f = baseLabelFlavour(l.name);
         if (f) {
-          const g = (bases[f] = bases[f] || { ordered: 0, shipped: 0, parts: [] });
+          const g = (bases[f] = bases[f] || { ordered: 0, shipped: 0, parts: [], sos: [], pos: [] });
           g.ordered += l.ordered || 0; g.shipped += l.shipped || 0;
+          if (l.so && !g.sos.includes(l.so)) g.sos.push(l.so);
+          if (l.custPo && !g.pos.includes(l.custPo)) g.pos.push(l.custPo);
           g.parts.push(`${sku} — ${fm(l.ordered)} ordered, ${fm(l.shipped)} shipped`);
           continue;
         }
@@ -204,14 +206,16 @@ export default function PurchaseOrdersView({ salesOrders = [], shipments = [], s
       const name = skuInfo(f).name;
       const lid = lids[f], base = bases[f];
       if (lid) out.push({ sku: f, name: `${name} — LID`, pair: !!base,
-        ordered: lid.ordered, shipped: lid.shipped, title: lid.name });
+        ordered: lid.ordered, shipped: lid.shipped, title: lid.name,
+        sos: [lid.so].filter(Boolean), pos: [lid.custPo].filter(Boolean) });
       if (base) out.push({ sku: baseSkuFor(f), name: `${name} — BASE`,
-        ordered: base.ordered, shipped: base.shipped,
+        ordered: base.ordered, shipped: base.shipped, sos: base.sos, pos: base.pos,
         title: `Base quantity comes from this flavour's label, the only line that names it:\n\n`
           + base.parts.join("\n")
           + `\n\nThe pooled cube line and the application fee are the same units billed again, so they are not listed separately.` });
     }
-    out.push(...other.map((l) => ({ ...l, title: l.name })));
+    out.push(...other.map((l) => ({ ...l, title: l.name,
+      sos: [l.so].filter(Boolean), pos: [l.custPo].filter(Boolean) })));
     return out;
   }, [cur]);
 
@@ -227,7 +231,8 @@ export default function PurchaseOrdersView({ salesOrders = [], shipments = [], s
     const mono = (sz = 10) => ({ name: "Consolas", size: sz });
 
     const ws = wb.addWorksheet("Order", { views: [{ state: "frozen", ySplit: 9 }] });
-    ws.columns = [{ width: 18 }, { width: 34 }, { width: 13 }, { width: 13 }, { width: 13 }, { width: 11 }];
+    ws.columns = [{ width: 18 }, { width: 34 }, { width: 15 }, { width: 24 },
+      { width: 13 }, { width: 13 }, { width: 13 }, { width: 11 }];
     const title = ws.addRow([cur.po || "— no customer PO —"]);
     title.font = { bold: true, size: 14, color: { argb: "FF2563EB" } };
     ws.addRow([`${MARKET_NAME[cur.market] || cur.market || ""} · ${cur.customer || ""}`])
@@ -244,21 +249,23 @@ export default function PurchaseOrdersView({ salesOrders = [], shipments = [], s
     pair("Progress", `${fm(cur.shipped)} / ${fm(cur.ordered)} · ${cur.pct}%`);
     ws.addRow([]);
 
-    const head = ws.addRow(["SKU", "Item", "Ordered", "Shipped", "Open", "%"]);
+    const head = ws.addRow(["SKU", "Item", "Sales order", "Customer PO", "Ordered", "Shipped", "Open", "%"]);
     head.eachCell((c) => { c.font = { bold: true, size: 9, color: { argb: GREY } };
       c.border = { bottom: { style: "thin", color: { argb: "FFD0D4DD" } } };
-      c.alignment = { horizontal: c.col > 2 ? "right" : "left" }; });
+      c.alignment = { horizontal: c.col > 4 ? "right" : "left" }; });
     for (const l of grouped) {
       const open = (l.ordered || 0) - (l.shipped || 0);
       const pct = l.ordered ? l.shipped / l.ordered : 0;
-      const r = ws.addRow([l.sku || "", l.name, l.ordered || 0, l.shipped || 0, open, pct]);
+      const r = ws.addRow([l.sku || "", l.name, (l.sos || []).join(", "), (l.pos || []).join(", "),
+        l.ordered || 0, l.shipped || 0, open, pct]);
       r.getCell(1).font = mono(9);
       r.getCell(2).font = { size: 10, color: { argb: INK } };
-      for (const i of [3, 4, 5]) { r.getCell(i).font = mono(10); r.getCell(i).numFmt = "#,##0"; }
-      r.getCell(4).font = { ...mono(10), color: { argb: GREEN } };
-      r.getCell(5).font = { ...mono(10), color: { argb: open > 0 ? AMBER : GREY } };
-      r.getCell(6).numFmt = "0%";
-      r.getCell(6).font = { ...mono(10), color: { argb: pct >= 1 ? GREEN : GREY } };
+      r.getCell(3).font = mono(9); r.getCell(4).font = mono(9);
+      for (const i of [5, 6, 7]) { r.getCell(i).font = mono(10); r.getCell(i).numFmt = "#,##0"; }
+      r.getCell(6).font = { ...mono(10), color: { argb: GREEN } };
+      r.getCell(7).font = { ...mono(10), color: { argb: open > 0 ? AMBER : GREY } };
+      r.getCell(8).numFmt = "0%";
+      r.getCell(8).font = { ...mono(10), color: { argb: pct >= 1 ? GREEN : GREY } };
     }
 
     const ws2 = wb.addWorksheet("Shipments", { views: [{ state: "frozen", ySplit: 1 }] });
@@ -451,7 +458,22 @@ export default function PurchaseOrdersView({ salesOrders = [], shipments = [], s
                         <td style={{ ...td, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 260,
                           borderBottom: l.pair ? "none" : undefined,
                           fontWeight: l.pooled ? 600 : 400,
-                          }} title={l.title}>{l.name}</td>
+                          }} title={l.title}>
+                          {l.name}
+                          {/* Which order this line is actually against. A card
+                              can merge two — New Jersey bills its cubes on one
+                              and the labels that go on them on another — so a
+                              lid and the base under it sit on different orders
+                              and a row that does not say so is half an answer. */}
+                          {(l.sos || []).map((so, n) => (
+                            <span key={so} title={`${so}${(l.pos || [])[n] ? ` · customer PO ${(l.pos || [])[n]}` : ""}`}
+                              style={{ marginLeft: 6, fontSize: 8.5, fontWeight: 700, ...mono,
+                                color: T.PU, border: "1px solid " + T.PU + "55", background: T.PU + "0F",
+                                borderRadius: 3, padding: "1px 4px", whiteSpace: "nowrap" }}>
+                              {so}{(l.pos || [])[n] ? ` · ${(l.pos || [])[n]}` : ""}
+                            </span>
+                          ))}
+                        </td>
                         <td style={{ ...num, borderBottom: l.pair ? "none" : undefined }}>{fm(l.ordered)}</td>
                         <td style={{ ...num, color: T.GR, borderBottom: l.pair ? "none" : undefined }}>{fm(l.shipped)}</td>
                         <td style={{ ...num, color: l.ordered - l.shipped > 0 ? T.AM : T.T2, borderBottom: l.pair ? "none" : undefined }}>{fm(l.ordered - l.shipped)}</td>
