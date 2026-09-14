@@ -449,8 +449,24 @@ export function buildApplySchedule({ mw, grid, actuals, today, startDate,
       }
     }
     if (g.lidNeed > 0) {
-      const need = g.lidNeed;
-      const lr = av.readyBy(g.sku, need + (usedLid[g.sku] || 0), start);
+      // A lid does not go out ahead of the base it needs.
+      //
+      // Shipping it early does not solve a base shortage, it moves it: the lid
+      // cannot be packaged without a base under it, so it becomes dead stock on
+      // the market's floor instead of ours. Colorado is holding 40,870 bare lids
+      // and New Jersey 44,186, both arrived exactly this way, and the plan was
+      // adding to them — 1,213,380 lids are inbound from the factory against
+      // 851,634 bases, so the gap grows on its own unless the schedule declines
+      // to pass it on.
+      //
+      // So a run that still owes bases ships only as many lids as its applied
+      // bases can pair with, and the rest waits. A run that owes no base is not
+      // held: its bases are already at the market, or already applied, and there
+      // is nothing left for the lid to wait on.
+      const appliedForRun = applyDone[g.rk] ? applyDone[g.rk].units : 0;
+      const need = g.baseNeed > 0 ? Math.min(g.lidNeed, appliedForRun) : g.lidNeed;
+      const heldBack = g.lidNeed - need;
+      const lr = need > 0 ? av.readyBy(g.sku, need + (usedLid[g.sku] || 0), start) : null;
       if (lr) {
         // A run whose bases are already at the market has no application of its
         // own to date its lids from, and `start` dated them to the first day of
@@ -469,7 +485,11 @@ export function buildApplySchedule({ mw, grid, actuals, today, startDate,
         usedLid[g.sku] = (usedLid[g.sku] || 0) + need;
         shipQueue.push({ g, kind: "LID", units: need, date: nextBizStr(lidsBind ? lr.date : applyD),
           reason: why(lidsBind ? `waits for ${lr.ref || "lids"} · ${shortDate(lr.date)}`
-                               : (applyDone[g.rk] ? "with its bases" : "lids in stock")) });
+                               : (applyDone[g.rk]
+                                   ? (heldBack > 0
+                                       ? `with its bases · ${heldBack.toLocaleString()} lids held for theirs`
+                                       : "with its bases")
+                                   : "lids in stock")) });
       }
     }
   }
