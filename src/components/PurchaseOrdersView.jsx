@@ -215,6 +215,79 @@ export default function PurchaseOrdersView({ salesOrders = [], shipments = [], s
     return out;
   }, [cur]);
 
+  // The order on one tab, its fulfilments on another — the same two things the
+  // panel shows, so a sheet mailed to a market reads like the screen it came
+  // from. Colour carries the same meaning here as there: green for shipped,
+  // amber for what is still owed, and a full green bar at 100%.
+  const exportOrder = async () => {
+    if (!cur) return;
+    const mod = await import("exceljs"); const ExcelJS = mod.default || mod;
+    const wb = new ExcelJS.Workbook();
+    const GREEN = "FF16A34A", AMBER = "FFD97706", GREY = "FF6B7280", INK = "FF1A1A2E";
+    const mono = (sz = 10) => ({ name: "Consolas", size: sz });
+
+    const ws = wb.addWorksheet("Order", { views: [{ state: "frozen", ySplit: 9 }] });
+    ws.columns = [{ width: 18 }, { width: 34 }, { width: 13 }, { width: 13 }, { width: 13 }, { width: 11 }];
+    const title = ws.addRow([cur.po || "— no customer PO —"]);
+    title.font = { bold: true, size: 14, color: { argb: "FF2563EB" } };
+    ws.addRow([`${MARKET_NAME[cur.market] || cur.market || ""} · ${cur.customer || ""}`])
+      .font = { size: 10, color: { argb: GREY } };
+    ws.addRow([]);
+    const pair = (k, v) => { const r = ws.addRow([k, v]);
+      r.getCell(1).font = { bold: true, size: 9, color: { argb: GREY } };
+      r.getCell(2).font = { size: 10 }; };
+    pair("Calyx sales order", [cur.so, ...(cur.alsoSo || [])].join(" + "));
+    pair("Status", statusText(cur.status));
+    pair("Ordered on", cur.orderDate || "—");
+    pair("Ship method", cur.shipMethod || "—");
+    pair("Terms", cur.terms || "—");
+    pair("Progress", `${fm(cur.shipped)} / ${fm(cur.ordered)} · ${cur.pct}%`);
+    ws.addRow([]);
+
+    const head = ws.addRow(["SKU", "Item", "Ordered", "Shipped", "Open", "%"]);
+    head.eachCell((c) => { c.font = { bold: true, size: 9, color: { argb: GREY } };
+      c.border = { bottom: { style: "thin", color: { argb: "FFD0D4DD" } } };
+      c.alignment = { horizontal: c.col > 2 ? "right" : "left" }; });
+    for (const l of grouped) {
+      const open = (l.ordered || 0) - (l.shipped || 0);
+      const pct = l.ordered ? l.shipped / l.ordered : 0;
+      const r = ws.addRow([l.sku || "", l.name, l.ordered || 0, l.shipped || 0, open, pct]);
+      r.getCell(1).font = mono(9);
+      r.getCell(2).font = { size: 10, color: { argb: INK } };
+      for (const i of [3, 4, 5]) { r.getCell(i).font = mono(10); r.getCell(i).numFmt = "#,##0"; }
+      r.getCell(4).font = { ...mono(10), color: { argb: GREEN } };
+      r.getCell(5).font = { ...mono(10), color: { argb: open > 0 ? AMBER : GREY } };
+      r.getCell(6).numFmt = "0%";
+      r.getCell(6).font = { ...mono(10), color: { argb: pct >= 1 ? GREEN : GREY } };
+    }
+
+    const ws2 = wb.addWorksheet("Shipments", { views: [{ state: "frozen", ySplit: 1 }] });
+    ws2.columns = [{ width: 13 }, { width: 20 }, { width: 16 }, { width: 34 }, { width: 8 },
+      { width: 13 }, { width: 16 }, { width: 24 }];
+    const h2 = ws2.addRow(["Shipped", "Item fulfilment", "SKU", "Flavor", "Type",
+      "Qty shipped", "Carrier", "Tracking"]);
+    h2.eachCell((c) => { c.font = { bold: true, size: 9, color: { argb: GREY } };
+      c.border = { bottom: { style: "thin", color: { argb: "FFD0D4DD" } } };
+      c.alignment = { horizontal: c.col === 6 ? "right" : "left" }; });
+    for (const sh of curShipments) for (const l of sh.lines || []) {
+      const r = ws2.addRow([sh.ship_date, (sh.fulfillment_tranids || []).join(", "), l.sku,
+        String(l.flavor || "").replace(/\s*-\s*(BASE|LID)\s*$/i, ""), l.component_type,
+        l.quantity_shipped, sh.carrier || "", sh.tracking_number || ""]);
+      r.getCell(2).font = mono(9); r.getCell(3).font = mono(9); r.getCell(8).font = mono(9);
+      r.getCell(6).numFmt = "#,##0";
+      r.getCell(6).font = { ...mono(10), color: { argb: GREEN } };
+    }
+    if (!curShipments.length) ws2.addRow(["Nothing has shipped against this order yet."])
+      .font = { size: 10, color: { argb: GREY } };
+
+    const buf = await wb.xlsx.writeBuffer();
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(new Blob([buf],
+      { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }));
+    a.download = `${String(cur.po || cur.so).replace(/[^\w.-]+/g, "-")}-${new Date().toISOString().slice(0, 10)}.xlsx`;
+    a.click(); URL.revokeObjectURL(a.href);
+  };
+
   const tOrd = list.reduce((a, o) => a + o.ordered, 0);
   const tShp = list.reduce((a, o) => a + o.shipped, 0);
 
@@ -343,8 +416,17 @@ export default function PurchaseOrdersView({ salesOrders = [], shipments = [], s
                   line by line that is twenty rows saying what six flavours and a
                   base pool say in seven. Pool the base side into one row and list
                   the lids flavour by flavour, which is how the floor picks them. */}
-              <div style={{ padding: "9px 14px 4px", fontSize: 10, fontWeight: 700, color: T.T2, textTransform: "uppercase", letterSpacing: .4 }}>
-                Line items ({grouped.length})
+              <div style={{ padding: "9px 14px 4px", display: "flex", alignItems: "center", gap: 10 }}>
+                <span style={{ fontSize: 10, fontWeight: 700, color: T.T2, textTransform: "uppercase", letterSpacing: .4 }}>
+                  Line items ({grouped.length})
+                </span>
+                <button onClick={exportOrder}
+                  title="Download this order as Excel — the order on one tab, its fulfilments on another"
+                  style={{ marginLeft: "auto", padding: "3px 10px", borderRadius: 4,
+                    border: "1px solid " + T.BD, background: "transparent", color: T.GR,
+                    cursor: "pointer", fontSize: 10, fontWeight: 600 }}>
+                  ↓ Excel
+                </button>
               </div>
               <table style={{ ...tbl, fontSize: 10.5 }}>
                 <thead><tr>
