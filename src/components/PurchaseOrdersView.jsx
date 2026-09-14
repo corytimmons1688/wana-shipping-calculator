@@ -11,6 +11,7 @@ import { T, tbl, th, td } from "../utils/theme";
 import { trackingUrl } from "../utils/tracking";
 import { cubeOrdersOnly, isCubeLabel, isCubeApplFee, baseLabelFlavour } from "../utils/salesOrderMatch";
 import { skuInfo } from "../utils/inventory";
+import { baseSkuFor } from "../utils/applySchedule";
 
 const MARKET_NAME = { NJ: "New Jersey", NY: "New York", CO: "Colorado", MA: "Massachusetts",
   AZ: "Arizona", IL: "Illinois", MI: "Michigan", MO: "Missouri", MT: "Montana", NM: "New Mexico",
@@ -168,71 +169,48 @@ export default function PurchaseOrdersView({ salesOrders = [], shipments = [], s
   // its own row rather than being folded into a total it has no part in.
   const grouped = useMemo(() => {
     if (!cur) return [];
-    // Each flavour's base side reads beside its lid. The label names the
-    // flavour, and the fee for applying it carries no name at all — every
-    // colour bills through one item — so a fee is tied to the label it matches
-    // on quantity, and each fee is spent once. Two flavours on an order can
-    // share a quantity, so a fee that is already claimed is skipped rather than
-    // counted twice.
+    // Read the way the fulfilments read: a lid line and a base line per flavour,
+    // the base carrying the cube code it actually ships on.
     //
-    // The bare PB- cubes cannot be split: they are one pooled line per colour
-    // covering every flavour that rides on them, and nothing on the order says
-    // how the pool divides. They keep a row of their own rather than being
-    // apportioned on a guess.
-    const fees = cur.lines.filter((l) => isCubeApplFee(l)).map((l) => ({ l, used: false }));
-    const takeFee = (qty) => {
-      const hit = fees.find((f) => !f.used && (f.l.ordered || 0) === qty);
-      if (!hit) return null;
-      hit.used = true; return hit.l;
-    };
-    const flav = {};           // lid sku → { lid, baseOrdered, baseShipped, parts }
-    const pool = { sku: "—", name: "Cube bases — pooled across flavours", pooled: true,
-      ordered: 0, shipped: 0, parts: [] };
-    const other = [];
+    // An order does not state a flavour's base quantity anywhere. It bills three
+    // things — one pooled PB- line per colour covering every flavour, that
+    // flavour's label, and the fee for applying it — and only the label names
+    // the flavour. So the label's quantity IS the flavour's base count, which is
+    // the same rule the schedule and the shipment report already run on.
+    //
+    // That makes these rows the physical picture rather than the billing one:
+    // the pooled cube line and the application fee are the same units counted a
+    // second and third way, so they are folded in here instead of listed. The
+    // card header still carries the billed totals.
+    const lids = {}, bases = {}, other = [];
     for (const l of cur.lines) {
       const sku = String(l.sku || "");
-      if (/^PL-WCB-/i.test(sku)) {
-        (flav[sku] = flav[sku] || { sku, baseOrdered: 0, baseShipped: 0, parts: [] });
-        flav[sku].lid = l;
-        continue;
-      }
-      if (/^PB-WCB-/i.test(sku)) {
-        pool.ordered += l.ordered || 0; pool.shipped += l.shipped || 0;
-        pool.parts.push(`${sku} — ${fm(l.ordered)} ordered, ${fm(l.shipped)} shipped`);
-        continue;
-      }
+      if (/^PL-WCB-/i.test(sku)) { lids[sku] = l; continue; }
+      if (/^PB-WCB-/i.test(sku) || isCubeApplFee(l)) continue;   // counted via the label
       if (isCubeLabel(sku)) {
         const f = baseLabelFlavour(l.name);
         if (f) {
-          const g = (flav[f] = flav[f] || { sku: f, baseOrdered: 0, baseShipped: 0, parts: [] });
-          g.baseOrdered += l.ordered || 0; g.baseShipped += l.shipped || 0;
+          const g = (bases[f] = bases[f] || { ordered: 0, shipped: 0, parts: [] });
+          g.ordered += l.ordered || 0; g.shipped += l.shipped || 0;
           g.parts.push(`${sku} — ${fm(l.ordered)} ordered, ${fm(l.shipped)} shipped`);
-          const fee = takeFee(l.ordered || 0);
-          if (fee) {
-            g.baseOrdered += fee.ordered || 0; g.baseShipped += fee.shipped || 0;
-            g.parts.push(`${fee.sku} — ${fm(fee.ordered)} ordered, ${fm(fee.shipped)} shipped`);
-          }
           continue;
         }
       }
-      if (isCubeApplFee(l)) continue;      // picked up beside its label, or left below
       other.push(l);
     }
-    // Any fee no label claimed still belongs on the card.
-    for (const f of fees) if (!f.used) other.push(f.l);
-
     const out = [];
-    for (const g of Object.values(flav).sort((x, y) =>
-      skuInfo(x.sku).name.localeCompare(skuInfo(y.sku).name))) {
-      const name = skuInfo(g.sku).name;
-      if (g.lid) out.push({ sku: g.sku, name, kind: "Lid", flavour: true,
-        ordered: g.lid.ordered, shipped: g.lid.shipped, title: g.lid.name });
-      if (g.parts.length) out.push({ sku: "", name, kind: "Label & application · base from pool",
-        flavour: true, sub: true, ordered: g.baseOrdered, shipped: g.baseShipped,
-        title: `${g.parts.length} lines:\n\n` + g.parts.join("\n") });
+    for (const f of [...new Set([...Object.keys(lids), ...Object.keys(bases)])]
+      .sort((x, y) => skuInfo(x).name.localeCompare(skuInfo(y).name))) {
+      const name = skuInfo(f).name;
+      const lid = lids[f], base = bases[f];
+      if (lid) out.push({ sku: f, name: `${name} — LID`, pair: !!base,
+        ordered: lid.ordered, shipped: lid.shipped, title: lid.name });
+      if (base) out.push({ sku: baseSkuFor(f), name: `${name} — BASE`,
+        ordered: base.ordered, shipped: base.shipped,
+        title: `Base quantity comes from this flavour's label, the only line that names it:\n\n`
+          + base.parts.join("\n")
+          + `\n\nThe pooled cube line and the application fee are the same units billed again, so they are not listed separately.` });
     }
-    if (pool.parts.length) out.push({ ...pool,
-      title: `${pool.parts.length} lines pooled into this row:\n\n` + pool.parts.join("\n") });
     out.push(...other.map((l) => ({ ...l, title: l.name })));
     return out;
   }, [cur]);
@@ -385,22 +363,17 @@ export default function PurchaseOrdersView({ salesOrders = [], shipments = [], s
                         background: l.pooled ? T.S2 + "70" : undefined,
                         // A flavour's base line sits under its lid with no rule
                         // between them, so the pair reads as one flavour.
-                        borderTop: l.sub ? "none" : undefined }}>
+                        borderTop: undefined }}>
                         <td style={{ ...td, ...mono, fontSize: 10, color: l.pooled ? T.T2 : undefined,
-                          borderBottom: l.sub ? undefined : "none" }}>{l.sku || ""}</td>
+                          borderBottom: l.pair ? "none" : undefined }}>{l.sku || ""}</td>
                         <td style={{ ...td, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", maxWidth: 260,
-                          borderBottom: l.sub ? undefined : "none",
+                          borderBottom: l.pair ? "none" : undefined,
                           fontWeight: l.pooled ? 600 : 400,
-                          paddingLeft: l.sub ? 22 : undefined,
-                          color: l.sub ? T.T2 : undefined, fontSize: l.sub ? 10 : undefined }} title={l.title}>
-                          {l.sub
-                            ? <><span style={{ color: T.BD, marginRight: 6, ...mono }}>└</span>{l.kind}</>
-                            : <>{l.name}{l.kind ? <span style={{ marginLeft: 6, fontSize: 9, color: T.T2 }}>{l.kind}</span> : null}</>}
-                        </td>
-                        <td style={{ ...num, borderBottom: l.sub ? undefined : "none" }}>{fm(l.ordered)}</td>
-                        <td style={{ ...num, color: T.GR, borderBottom: l.sub ? undefined : "none" }}>{fm(l.shipped)}</td>
-                        <td style={{ ...num, color: l.ordered - l.shipped > 0 ? T.AM : T.T2, borderBottom: l.sub ? undefined : "none" }}>{fm(l.ordered - l.shipped)}</td>
-                        <td style={{ ...num, whiteSpace: "nowrap", borderBottom: l.sub ? undefined : "none" }}>
+                          }} title={l.title}>{l.name}</td>
+                        <td style={{ ...num, borderBottom: l.pair ? "none" : undefined }}>{fm(l.ordered)}</td>
+                        <td style={{ ...num, color: T.GR, borderBottom: l.pair ? "none" : undefined }}>{fm(l.shipped)}</td>
+                        <td style={{ ...num, color: l.ordered - l.shipped > 0 ? T.AM : T.T2, borderBottom: l.pair ? "none" : undefined }}>{fm(l.ordered - l.shipped)}</td>
+                        <td style={{ ...num, whiteSpace: "nowrap", borderBottom: l.pair ? "none" : undefined }}>
                           <span style={{ color: p >= 100 ? T.GR : T.T2, marginRight: 4 }}>{p}%</span><Bar pct={p} w={30} />
                         </td>
                       </tr>
