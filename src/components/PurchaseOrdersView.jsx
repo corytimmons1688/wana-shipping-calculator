@@ -325,7 +325,7 @@ export default function PurchaseOrdersView({ salesOrders = [], shipments = [], s
                       <td style={num}>{fm(o.ordered)}</td>
                       <td style={{ ...num, color: T.GR }}>{fm(o.shipped)}</td>
                       {!cur && <td style={{ ...num, color: o.ordered - o.shipped > 0 ? T.AM : T.T2 }}>{fm(o.ordered - o.shipped)}</td>}
-                      <td style={{ ...num, whiteSpace: "nowrap", borderBottom: l.sub ? undefined : "none" }}>
+                      <td style={{ ...num, whiteSpace: "nowrap" }}>
                         <span style={{ color: o.pct >= 100 ? T.GR : T.T2, marginRight: 5 }}>{o.pct}%</span>
                         <Bar pct={o.pct} w={cur ? 34 : 54} />
                       </td>
