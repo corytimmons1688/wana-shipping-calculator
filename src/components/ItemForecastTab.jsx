@@ -100,6 +100,11 @@ export default function ItemForecastTab({ sc, upd }) {
     const ord = orderedBySku(so.rows, sel);
     const byKey = {};
     for (const r of fc.rows) (byKey[r.key] = byKey[r.key] || []).push(r);
+    // Walk a shared group in the order the grid shows it. The order total is
+    // printed against the first row and the rest point back at it, so "first"
+    // has to mean first on screen — and the pool is then drawn down the way the
+    // eye reads the rows, top to bottom.
+    for (const k of Object.keys(byKey)) byKey[k].sort((a, b) => a.name.localeCompare(b.name));
     const out = {};
     for (const key of Object.keys(byKey)) {
       const rows = byKey[key];
@@ -120,7 +125,8 @@ export default function ItemForecastTab({ sc, upd }) {
       }
       rows.forEach((r, j) => {
         const fcTotal = r.weekly.reduce((a, v, i) => a + (r.gated[i] ? 0 : v), 0);
-        out[rowId(r)] = { orders: e.orders, orderTotal: e.ordered, shared: rows.length > 1,
+        out[rowId(r)] = { orders: e.orders, orderTotal: e.ordered, key,
+          shared: rows.length > 1, first: j === 0,
           used: used[j], short: Math.max(0, fcTotal - used[j]), surplus: left,
           fcTotal, weeks: weeks[j] };
       });
@@ -283,8 +289,14 @@ export default function ItemForecastTab({ sc, upd }) {
                              + (c.surplus > 0 ? `\n${fm(Math.round(c.surplus))} ordered beyond the forecast` : ""))
                           : "No cube sales order names this item";
                         return [
-                          <td key="o" title={tip} style={{ ...num, borderLeft: "1px solid " + T.BD, color: c.used > 0 ? T.TX : T.BD }}>
-                            {c.used > 0 ? fm(Math.round(c.used)) : "—"}
+                          <td key="o" title={tip} style={{ ...num, borderLeft: "1px solid " + T.BD,
+                            color: c.orderTotal > 0 ? T.TX : T.BD }}>
+                            {/* One order covers a whole group of variants, so it
+                                is printed against the first of them and the rest
+                                point at it — six rows each showing 30,720 would
+                                read as six orders. */}
+                            {c.shared && !c.first ? <span title={`Shares the ${c.key} order above`} style={{ color: T.T2 }}>↳</span>
+                              : c.orderTotal > 0 ? fm(Math.round(c.orderTotal)) : "—"}
                           </td>,
                           <td key="g" style={{ ...num, fontWeight: 700, background: c.short > 0 ? SHORT_BG : undefined, color: c.short > 0 ? SHORT_TX : T.T2 }}>
                             {c.short > 0 ? fm(Math.round(c.short)) : "—"}
@@ -304,7 +316,9 @@ export default function ItemForecastTab({ sc, upd }) {
                       {fm(Math.round(grp.rows.reduce((a, r) => a + r.total, 0)))}
                     </td>
                     {cover && (() => {
-                      const o = grp.rows.reduce((a, r) => a + ((cover[rowId(r)] || {}).used || 0), 0);
+                      const seen = new Set();
+                      const o = grp.rows.reduce((a, r) => { const c = cover[rowId(r)];
+                        if (!c || seen.has(c.key)) return a; seen.add(c.key); return a + (c.orderTotal || 0); }, 0);
                       const sh = grp.rows.reduce((a, r) => a + ((cover[rowId(r)] || {}).short || 0), 0);
                       return [
                         <td key="o" style={{ ...num, fontWeight: 700, color: T.T2, borderLeft: "1px solid " + T.BD, background: T.S2 + "66" }}>{o > 0 ? fm(Math.round(o)) : "—"}</td>,
@@ -325,7 +339,9 @@ export default function ItemForecastTab({ sc, upd }) {
                   {fm(Math.round(grandTotal))}
                 </td>
                 {cover && (() => {
-                  const o = fc.rows.reduce((a, r) => a + ((cover[rowId(r)] || {}).used || 0), 0);
+                  const seen = new Set();
+                  const o = fc.rows.reduce((a, r) => { const c = cover[rowId(r)];
+                    if (!c || seen.has(c.key)) return a; seen.add(c.key); return a + (c.orderTotal || 0); }, 0);
                   return [
                     <td key="o" style={{ ...num, fontWeight: 800, borderTop: "2px solid " + T.BD, borderLeft: "1px solid " + T.BD }}>{fm(Math.round(o))}</td>,
                     <td key="g" style={{ ...num, fontWeight: 800, borderTop: "2px solid " + T.BD, color: shortTotal > 0 ? SHORT_TX : T.T2, background: shortTotal > 0 ? SHORT_BG : undefined }}>{shortTotal > 0 ? fm(Math.round(shortTotal)) : "—"}</td>,
