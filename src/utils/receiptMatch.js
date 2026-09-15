@@ -37,8 +37,19 @@ export function matchReceipts(inbound = [], receipts = []) {
   if (!irs.length) return { confirmed, possible };
 
   // A receipt already credited to a shipment cannot also explain another one.
+  //
+  // A container booked across several receipts records every one of them, and
+  // every one has to be claimed. Crediting only the anchor would leave the
+  // others loose, and a one-line receipt is exactly what a one-line shipment
+  // matches perfectly — CP-36's correcting receipt would have been free for the
+  // next shipment to claim in full.
   const claimed = new Set();
-  for (const sh of inbound) if (sh.received && sh.receivedRef) claimed.add(sh.receivedRef);
+  for (const sh of inbound) {
+    if (!sh.received) continue;
+    const refs = (sh.receivedRefs && sh.receivedRefs.length) ? sh.receivedRefs
+      : (sh.receivedRef ? [sh.receivedRef] : []);
+    for (const r of refs) claimed.add(r);
+  }
 
   for (const sh of inbound) {
     if (sh.received) continue;

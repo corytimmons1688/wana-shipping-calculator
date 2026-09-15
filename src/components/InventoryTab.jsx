@@ -365,7 +365,7 @@ export default function InventoryTab({ sc, actuals, updActuals }) {
               <button onClick={() => {
                 const ids = new Set(autoRcv.applied.map((a) => a.id));
                 updActuals((d) => { for (const sh of d.inbound || []) if (ids.has(sh.id) && sh.autoReceived) {
-                  sh.received = false; delete sh.receivedRef; delete sh.receivedOn; delete sh.autoReceived; } });
+                  sh.received = false; delete sh.receivedRef; delete sh.receivedRefs; delete sh.receivedOn; delete sh.autoReceived; } });
                 setAutoRcv((p) => ({ ...p, applied: [] }));
               }} style={{ marginLeft: 8, padding: "1px 8px", borderRadius: 4, border: "1px solid " + T.GR,
                 background: "transparent", color: "#166534", cursor: "pointer", fontSize: 9.5 }}>Undo</button>
